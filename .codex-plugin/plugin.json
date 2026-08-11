@@ -1,0 +1,39 @@
+{
+  "name": "openeyes",
+  "version": "0.1.0",
+  "description": "OpenEyes — AI-friendly computer-use primitives (capture/detect/click) as a CLI and MCP server. Drives any desktop GUI on Windows/macOS/Linux via the platform accessibility tree, with Vimium-style grid fallback.",
+  "author": {
+    "name": "yangpeng",
+    "email": "yangpeng@example.com"
+  },
+  "homepage": "https://github.com/openeyes-ai/openeyes",
+  "license": "MIT",
+  "keywords": [
+    "openeyes",
+    "computer-use",
+    "ai-agent",
+    "uia",
+    "screenshot",
+    "click",
+    "mcp",
+    "vision",
+    "automation"
+  ],
+  "skills": "./skills/openeyes/",
+  "interface": {
+    "displayName": "OpenEyes (Computer-Use)",
+    "shortDescription": "Capture/detect/click + MCP server for AI desktop automation",
+    "longDescription": "OpenEyes provides primitives for AI agents to see and operate any desktop UI: capture screenshots, enumerate interactive elements via the platform accessibility tree (UIA on Windows, AX on macOS, AT-SPI on Linux), click by coordinates / text / handle / hint, snap to a Vimium-style grid, drag, type, send hotkeys. Pluggable vision backend (OmniParser/Florence) for legacy UIs. Safe-by-default: every click defaults to dry-run.",
+    "developerName": "yangpeng",
+    "category": "Developer",
+    "capabilities": ["Interactive"],
+    "defaultPrompt": [
+      "Use openeyes to find the message input box in the Feishu client and click it",
+      "Take a screenshot of the foreground window, enumerate its clickable elements, and click the one matching the user's intent",
+      "Drive an unknown legacy desktop app by enumerating its controls via UIAutomation",
+      "Open the Any VPN window and re-click the 'Secure my connection' button every 20s (dry-run by default)"
+    ],
+    "brandColor": "#0EA5E9",
+    "screenshots": []
+  }
+}

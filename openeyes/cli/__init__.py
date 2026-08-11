@@ -1,0 +1,1 @@
+"""OpenEyes CLI — `eyes` command."""
