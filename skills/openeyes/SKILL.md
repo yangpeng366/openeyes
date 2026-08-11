@@ -1,9 +1,11 @@
 ---
 name: openeyes
-description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Capture screens, enumerate interactive elements via the platform accessibility tree (UIA / AX / AT-SPI), click by coords / text / hint, snap to a grid, drag, type, send hotkeys. Use when driving UWP / Win32 / WinUI / browser apps from Codex where no API or DOM is available. The Windows UIA backend needs no ML — Vision backends (OmniParser / Florence) plug in later for legacy UIs.
+description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Capture screens, enumerate interactive elements via the platform accessibility tree (UIA / AX / AT-SPI), click by coords / text / hint, snap to a grid, drag, type, send hotkeys. Includes a `status` command for quick action-button discovery, and `--focus-titlebar` flag for UWP-safe clicking. Use when driving UWP / Win32 / WinUI / browser apps from Codex where no API or DOM is available. The Windows UIA backend needs no ML — Vision backends (OmniParser / Florence) plug in later for legacy UIs.
 ---
 
 # OpenEyes Skill
+
+> GitHub: <https://github.com/yangpeng366/openeyes> · Live at github.com/yangpeng366/openeyes
 
 OpenEyes is the AI computer-use primitive layer on this machine. It replaces
 hardcoded mouse coordinates with **structured detection**: enumerate
