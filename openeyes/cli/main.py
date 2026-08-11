@@ -106,6 +106,50 @@ def detect(window: int, restore: bool, depth: int,
         click.echo(json.dumps([e.to_dict() for e in elems], ensure_ascii=False, indent=2))
 
 
+# ----- status ---------------------------------------------------------------
+
+@cli.command()
+@click.option("--window", type=int, required=True)
+@click.option("--restore", is_flag=True)
+@click.option("--max", type=int, default=30)
+def status(window: int, restore: bool, max: int) -> None:
+    """Quick snapshot of the most likely-interactive elements in a window.
+
+    Useful for live debugging: shows buttons with names that contain any of
+    known action verbs (Click, Reset, Reconnect, Secure, Submit, OK, Cancel,
+    Save, etc.) plus their current center coordinates.
+    """
+    ACTION_VERBS = (
+        "click", "reset", "reconnect", "secure", "submit", "ok", "cancel",
+        "save", "apply", "close", "send", "open", "new", "delete", "remove",
+        "add", "edit", "confirm", "back", "next", "continue", "finish",
+        "yes", "no", "accept", "reject", "approve", "deny", "upgrade",
+        "connect", "disconnect", "sign", "log", "upload", "download",
+        "browse", "search", "find", "filter", "refresh", "reload",
+    )
+    elems = detect_elements(window, restore=restore)
+    seen = set()
+    print(f"[status] hwnd={window} total_elements={len(elems)}")
+    shown = 0
+    for e in elems:
+        name_l = (e.name or "").lower()
+        if not name_l or e.control_type != "Button":
+            continue
+        if not any(v in name_l for v in ACTION_VERBS):
+            continue
+        # dedupe by (name, center)
+        key = (e.name, e.center.x, e.center.y)
+        if key in seen:
+            continue
+        seen.add(key)
+        print(f"  Button @ ({e.center.x},{e.center.y}) {e.bbox.w}x{e.bbox.h}  {e.name!r}")
+        shown += 1
+        if shown >= max:
+            break
+    if shown == 0:
+        print("  (no action-verb buttons found)")
+
+
 # ----- click ----------------------------------------------------------------
 
 @cli.command("click")
@@ -118,11 +162,14 @@ def detect(window: int, restore: bool, depth: int,
 @click.option("--button", type=click.Choice(["left", "right", "middle"]), default="left")
 @click.option("--double", is_flag=True)
 @click.option("--return-to-origin", is_flag=True)
+@click.option("--focus-titlebar", "focus_titlebar", is_flag=True,
+              help="click title bar first to ensure window focus (UWP-safe)")
 @click.option("--go", "go", is_flag=True,
               help="actually click. Default is dry-run.")
 def tap(window: int, x: int | None, y: int | None,
           name_contains: str | None, control_type: str | None, regex: str | None,
-          button: str, double: bool, return_to_origin: bool, go: bool) -> None:
+          button: str, double: bool, return_to_origin: bool,
+          focus_titlebar: bool, go: bool) -> None:
     """Click by coordinates OR by element selector.
 
     By default the click is dry-run — only the resolved target is printed.
@@ -150,6 +197,11 @@ def tap(window: int, x: int | None, y: int | None,
     if not go:
         click.echo(f"[dry-run] would click {desc}")
         return
+
+    if focus_titlebar and window:
+        from openeyes.actuators.win32 import focus_window
+        ok = focus_window(window)
+        click.echo(f"focus_window: {ok}", err=True)
 
     if return_to_origin:
         import win32api

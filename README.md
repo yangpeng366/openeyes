@@ -3,7 +3,11 @@
 > **AI-friendly computer-use primitives for Windows / macOS / Linux.**
 > Capture. Detect. Click. Let any LLM agent drive any desktop GUI.
 
-[English](#english) · [中文](#中文) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [License](#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Windows / macOS / Linux](https://img.shields.io/badge/platform-win%20%7C%20macos%20%7C%20linux-lightgrey)](https://github.com/yangpeng366/openeyes)
+
+GitHub: <https://github.com/yangpeng366/openeyes> · 中文 · [English](#english) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [License](#license)
 
 ---
 
@@ -34,13 +38,9 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **可插拔 vision backend**：OmniParser / Florence-2 / 自训练
 - **跨平台**：Windows（首发）/ macOS / Linux，统一抽象
 
-### 三处落点
+### 设计文档
 
-| 类型 | 位置 |
-|---|---|
-| Feishu 设计书 | https://my.feishu.cn/docx/Ul6gdMULGo5VfzxDVAYcVoX6n9e |
-| 项目方向 Base | https://my.feishu.cn/base/Vb6pb5SJ4aWpEpsqPxvcR5Tqnte?table=tbl2XGd8bO10NBY5&view=vewK5iifVn |
-| 本地设计稿 | `02_项目推进/openeyes/DESIGN.md`（开发机） |
+完整设计书：https://my.feishu.cn/docx/Ul6gdMULGo5VfzxDVAYcVoX6n9e （中文，含架构图 / 模块清单 / 路线图）
 
 ---
 
@@ -80,7 +80,7 @@ OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform
 ### Windows
 
 ```powershell
-git clone https://github.com/openeyes-ai/openeyes.git
+git clone https://github.com/yangpeng366/openeyes.git
 cd openeyes
 pip install -e ".[windows,mcp]"
 

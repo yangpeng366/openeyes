@@ -1,4 +1,4 @@
-"""Smoke tests — verify imports + cross-platform safe ops without clicking."""
+"""Smoke tests - verify imports + cross-platform safe ops without clicking."""
 from __future__ import annotations
 import pytest
 
@@ -72,12 +72,48 @@ def test_platform_backend_resolves_or_raises(monkeypatch, platform):
     import sys
     monkeypatch.setattr(sys, "platform", platform)
     if platform in ("darwin", "linux"):
-        # not implemented yet — should raise NotImplementedError
         from openeyes.core import windows
         with pytest.raises(NotImplementedError):
             windows.list_windows()
     else:
-        # windows: should call into real backend
         from openeyes.core import windows
         wins = windows.list_windows()
         assert isinstance(wins, list)
+
+
+def test_focus_window_returns_bool():
+    """focus_window must return a bool so callers can branch on success."""
+    from openeyes.actuators.win32 import focus_window
+    wins = list_windows()
+    if not wins:
+        result = focus_window(0)
+        assert isinstance(result, bool)
+    else:
+        result = focus_window(wins[0].hwnd)
+        assert isinstance(result, bool)
+
+
+def test_keepalive_targets_are_keepalive_only():
+    """KEEPALIVE_TARGETS must not include Secure my connection by default.
+
+    Guards against the auto-reconnect surprise: clicking Secure my connection
+    changes network routing, which is out of scope for a keepalive loop.
+    Bootstrap must be opt-in.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "anyvpn_keepalive_test",
+        r"E:\gitAll\openeyes\examples\anyvpn_keepalive.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    joined = " ".join(mod.KEEPALIVE_TARGETS).lower()
+    assert "secure my connection" not in joined, (
+        "KEEPALIVE_TARGETS must not auto-connect; use BOOTSTRAP_TARGETS + --bootstrap"
+    )
+
+
+def test_status_command_exists():
+    """eyes status subcommand should be a callable Click command."""
+    from openeyes.cli.main import status
+    assert callable(status)

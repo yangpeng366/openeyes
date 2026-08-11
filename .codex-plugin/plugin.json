@@ -4,9 +4,9 @@
   "description": "OpenEyes — AI-friendly computer-use primitives (capture/detect/click) as a CLI and MCP server. Drives any desktop GUI on Windows/macOS/Linux via the platform accessibility tree, with Vimium-style grid fallback.",
   "author": {
     "name": "yangpeng",
-    "email": "yangpeng@example.com"
+    "email": "yangpeng@sobey.com"
   },
-  "homepage": "https://github.com/openeyes-ai/openeyes",
+  "homepage": "https://github.com/yangpeng366/openeyes",
   "license": "MIT",
   "keywords": [
     "openeyes",

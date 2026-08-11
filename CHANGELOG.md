@@ -6,6 +6,8 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - 2026-08-11
 
+GitHub: <https://github.com/yangpeng366/openeyes>
+
 ### Added
 - `openeyes-core`: cross-platform capture / detect / click primitives
 - `openeyes.backends.uia`: Windows UIA backend via pywinauto
@@ -24,3 +26,5 @@ versioning: [Semantic Versioning](https://semver.org/).
 - This is the MVP. Vision backend (OmniParser/Florence) is on the v0.2.0 roadmap.
 - Default click behavior is **dry-run** — pass `--go` to actually click.
 - Refactored from NVK MVP (`E:\AI-Portable\codex-home\plugins\nvk\`). NVK stays as legacy plugin.
+- Live at https://github.com/yangpeng366/openeyes
+- First showcase validated against Feishu client (hwnd 331812, 317 elements) and AnyVPN UWP (hwnd 862936).

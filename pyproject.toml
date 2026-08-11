@@ -9,7 +9,7 @@ description = "OpenEyes — AI-friendly computer-use primitives for Windows/macO
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "yangpeng", email = "yangpeng@example.com" },
+    { name = "yangpeng", email = "yangpeng@sobey.com" },
 ]
 keywords = [
     "computer-use",
@@ -69,8 +69,8 @@ dev = [
 eyes = "openeyes.cli.main:main"
 
 [project.urls]
-Homepage = "https://github.com/openeyes-ai/openeyes"
-Issues = "https://github.com/openeyes-ai/openeyes/issues"
+Homepage = "https://github.com/yangpeng366/openeyes"
+Issues = "https://github.com/yangpeng366/openeyes/issues"
 
 [tool.setuptools.packages.find]
 include = ["openeyes*"]

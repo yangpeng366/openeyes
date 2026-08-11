@@ -106,11 +106,36 @@ def scroll(dx: int, dy: int, at_xy: tuple[int, int] | None = None) -> None:
         win32api.mouse_event(win32con.MOUSEEVENTF_HWHEEL, 0, 0, dx * 120, 0)
 
 
-def focus_window(hwnd: int) -> None:
-    """Bring the window to foreground (best-effort)."""
+def focus_window(hwnd: int) -> bool:
+    """Bring the window to foreground (best-effort). Returns True on success.
+
+    UWP / Windows Store apps are tricky: ``set_focus()`` often silently fails
+    because the actual content lives inside a child CoreWindow of an
+    ApplicationFrameWindow. If the first attempt does not bring the window
+    to the foreground (verified via GetForegroundWindow), we click the title
+    bar as a fallback — that usually forces Windows to give us focus.
+    """
+    import win32gui
     d = Desktop(backend="uia")
     w = d.window(handle=hwnd)
     try:
         w.set_focus()
     except Exception:
         pass
+    try:
+        fg = win32gui.GetForegroundWindow()
+        if fg == hwnd:
+            return True
+    except Exception:
+        return False
+    # Fallback: click the title bar (top-center, 20px down from window top).
+    try:
+        l, t, r, _ = win32gui.GetWindowRect(hwnd)
+        title_x = (l + r) // 2
+        title_y = t + 20
+        click_xy(title_x, title_y)
+        time.sleep(0.2)
+        fg = win32gui.GetForegroundWindow()
+        return fg == hwnd
+    except Exception:
+        return False
