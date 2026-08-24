@@ -67,6 +67,7 @@ dev = [
 
 [project.scripts]
 eyes = "openeyes.cli.main:main"
+eyes-mcp = "openeyes.mcp.server:main"
 
 [project.urls]
 Homepage = "https://github.com/yangpeng366/openeyes"

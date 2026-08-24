@@ -1,29 +1,40 @@
 ---
 name: openeyes
-description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Capture screens, enumerate interactive elements via the platform accessibility tree (UIA / AX / AT-SPI), click by coords / text / hint, snap to a grid, drag, type, send hotkeys. Includes a `status` command for quick action-button discovery, and `--focus-titlebar` flag for UWP-safe clicking. Use when driving UWP / Win32 / WinUI / browser apps from Codex where no API or DOM is available. The Windows UIA backend needs no ML — Vision backends (OmniParser / Florence) plug in later for legacy UIs.
+description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Includes UIA-backed native apps (Win32/UWP), CDP-backed Chromium browser pages (Edge/Chrome via DevTools Protocol — no screenshot, no vision model, structured DOM), Vimium-style letter hints, Vimium-style 3x3 grid, focus/click/type/hotkey/drag/screenshot. Use when Codex needs to (a) drive a native app without an API or DOM, (b) drive a real browser session with login cookies / 2FA, or (c) read or write page elements (text input, button click) without spending image-budget. Browser path uses raw websocket-client on Chrome DevTools Protocol; Vision backends (OmniParser / Florence-2) remain as Phase-3 fallback for canvas / image-only UIs.
 ---
 
 # OpenEyes Skill
 
-> GitHub: <https://github.com/yangpeng366/openeyes> · Live at github.com/yangpeng366/openeyes
+> Repo: <https://github.com/yangpeng366/openeyes> · Live at github.com/yangpeng366/openeyes
 
 OpenEyes is the AI computer-use primitive layer on this machine. It replaces
 hardcoded mouse coordinates with **structured detection**: enumerate
 interactive elements, find the one matching the user's intent, click its
-center.
+center. LLM never has to read pixels.
 
-## Three-tier fallback
+## Three backends, one schema
 
-1. **UIA detect** (free, no ML) — `eyes detect --window <hwnd> --name-contains "<text>"`
-   Returns bbox center, always click there. Covers ~90% of accessible apps
-   (Any VPN, Edge, File Explorer, VS Code, Feishu, Sublime, Word, Excel…).
-2. **Hardcoded coords** — only when UIA returns nothing and the target is a
-   static, known-position element.
-3. **Screenshot + vision model** — when neither UIA nor coords suffice
-   (custom canvas, embedded WebView2 contents, legacy non-accessible apps).
-   Pluggable via `openeyes-vision-omniparser` / `openeyes-vision-florence`.
+1. **UIA** (`openeyes.backends.uia`) — Windows / macOS / Linux native apps.
+   pywinauto + ctypes. Free, no model. Covers Any VPN, VS Code, Feishu,
+   Word, Excel, Explorer.
+2. **CDP** (`openeyes.backends.cdp`) — Chromium browser pages (Edge / Chrome
+   / WebView2). Raw websocket-client against Chrome DevTools Protocol.
+   No LLM vision needed, no model on disk. The DOM probe returns structured
+   ``Element[]`` with name, role, viewport-relative bbox, automation_id,
+   class, parent chain. Pluggable in-page JS probe filters zero-area and
+   ``display:none``; viewport-relative centers work directly via
+   ``Input.dispatchMouseEvent`` / ``Input.insertText``. Falls back to
+   ``seed_user_data`` profile copy so cookies survive across launches.
+3. **Vision** — Phase 3 fallback for canvas / image-only UIs (OmniParser,
+   Florence-2). Not yet wired.
+
+All backends emit the same ``Element`` schema
+(``backend / control_type / name / bbox / center / automation_id / hint
+...``) so CLI / MCP / hints module are backend-agnostic.
 
 ## Quick commands
+
+### Desktop / native (UIA)
 
 ```bash
 # 1. find hwnd
@@ -35,33 +46,81 @@ eyes capture --window <hwnd> --out shot.png
 # 3. detect (dry-run is automatic)
 eyes detect --window <hwnd> --pretty
 
-# 4. click by name (dry-run is default; pass --go to actually click)
+# 4. click by name (dry-run by default; pass --go to actually click)
 eyes click --window <hwnd> --name-contains "消息" --go
 
-# 5. click by absolute coords
-eyes click --x 100 --y 200 --go
-
-# 6. Vimium-style grid (3x3 default)
+# 5. Vimium-style grid (3x3 default)
 eyes grid --window <hwnd> --row 1 --col 2 --go
 
-# 7. hotkey / type
+# 6. hotkey / type
 eyes hotkey --combo ctrl+a
 eyes type --text "hello"
 ```
 
+### Browser (CDP)
+
+```bash
+# 1. launch a dedicated Edge with --remote-debugging-port=9222 (--no-seed to skip cookie copy)
+eyes browser launch --url https://example.com --no-seed
+
+# 2. list tabs (HTTP /json discovery)
+eyes browser tabs
+
+# 3. DOM probe → JSON (--pretty for human view)
+eyes browser scan --pretty --url-contains example.com
+
+# 4. read first input (hint 'a' in reading order) — dry-run by default
+eyes browser type --text "search term" --hint a
+
+# 5. actually click the GO button at hint 's'
+eyes browser click --hint s --go
+
+# 6. snapshot viewport
+eyes browser shot --out shot.png
+```
+
+The browser path also assigns Vimium-style letter hints to every
+interactive element (``a``, ``s``, ``d``, ``f``, ... up to 2-letter,
+3-letter up to 1884 total). An LLM can answer "click element ``s``"
+without describing coordinates — same UX as UIA mode.
+
 ## MCP server
 
-`eyes-mcp` exposes the same 7 primitives as MCP tools:
+`eyes-mcp` exposes 13 primitives as MCP tools:
 
+**Native (UIA):**
 - `list_windows`
-- `capture_window`
+- `capture_window` (dry_run=true default; set false to write PNG)
 - `detect_elements`
 - `click` (dry_run=true default)
 - `grid`
-- `hotkey`
-- `type_text`
+- `hotkey` (dry_run=true default; set false to send keys)
+- `type_text` (dry_run=true default; set false to type)
+
+**Browser (CDP):**
+- `browser_launch`  --url / --port / --no-seed / --dry-run=false
+- `browser_tabs`
+- `browser_scan`    --pretty / --control-type / --name-contains
+- `browser_click`   --hint / --idx / --name-contains / --go
+- `browser_type`    --text / --hint / --idx / --enter / --dry-run=false
+- `browser_shot`    --out / --dry-run=false
 
 Start: `eyes-mcp` (stdio transport).
+
+MCP side-effecting tools default to `dry_run=true`; explicitly pass
+`dry_run=false` before writing files, launching a browser, sending keys, or
+typing text. `browser_type` may scan the DOM in dry-run mode when a selector
+is supplied, but it never focuses, types, or presses Enter until execution is
+explicitly enabled.
+
+## When to use which backend
+
+| Scenario | Backend | Why |
+| --- | --- | --- |
+| Any VPN / Edge native shell / VS Code / Feishu / Word / Excel | UIA | Fast, free |
+| Real Chromium browser page (login wall, multi-step form, JS-driven UI) | CDP | Structured, no image cost |
+| WebView2 inside a UWP / Edge legacy URL bar / canvas-only UI | CDP (browser) | UIA only sees the shell |
+| Custom canvas game / image-only button | Vision (Phase 3) | Last resort |
 
 ## Tips
 
@@ -70,35 +129,54 @@ Start: `eyes-mcp` (stdio transport).
 - Pass `--return-to-origin` after a click to leave the user's cursor where
   it was.
 - After clicking a state-changing button (e.g. `Secure my connection`),
-  re-run `eyes detect` to verify the new state — UIA tree is the source
-  of truth.
+  re-run `eyes detect` (UIA) or `eyes browser scan` (CDP) to verify the
+  new state — the source of truth is the live element tree, not pixels.
 - UWP apps: title is on `ApplicationFrameWindow`; controls live inside a
   child `Windows.UI.Core.CoreWindow`. Pass `--restore` to call
   `ShowWindow(SW_RESTORE)` before enumerating (the tree is empty when
   minimized).
+- CDP browser path defaults to `--port 9222`. Reuse a ``--profile-dir``
+  across scripts to keep cookies alive (no re-login). Pass ``--no-seed`` to
+  skip copying live profile slices into the temp dir.
+- CDP coordinates are viewport-relative — independent of Edge window
+  position. Same DOM element, same numbers, every time.
 
 ## Hard-won facts (this machine)
 
-- Python 3.11.5, Pillow 11.2.1, pywinauto 0.6.9, pywin32 — already installed.
+- Python 3.11.5, Pillow 11.2.1, pywinauto 0.6.9, pywin32, websocket-client 1.8.0.
 - DPI: multi-monitor 3840x1200. Use window-relative coords; absolute coords
   break when the window moves.
 - `pywinauto.rect.left/top/width/height` may be int property or callable —
   use `_call()` wrapper.
 - `node.children` in UIA backend is a method — `node.children()`.
+- Chromium ~v111 requires ``--remote-allow-origins=*`` on the debug-
+  enabled browser or WebSocket handshakes get 403. OpenEyes ``launch_edge``
+  passes this flag by default.
+- Chromium's ``webSocketDebuggerUrl`` often strips the port
+  (``ws://127.0.0.1/...``); ``connect()`` stitches ``:9222`` back.
+- Edge ``User Data`` is locked when live Edge runs; ``launch_edge`` seeds
+  the temp userDataDir from just the session slices (Preferences /
+  Cookies / Local Storage / Network / IndexedDB).
+- 先判断是否有 API/CLI/DOM 可走：能走就不要开浏览器自动化。
 
 ## Python API
 
 ```python
-from openeyes import list_windows, find_window, capture_window
-from openeyes import detect_elements, find_elements, click_by_selector
-
+# Native (UIA)
+from openeyes import find_window, detect_elements, find_elements, click_by_selector
 wins = find_window(title_contains="飞书")
-if wins:
-    hwnd = wins[0].hwnd
-    img = capture_window(hwnd)
-    img.save("feishu.png")
-    elems = detect_elements(hwnd, restore=True)
-    msg = find_elements(elems, name_contains="消息")[0]
-    target = click_by_selector(hwnd, name_contains="消息", dry_run=True)
-    print("would click", target.center, target.name)
+elems = detect_elements(wins[0].hwnd, restore=True)
+msg = find_elements(elems, name_contains="消息")[0]
+click_by_selector(wins[0].hwnd, name_contains="消息", dry_run=False)
+
+# Browser (CDP)
+from openeyes.backends import cdp
+from openeyes.core.hints import assign_hints
+
+info = cdp.launch_edge(url="https://example.com", seed=False)
+conn = cdp.connect(port=9222, url_contains="example.com")
+elems = cdp.scan_dom(conn)
+assign_hints(elems)
+go = next(e for e in elems if e.name == "GO")
+cdp.click_center(conn, go)
 ```

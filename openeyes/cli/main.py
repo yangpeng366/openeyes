@@ -256,6 +256,201 @@ def type(text: str, interval: float) -> None:
     click.echo(f"typed {len(text)} chars")
 
 
+# ----- browser (CDP) -------------------------------------------------------
+
+@cli.group()
+def browser() -> None:
+    """Drive any Chromium browser (Edge / Chrome) via CDP.
+
+    Subcommands:
+
+    \b
+        eyes browser launch  --url <url>
+        eyes browser tabs
+        eyes browser scan    [--pretty]
+        eyes browser click   --hint <a|aa> ...
+        eyes browser type    --text <str>
+        eyes browser shot    --out <png>
+
+    Defaults are dry-run unless ``--go`` is passed.
+    """
+
+
+@browser.command("launch")
+@click.option("--url", default="about:blank", show_default=True)
+@click.option("--port", type=int, default=9222, show_default=True)
+@click.option("--profile-dir", default=None,
+              help="reuse a temp profile dir to keep cookies across launches")
+@click.option("--seed/--no-seed", default=True,
+              help="copy session slices from live Edge profile (Default)")
+@click.option("--headless", is_flag=True)
+def browser_launch(url: str, port: int, profile_dir: str | None,
+                   seed: bool, headless: bool) -> None:
+    """Launch Edge with --remote-debugging-port=PORT."""
+    from openeyes.backends import cdp as browser_backend
+    prof = browser_backend.Path(profile_dir) if profile_dir else None
+    info = browser_backend.launch_edge(
+        port=port, url=url, profile_dir=prof, seed=seed, headless=headless,
+    )
+    click.echo(json.dumps(info, ensure_ascii=False, indent=2))
+
+
+@browser.command("tabs")
+@click.option("--port", type=int, default=9222, show_default=True)
+def browser_tabs(port: int) -> None:
+    """List DevTools page targets on the configured port."""
+    from openeyes.backends import cdp as browser_backend
+    try:
+        pages = browser_backend.list_tabs(port)
+    except Exception as e:
+        click.echo(f"failed to reach :{port}: {e}", err=True)
+        sys.exit(4)
+    short = [{"id": p.get("id"), "title": p.get("title"),
+              "url": p.get("url"), "type": p.get("type")} for p in pages]
+    click.echo(json.dumps(short, ensure_ascii=False, indent=2))
+
+
+@browser.command("scan")
+@click.option("--port", type=int, default=9222, show_default=True)
+@click.option("--url", default=None, help="navigate first (default: skip)")
+@click.option("--url-contains", default=None)
+@click.option("--name-contains")
+@click.option("--control-type")
+@click.option("--regex")
+@click.option("--max", type=int, default=200)
+@click.option("--pretty", is_flag=True)
+@click.option("--no-hints", is_flag=True,
+              help="skip letter-hint assignment (faster, no annotations)")
+def browser_scan(port: int, url: str | None, url_contains: str | None,
+                  name_contains: str | None, control_type: str | None,
+                  regex: str | None, max: int, pretty: bool,
+                  no_hints: bool) -> None:
+    """DOM probe the active page; return interactive elements as JSON."""
+    from openeyes.backends import cdp as browser_backend
+    from openeyes.core.hints import assign_hints
+    from openeyes.core.selector import find_elements
+    conn = browser_backend.connect(port=port, url_contains=url_contains)
+    if url:
+        conn.navigate(url)
+        time.sleep(0.6)
+    elems = browser_backend.scan_dom(conn)
+    if not no_hints:
+        assign_hints(elems)
+    elems = find_elements(elems, name_contains=name_contains,
+                           control_type=control_type, regex=regex)
+    elems = elems[:max]
+    if pretty:
+        page = conn.current_url() or "(no url)"
+        title = conn.page_title() or "(untitled)"
+        click.echo(f"# {title}  <{page}>  [{len(elems)} interactive]")
+        for e in elems:
+            tag = f"[{e.hint}]" if e.hint else "     "
+            click.echo(
+                f"  {tag} [{e.control_type:>12}] "
+                f"({e.center.x:>4},{e.center.y:>4}) "
+                f"{e.bbox.w}x{e.bbox.h}  {e.name!r}"
+            )
+    else:
+        click.echo(json.dumps([e.to_dict() for e in elems],
+                               ensure_ascii=False, indent=2))
+
+
+def _resolve_browser_target(conn, port: int, hint: str | None,
+                              idx: int | None, name_contains: str | None,
+                              control_type: str | None,
+                              url_contains: str | None):
+    """Pick one element out of a fresh DOM scan (click/type entry-point)."""
+    from openeyes.backends import cdp as browser_backend
+    from openeyes.core.hints import assign_hints, find_by_hint
+    from openeyes.core.selector import find_elements
+    if conn is None:
+        conn = browser_backend.connect(port=port, url_contains=url_contains)
+    elems = browser_backend.scan_dom(conn)
+    assign_hints(elems)
+    elems = find_elements(elems, name_contains=name_contains,
+                           control_type=control_type)
+    if not elems:
+        raise click.UsageError("no matching element")
+    chosen = None
+    if hint:
+        chosen = find_by_hint(elems, hint)
+        if not chosen:
+            raise click.UsageError(f"no element with hint {hint!r}")
+    elif idx is not None:
+        if idx < 0 or idx >= len(elems):
+            raise click.UsageError(
+                f"--idx {idx} out of range (0..{len(elems) - 1})")
+        chosen = elems[idx]
+    else:
+        chosen = elems[0]
+    return chosen, conn
+
+
+@browser.command("click")
+@click.option("--port", type=int, default=9222, show_default=True)
+@click.option("--hint", default=None,
+              help="Vimium-style letter (a, s, .. zz, aaa ..)")
+@click.option("--idx", type=int, default=None,
+              help="0-based index into the scan-ordered list")
+@click.option("--name-contains", default=None)
+@click.option("--control-type", default=None)
+@click.option("--url-contains", default=None)
+@click.option("--go", "go", is_flag=True, help="actually click")
+def browser_click(port: int, hint: str | None, idx: int | None,
+                   name_contains: str | None, control_type: str | None,
+                   url_contains: str | None, go: bool) -> None:
+    """Click a single element resolved by hint/idx/name-contains."""
+    from openeyes.backends import cdp as browser_backend
+    chosen, conn = _resolve_browser_target(
+        None, port, hint, idx, name_contains, control_type, url_contains)
+    desc = (f"[cdp] '{chosen.name}' ({chosen.control_type}) "
+            f"center=({chosen.center.x},{chosen.center.y})")
+    if not go:
+        click.echo(f"[dry-run] would click {desc}")
+        return
+    browser_backend.click_center(conn, chosen)
+    click.echo(f"clicked {desc}")
+
+
+@browser.command("type")
+@click.option("--port", type=int, default=9222, show_default=True)
+@click.option("--text", required=True)
+@click.option("--hint", default=None)
+@click.option("--idx", type=int, default=None)
+@click.option("--name-contains", default=None)
+@click.option("--control-type", default=None)
+@click.option("--enter/--no-enter", default=False,
+              help="press Enter after typing")
+@click.option("--url-contains", default=None)
+def browser_type(port: int, text: str, hint: str | None, idx: int | None,
+                  name_contains: str | None, control_type: str | None,
+                  enter: bool, url_contains: str | None) -> None:
+    """Type text into a focused element (or specify target by hint/idx)."""
+    from openeyes.backends import cdp as browser_backend
+    chosen = None
+    if hint or idx is not None or name_contains or control_type:
+        chosen, conn = _resolve_browser_target(
+            None, port, hint, idx, name_contains, control_type, url_contains)
+    else:
+        conn = browser_backend.connect(port=port, url_contains=url_contains)
+    browser_backend.type_text(conn, text, element=chosen, press_enter=enter)
+    desc = (f"typed {len(text)} chars"
+            + (f" into {chosen.name!r}" if chosen else " (focused field)")
+            + (" + Enter" if enter else ""))
+    click.echo(desc)
+
+
+@browser.command("shot")
+@click.option("--port", type=int, default=9222, show_default=True)
+@click.option("--out", required=True, help="output PNG path")
+def browser_shot(port: int, out: str) -> None:
+    """Capture the page viewport as PNG."""
+    from openeyes.backends import cdp as browser_backend
+    conn = browser_backend.connect(port=port)
+    p = browser_backend.screenshot(conn, out)
+    click.echo(p)
+
+
 def main() -> int:
     """Console entrypoint."""
     try:

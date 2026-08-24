@@ -1,0 +1,12 @@
+- insert:
+    - id: mcp-openeyes
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: openeyes
+        transport: stdio
+        cwd: E:/gitAll/openeyes
+        command: python
+        args:
+          - '-m'
+          - 'openeyes.mcp.server'
+        failOnStartupError: true
