@@ -1167,3 +1167,204 @@ collects 59 items including the new `test_cdp.py`,
 stdio probe verifies the 13-tool contract the snapshot exposes. No
 further gates block a local commit; a push or PR remains gated on
 explicit user approval per the `放权 + 高频推进` row annotation.
+
+## Patrol evidence — August 25, 2026 18:09 (Asia/Shanghai)
+
+The next read-only patrol ran against the current checkout at `c8a0276`,
+which is synchronized with `origin/main`. The local prerequisites and MCP
+contract remain healthy, but the browser acceptance path is unavailable
+because neither the dsh web host nor the Edge CDP endpoint is listening.
+
+- `dsh-preflight.ps1` returned `ready:true` with `dsh:true`,
+  `openeyes_mcp_import:true`, `dsh_mcp_client_version:0.1.1-rc.2`, and
+  `missing_prerequisites:[]`.
+- `mcp-stdio-probe.py` returned `ready:true`, `tool_count:13`, and the
+  unchanged 13-tool contract.
+- `dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061` because `127.0.0.1:3080` refused the
+  connection; no page-context fetch could be evaluated.
+- `pytest tests/` passed `65 / 65` in `10.56s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or
+  `3080`; `eyes windows list --title-contains Edge` found one visible Edge
+  window, but no debug Edge process was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains safely
+deferred until both `9222` and `3080` are listening. The next action is to
+rerun this same probe set, then perform the acceptance probe only when both
+listeners are available.
+
+## Patrol evidence — August 25, 2026 18:31:11 (Asia/Shanghai)
+
+This read-only patrol ran against checkout `c8a0276`; the working tree still
+contains the existing documentation change and local `.codex` artifacts.
+The repository-local prerequisites, MCP stdio contract, and full test suite
+remain healthy, while the live dsh/CDP acceptance path is unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `openeyes_mcp_import:true`, `dsh_mcp_client_version:0.1.1-rc.2`, and
+  `missing_prerequisites:[]`.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `tool_count:13`,
+  and the unchanged tool names from `docs/capability-contract.md`.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061`; no page-context fetch was evaluated.
+- `pytest tests/` passed `65 / 65` in `17.36s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge window, but
+  the required debug listener is absent.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains deferred:
+run it only after both `9222` and `3080` listen. The next patrol should rerun
+this same read-only probe set before reconsidering the acceptance gate.
+
+## Patrol evidence — August 25, 2026 18:46:48 (Asia/Shanghai)
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. Repository-local
+prerequisites and the MCP stdio contract are healthy; the live dsh/CDP path is
+still unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, version `0.1.1-rc.2`, and no missing
+  prerequisites.
+- `python examples\mcp-stdio-probe.py` returned `ready:true` with the stable
+  13-tool contract.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061` because the target actively refused the
+  connection; no page-context fetch was evaluated.
+- `pytest tests/` passed `65 / 65` in `8.01s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge window, but
+  no required debug listener was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains safely
+deferred until both listeners are available. The next patrol should rerun this
+same read-only probe set before reconsidering that acceptance gate.
+## Patrol evidence — August 25, 2026 19:07:58 (Asia/Shanghai)
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. The repository-local
+prerequisites, MCP stdio contract, and full test suite remain healthy, while
+the live dsh/CDP acceptance path is still unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, version `0.1.1-rc.2`, and no missing
+  prerequisites.
+- `python examples\mcp-stdio-probe.py` returned `ready:true` with the stable
+  13-tool contract.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061` because the target actively refused the
+  connection; no page-context fetch was evaluated.
+- `pytest tests/` passed `65 / 65` in `9.39s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge window, but
+  no required debug listener was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains safely
+deferred until both listeners are available. The next patrol should rerun this
+same read-only probe set before reconsidering the acceptance gate.
+
+
+## Patrol evidence — August 25, 2026 19:42:41 (Asia/Shanghai)
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. The local MCP path
+and full test suite remain healthy; the live dsh/CDP acceptance path is still
+unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, version `0.1.1-rc.2`, and no missing
+  prerequisites.
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1 -DumpConfig` showed the
+  repository-local `mcp-openeyes` entry with stdio transport, `cwd:
+  E:/gitAll/openeyes`, `python -m openeyes.mcp.server`, and
+  `failOnStartupError: true`.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `tool_count:13`,
+  and the stable names from `docs/capability-contract.md`.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061`; no page-context fetch was evaluated.
+- `pytest tests\` passed `65 / 65` in `9.78s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge window, but
+  no required debug listener was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains deferred
+until both listeners are available. The repository now ignores local `.codex/`
+patrol artifacts so subsequent evidence runs do not create untracked noise.
+
+## Patrol evidence — August 25, 2026 19:22:26 (Asia/Shanghai)
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. Repository-local
+prerequisites, the MCP stdio contract, and the full test suite remain healthy,
+while the live dsh/CDP acceptance path is still unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, version `0.1.1-rc.2`, and no missing
+  prerequisites.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `tool_count:13`,
+  and the unchanged 13-tool contract.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061`; no page-context fetch was evaluated.
+- `pytest tests/` passed `65 / 65` in `10.32s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge window, but
+  no required debug listener was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains safely
+deferred until both listeners are available. The next patrol should rerun this
+same read-only probe set before reconsidering the acceptance gate.
+
+## Patrol evidence — August 25, 2026 19:57:07 (Asia/Shanghai)
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. The dsh prerequisites,
+repository-local MCP stdio mount, and full test suite remain healthy; the live
+dsh/CDP acceptance path is still unavailable.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, version `0.1.1-rc.2`, and no missing
+  prerequisites.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `tool_count:13`,
+  and the unchanged 13-tool contract.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061`; no page-context fetch was evaluated.
+- `pytest tests\` passed `65 / 65` in `10.67s`.
+- `Get-NetTCPConnection -State Listen` found no listener on `9222` or `3080`.
+  `eyes windows list --title-contains Edge` found one visible Edge Beta window,
+  but no required debug listener was present.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains deferred
+until both listeners are available; no click or other browser side effect was
+performed in this round.
+
+## Patrol evidence — August 25, 2026 20:15:43 (Asia/Shanghai) — Round 81
+
+This read-only patrol reran the prescribed local gates against checkout
+`c8a0276`, which remains synchronized with `origin/main`. The dsh prerequisites
+and the repository-local MCP stdio mount remain healthy; the live dsh/CDP path is
+still unavailable because neither 9222 nor 3080 is listening on this workstation.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, `dsh_mcp_client_version:0.1.1-rc.2`, and
+  `missing_prerequisites:[]`; `next_action` continues to point at the two-tab
+  `browser_click` `url_contains` acceptance probe, deferred until both listeners
+  come up.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `protocol:stdio`, and
+  `tool_count:13` with the stable tool names from `docs/capability-contract.md`
+  (list_windows, capture_window, detect_elements, click, grid, hotkey, type_text
+  + browser_launch, browser_tabs, browser_scan, browser_click, browser_type and
+  browser_shot), matching the 13-tool MCP contract exposed in Round 80 evidence.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061` (target actively refused the connection); the
+  page-context fetch was not evaluated because `127.0.0.1:3080` is not listening.
+- `pytest tests/` passed `65 / 65` in `10.03s`; the suite covers the CDP backend
+  (`test_cdp.py`), MCP stdio probe (`test_mcp_stdio_probe.py`), MCP contract
+  (`test_mcp_contract.py`), dsh fetch stall probe (`test_dsh_fetch_stall_probe.py`
+  and `test_dsh_mount_contract.py`), launch-debug-edge launcher and hints plus the
+  smoke suite, with no regressions versus the Round 80 evidence (also `65 / 65`).
+- `Get-NetTCPConnection -State Listen` returned no listener on either `9222` or
+  `3080`. `eyes windows list --title-contains Edge` returned one visible Edge Beta
+  window titled `build-arm-articleEditor [Jenkins] 和另外 4 个页面 - 个人 - Microsoft Edge Beta`, but the required CDP debug listener is absent; no debug Edge process is present in the listening set, so the browser_click acceptance probe cannot be safely performed this round.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains deferred until both `9222` and `3080` listen; the next patrol should rerun this same read-only probe set before reconsidering the acceptance gate. The pending `.gitignore` change (add `/.codex/` to ignore local patrol artefacts) and the accumulated evidence sections in `docs/dsh-web-acceptance.md` remain ready for a local commit, with push/PR still gated on explicit user approval per the row annotation `放权 + 高频推进`.
+
