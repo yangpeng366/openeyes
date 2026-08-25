@@ -32,6 +32,7 @@ coverage.xml
 .tox/
 
 # Project artefacts
+/-w
 *.log
 logs/
 .tmp/
