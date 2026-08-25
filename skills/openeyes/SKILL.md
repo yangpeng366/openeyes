@@ -180,3 +180,32 @@ assign_hints(elems)
 go = next(e for e in elems if e.name == "GO")
 cdp.click_center(conn, go)
 ```
+
+## Repository stewardship (codex is authorized)
+
+As of 2026-08-25 the user has granted **full delegation** on this repo:
+
+### Authority
+- `git commit`, `git push` to `origin/main` (SSH:443 fallback per host `MEMORY.md` §7).
+- Open pull requests against `yangpeng366/openeyes` from a topic branch (e.g. `fix/<short-slug>`).
+- Fix typos, doc bugs, small refactors, contract drift between `docs/capability-contract.md` and the MCP / CLI surface — all in scope without per-change approval.
+- Re-run the local test suite (`pytest tests/`) before pushing; skip only when the change is docs-only.
+
+### Git identity (hard rule)
+- All commits must be authored as `yangpeng <yangpeng@sobey.com>`. The repo-local config already sets this; verify with `git config --get user.name` / `user.email` before any commit.
+
+### Red lines
+- **No force push** to `main`. Rebase / amend only on the same local branch before the push lands.
+- **No push of `.codex/`** — local round artifacts; keep on disk, do not `git add`. Add `.codex/` to `.gitignore` as a follow-up commit if it is not already ignored.
+- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented 13-tool contract requires a feature branch + PR with rationale in the body.
+- **No secrets** in commits. The repo has no secrets today; if any are ever needed, use env vars and document in the PR.
+
+### Push workaround (Windows host)
+- Direct `https://api.github.com` push times out on this host (see host `MEMORY.md` §7). Use the SSH-over-443 remote:
+  `git remote set-url origin ssh://git@ssh.github.com:443/yangpeng366/openeyes.git`
+- If SSH:443 also fails, fall back to Python `urllib.request` (TLS negotiation differs from curl).
+
+### What the user still wants to be told about
+- Any push that lands on `main` (one-line summary in the daily session brief).
+- Any new PR opened (link + one-paragraph rationale).
+- Any blocked push (network / 2FA / repo permission) — escalate before retrying.
