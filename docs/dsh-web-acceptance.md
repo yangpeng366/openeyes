@@ -1717,3 +1717,63 @@ gate. The accumulated Round 88 evidence section is appended to
 `docs/dsh-web-acceptance.md` and will be committed locally on top of
 `72a0cdb`; push/PR remains gated on explicit user approval per the
 row annotation `放权 + 高频推进`.
+
+## Patrol evidence — August 26, 2026 04:04:44 +08:00 (Asia/Shanghai) — Round 89
+
+This read-only patrol reran the prescribed local gates against checkout
+`7b59beb` (the Round 88 evidence refresh), which is eight commits ahead of
+`origin/main` (still `c8a0276`) because the Round 81 evidence refresh +
+`.codex/` ignore change, the Round 82 evidence refresh, the Round 83
+evidence refresh, the Round 84 evidence refresh, the Round 85 evidence
+refresh, the Round 86 evidence refresh, the Round 87 evidence refresh,
+and the Round 88 evidence refresh are still local; push/PR remains gated
+on explicit user approval per the row annotation `放权 + 高频推进`. The
+dsh prerequisites, the repository-local MCP stdio mount, and the full
+`pytest` suite remain healthy; the live dsh/CDP path is still
+unavailable because neither `9222` nor `3080` is listening on this
+workstation.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`,
+  `dsh_mcp_client_version:0.1.1-rc.2`, and
+  `missing_prerequisites:[]`; `next_action` continues to point at the
+  two-tab `browser_click` `url_contains` acceptance probe, deferred
+  until both listeners come up.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`,
+  `protocol:stdio`, and `tool_count:13` with the stable tool names
+  from `docs/capability-contract.md` (list_windows, capture_window,
+  detect_elements, click, grid, hotkey, type_text + browser_launch,
+  browser_tabs, browser_scan, browser_click, browser_type and
+  browser_shot), matching the 13-tool MCP contract exposed in Round 81,
+  Round 82, Round 83, Round 84, Round 85, Round 86, Round 87 and Round 88
+  evidence.
+- `python examples\dsh-fetch-stall-probe.py --url-contains
+  127.0.0.1:3080 --timeout 2500` exited `1` with `WinError 10061`
+  (target actively refused the connection); the page-context fetch was
+  not evaluated because `127.0.0.1:3080` is not listening.
+- `pytest tests\` passed `65 / 65` in `10.11s`; the suite covers
+  the CDP backend (`test_cdp.py`), MCP stdio probe
+  (`test_mcp_stdio_probe.py`), MCP contract
+  (`test_mcp_contract.py`), dsh fetch stall probe
+  (`test_dsh_fetch_stall_probe.py` and `test_dsh_mount_contract.py`),
+  launch-debug-edge launcher and hints plus the smoke suite, with no
+  regressions versus the Round 88 evidence (also `65 / 65`, then
+  `9.84s`). The `+0.27s` wall-time delta versus Round 88 stays inside
+  the Round 81–88 noise band (`8.07s`–`12.58s`); the suite still exits
+  clean.
+- `Get-NetTCPConnection -State Listen` returned no listener on either
+  `9222` or `3080`. `python -m openeyes.cli.main windows list
+  --title-contains Edge` returned one visible Edge Beta window titled
+  `build-arm-articleEditor [Jenkins] 和另外 4 个页面 - 个人 - Microsoft
+  Edge Beta` (hwnd `13241940`, pid `0`), but the required CDP debug
+  listener is absent; no debug Edge process is present in the listening
+  set, so the `browser_click` acceptance probe cannot be safely
+  performed this round.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains
+deferred until both `9222` and `3080` listen; the next patrol should
+rerun this same read-only probe set before reconsidering the acceptance
+gate. The accumulated Round 89 evidence section is appended to
+`docs/dsh-web-acceptance.md` and will be committed locally on top of
+`7b59beb`; push/PR remains gated on explicit user approval per the
+row annotation `放权 + 高频推进`.
