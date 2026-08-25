@@ -1368,3 +1368,49 @@ still unavailable because neither 9222 nor 3080 is listening on this workstation
 
 The two-tab `browser_click` `url_contains` acceptance probe remains deferred until both `9222` and `3080` listen; the next patrol should rerun this same read-only probe set before reconsidering the acceptance gate. The pending `.gitignore` change (add `/.codex/` to ignore local patrol artefacts) and the accumulated evidence sections in `docs/dsh-web-acceptance.md` remain ready for a local commit, with push/PR still gated on explicit user approval per the row annotation `放权 + 高频推进`.
 
+
+## Patrol evidence — August 25, 2026 20:33:43 (Asia/Shanghai) — Round 82
+
+This read-only patrol reran the prescribed local gates against checkout
+`31345ee`, which is one commit ahead of `origin/main` (still `c8a0276`) because
+the Round 81 evidence refresh + `.codex/` ignore change has not been pushed;
+push/PR remains gated on explicit user approval per the row annotation
+`放权 + 高频推进`. The dsh prerequisites, the repository-local MCP stdio mount,
+and the full `pytest` suite remain healthy; the live dsh/CDP path is still
+unavailable because neither `9222` nor `3080` is listening on this workstation.
+
+- `pwsh -NoProfile -File examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh:true`, `openeyes_mcp_import:true`, `dsh_mcp_client_version:0.1.1-rc.2`,
+  and `missing_prerequisites:[]`; `next_action` continues to point at the
+  two-tab `browser_click` `url_contains` acceptance probe, deferred until both
+  listeners come up.
+- `python examples\mcp-stdio-probe.py` returned `ready:true`, `protocol:stdio`,
+  and `tool_count:13` with the stable tool names from
+  `docs/capability-contract.md` (list_windows, capture_window, detect_elements,
+  click, grid, hotkey, type_text + browser_launch, browser_tabs, browser_scan,
+  browser_click, browser_type and browser_shot), matching the 13-tool MCP
+  contract exposed in Round 81 evidence.
+- `python examples\dsh-fetch-stall-probe.py --url-contains 127.0.0.1:3080 --timeout 6`
+  exited `3` with `WinError 10061` (target actively refused the connection);
+  the page-context fetch was not evaluated because `127.0.0.1:3080` is not
+  listening.
+- `pytest tests\` passed `65 / 65` in `10.30s`; the suite covers the CDP
+  backend (`test_cdp.py`), MCP stdio probe (`test_mcp_stdio_probe.py`), MCP
+  contract (`test_mcp_contract.py`), dsh fetch stall probe
+  (`test_dsh_fetch_stall_probe.py` and `test_dsh_mount_contract.py`),
+  launch-debug-edge launcher and hints plus the smoke suite, with no
+  regressions versus the Round 81 evidence (also `65 / 65`).
+- `Get-NetTCPConnection -State Listen` returned no listener on either `9222`
+  or `3080`. `eyes windows list --title-contains Edge` returned one visible
+  Edge Beta window titled `build-arm-articleEditor [Jenkins] 和另外 4 个页面 - 个人 - Microsoft Edge Beta`,
+  but the required CDP debug listener is absent; no debug Edge process is
+  present in the listening set, so the `browser_click` acceptance probe
+  cannot be safely performed this round.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains deferred
+until both `9222` and `3080` listen; the next patrol should rerun this same
+read-only probe set before reconsidering the acceptance gate. The accumulated
+Round 82 evidence section plus the still-unpushed Round 81 commit remain
+ready for a local commit, with push/PR still gated on explicit user approval
+per the row annotation `放权 + 高频推进`.
+
