@@ -155,25 +155,43 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design.
 ```
 openeyes/
 ├── openeyes/              # main package
-│   ├── core/              # windows + capture + detect + click primitives
+│   ├── core/              # windows + capture + detect / click primitives
 │   │   ├── windows.py     # EnumWindows wrapper
 │   │   ├── capture.py     # PIL.ImageGrab wrapper
 │   │   ├── schema.py      # Element / WindowInfo dataclasses
 │   │   ├── selector.py    # element find / filter
-│   │   └── _platform.py   # cross-platform backend selection
+│   │   ├── actuator.py    # mouse / hotkey / type_text façade
+│   │   └── hints.py       # Vimium-style letter hint overlay
 │   ├── backends/
-│   │   └── uia.py         # Windows UIA backend (pywinauto)
+│   │   ├── uia.py         # Windows UIA backend (pywinauto)
+│   │   └── cdp.py         # Edge / Chrome DevTools Protocol backend
 │   ├── actuators/
 │   │   └── win32.py       # Windows mouse/keyboard input
 │   ├── cli/               # `eyes` command
 │   │   └── main.py
-│   └── mcp/               # MCP server
+│   └── mcp/               # MCP server — 13 tools (7 native + 6 browser)
 │       └── server.py
+├── docs/
+│   ├── architecture.md
+│   ├── capability-contract.md   # 13-tool MCP contract (read / write / high-risk)
+│   └── dsh-web-acceptance.md    # manual acceptance guide for dsh web
 ├── examples/
 │   ├── feishu_first_test.py
-│   └── anyvpn_keepalive.py
+│   ├── anyvpn_keepalive.py      # + launch-anyvpn-keepalive.ps1
+│   ├── mcp-stdio-probe.py       # MCP stdio mount smoke test
+│   ├── dsh-preflight.ps1        # dsh web preflight (read-only)
+│   ├── dsh-fetch-stall-probe.py # CDP probe for the dsh fetch-stall symptom
+│   ├── dsh-session-diagnostic.py
+│   ├── dsh-openeyes-mcp.yml     # web profile for dsh
+│   └── README.md
 ├── tests/
-│   └── test_smoke.py
+│   ├── test_smoke.py
+│   ├── test_cdp.py
+│   ├── test_hints.py
+│   ├── test_mcp_contract.py     # locks the 13-tool contract
+│   ├── test_mcp_stdio_probe.py
+│   ├── test_dsh_mount_contract.py
+│   └── test_dsh_fetch_stall_probe.py
 ├── .codex-plugin/
 │   └── plugin.json
 ├── skills/openeyes/
