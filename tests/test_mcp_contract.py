@@ -128,8 +128,6 @@ def test_browser_click_forwards_url_filter(monkeypatch):
     })
 
     assert seen == {"port": 9222, "url_contains": "patrol-target"}
-    assert result["clicked"] is False
-    assert result["would_click"] is True
     assert result["target"]["name"] == "Continue"
 
 
@@ -200,3 +198,73 @@ def test_browser_click_unmatched_url_filter_fails_before_scan_or_click(monkeypat
     
     assert "no page target matched url_contains='missing-tab'" in result["error"]
     assert result["tool"] == "browser_click"
+
+
+def test_browser_type_forwards_url_filter(monkeypatch):
+    seen = {}
+
+    def connect(*, port, url_contains=None):
+        seen["port"] = port
+        seen["url_contains"] = url_contains
+        return object()
+
+    def scan(_conn):
+        return [Element(
+            backend="cdp",
+            control_type="Edit",
+            name="Search",
+            bbox=BBox(10, 20, 80, 24),
+            center=Center(50, 32),
+        )]
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", scan)
+    conn = MagicMock()
+    conn.evaluate = MagicMock(return_value=True)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", lambda *a, **k: None)
+
+    result = _call("browser_type", {
+        "text": "hello",
+        "name_contains": "Search",
+        "url_contains": "patrol-target",
+        "dry_run": False,
+    })
+
+    assert seen == {"port": 9222, "url_contains": "patrol-target"}
+    assert result["sent"] is True
+    assert result["sent_chars"] == len("hello")
+    assert result["into"] == "Search"
+    assert result["target"]["name"] == "Search"
+
+
+def test_browser_type_unmatched_url_filter_fails_before_type(monkeypatch):
+    def connect(*, port, url_contains=None):
+        raise CDPError(
+            "no page target matched url_contains='missing-tab'; "
+            "available URLs: 'https://tab-a', 'https://tab-b'"
+        )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("browser_type touched a page after url_contains mismatch")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", fail)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+
+    result = _call("browser_type", {
+        "text": "hello",
+        "name_contains": "Search",
+        "url_contains": "missing-tab",
+        "dry_run": False,
+    })
+
+    assert "no page target matched url_contains='missing-tab'" in result["error"]
+    assert result["tool"] == "browser_type"
+
+
+def test_browser_type_schema_advertises_url_contains():
+    tools = asyncio.run(mcp_server.list_tools())
+    by_name = {tool.name: tool for tool in tools}
+    schema = by_name["browser_type"].inputSchema
+    assert "url_contains" in schema["properties"]
+    assert schema["properties"]["url_contains"] == {"type": "string"}

@@ -1,4 +1,5 @@
-"""OpenEyes MCP server — exposes core primitives as MCP tools.
+"""
+OpenEyes MCP server — exposes core primitives as MCP tools.
 
 Tools (13 = 7 native + 6 browser):
     list_windows()             -> [{hwnd, title, ...}, ...]
@@ -238,6 +239,7 @@ async def list_tools() -> list[Tool]:
                     "idx": {"type": "integer"},
                     "name_contains": {"type": "string"},
                     "control_type": {"type": "string"},
+                    "url_contains": {"type": "string"},
                     "press_enter": {"type": "boolean", "default": False},
                     "dry_run": {"type": "boolean", "default": True},
                 },
@@ -522,7 +524,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         "press_enter": press_enter,
                         "dry_run": True,
                     }))]
-                conn = browser_backend.connect(port=arguments.get("port", 9222))
+                conn = browser_backend.connect(
+                    port=arguments.get("port", 9222),
+                    url_contains=arguments.get("url_contains"),
+                )
                 chosen = None
                 if has_target:
                     elems = browser_backend.scan_dom(conn)

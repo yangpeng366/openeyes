@@ -23,7 +23,7 @@ This contract describes the 13 tools exposed by `openeyes.mcp.server` in v0.1.x.
 | `browser_tabs` | Browser | read | none | Lists DevTools page targets. |
 | `browser_scan` | Browser | read | none | Reads interactive DOM elements and assigns hints. |
 | `browser_click` | Browser | high-risk | `go=false` default; `true` executes | Resolves one element and optionally clicks it. |
-| `browser_type` | Browser | write | `dry_run=true` default; `false` types | Resolves an optional target and types into it. |
+| `browser_type` | Browser | write | `dry_run=true` default; `false` types | Resolves an optional target via `hint`/`idx`/`name_contains`/`control_type` and types into it. Accepts `url_contains` to scope tab resolution. |
 | `browser_shot` | Browser | write | `dry_run=true` default; `false` writes | Captures a viewport PNG to the requested path. |
 
 ## Dry-run contract
@@ -34,7 +34,7 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 
 `browser_click` uses the compatibility switch `go: false`. Omitting `go`, passing `false`, or passing no value must return the resolved target with `clicked: false` and `would_click: true`. Only `go: true` may click.
 
-`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. File captures return the requested output path without creating it.
+`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent. File captures return the requested output path without creating it.
 
 ## dsh stdio mount
 
