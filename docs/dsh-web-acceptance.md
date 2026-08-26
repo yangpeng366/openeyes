@@ -1961,3 +1961,48 @@ gate. The accumulated Round 92 evidence section is appended to
 `docs/dsh-web-acceptance.md` and will be committed locally on top of
 `e5bc87e`; push/PR remains gated on explicit user approval per the
 row annotation `放权 + 高频推进`.
+## Round 94 patrol evidence — 2026-08-27 04:35 +08:00 (Asia/Shanghai)
+
+This round performs a read-only candidate audit and records the exact
+boundary for the next external action. No push, PR, browser launch, dsh
+service action, credential change, or public release change was made.
+
+- The GitHub public API still reports `yangpeng366/openeyes` as public,
+  with `main` as the default branch, zero open pull requests, and zero
+  open issues. The remote default branch is still `c8a0276`; its latest
+  public commit remains the repository-stewardship documentation commit.
+- `git rev-list --left-right --count origin/main...03aaa1a` reports
+  `0 12`; the candidate branch `analysis/round-93-candidate` is one
+  additional local commit (`6b80b70`) ahead of the Round 92 tip (`03aaa1a`).
+  The 12 pending commits from `31345ee` through `03aaa1a` change only
+  `.gitignore` and `docs/dsh-web-acceptance.md`; no source, test, MCP
+  contract, or `.codex/` path is included in the pending diff.
+- The repository-local `skills/openeyes/SKILL.md` and the installed
+  Codex skill at `E:\AI-Portable\codex-home\skills\openeyes\SKILL.md`
+  have the same SHA-256, so the documented skill surface is not drifting
+  between the repository and the local skill installation.
+- `pytest tests\` passed `65 / 65` in `6.96s`; the suite covers the CDP
+  backend (`test_cdp.py`), MCP stdio probe (`test_mcp_stdio_probe.py`),
+  MCP contract (`test_mcp_contract.py`), dsh fetch stall probe
+  (`test_dsh_fetch_stall_probe.py` and `test_dsh_mount_contract.py`),
+  launch-debug-edge launcher and hints plus the smoke suite, with no
+  regressions versus the Round 92 evidence (`65 / 65` in `13.88s`).
+  The `-6.92s` wall-time delta versus Round 92 is within the expected
+  noise band and confirms stable test performance.
+- `Get-NetTCPConnection -State Listen` returned no listener on either
+  `9222` or `3080`. `python -m openeyes.cli.main windows list
+  --title-contains Edge` returned one visible Edge Beta window:
+  `build-arm-articleEditor [Jenkins] 和另外 4 个页面 - 个人 - Microsoft Edge Beta`
+  (hwnd `13241940`, `pid` `0`, class `Chrome_WidgetWin_1`,
+  `x=1911 y=84 w=1938 h=1098`); it is not a debug Edge process and no
+  CDP debug listener is present in the listening set, so the
+  `browser_click` acceptance probe cannot be safely performed this
+  round.
+
+The two-tab `browser_click` `url_contains` acceptance probe remains
+deferred until both `9222` and `3080` listen; the next patrol should
+rerun this same read-only probe set before reconsidering the acceptance
+gate. The accumulated Round 94 evidence section is appended to
+`docs/dsh-web-acceptance.md` and will be committed locally on top of
+`03aaa1a`; push/PR remains gated on explicit user approval per the
+row annotation `放权 + 高频推进`.
