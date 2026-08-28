@@ -180,6 +180,7 @@ openeyes/
 │   ├── anyvpn_keepalive.py      # + launch-anyvpn-keepalive.ps1
 │   ├── mcp-stdio-probe.py       # MCP stdio mount smoke test
 │   ├── dsh-preflight.ps1        # dsh web preflight (read-only)
+│   ├── maintenance-round-probes.ps1 # five-probe patrol orchestrator (read-only)
 │   ├── dsh-fetch-stall-probe.py # CDP probe for the dsh fetch-stall symptom
 │   ├── dsh-session-diagnostic.py
 │   ├── dsh-openeyes-mcp.yml     # web profile for dsh
@@ -190,6 +191,7 @@ openeyes/
 │   ├── test_hints.py
 │   ├── test_mcp_contract.py     # locks the 13-tool contract
 │   ├── test_mcp_stdio_probe.py
+│   ├── test_maintenance_round_probes.py
 │   ├── test_dsh_mount_contract.py
 │   └── test_dsh_fetch_stall_probe.py
 ├── .codex-plugin/

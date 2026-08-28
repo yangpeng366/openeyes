@@ -2086,3 +2086,9 @@ docs-only fast-forward if and only if a new docs/tests/skills change
 warrants one, or (b) record `inspected` byte-stable status and skip a
 new commit. Browser-side acceptance remains gated on the user opening
 a debug Edge instance and a dsh web tab.
+
+The five probes are now scripted in `examples/maintenance-round-probes.ps1`
+(`-Mode List` prints them; `-Mode Run -ReportPath <file>` captures JSON
+evidence). Run that script on `2026-09-04T18:00:00+08:00` instead of
+assembling the commands by hand; it does not perform the live
+`browser_click` acceptance, only the listener/window preconditions.

@@ -71,6 +71,20 @@ pwsh -NoProfile -File examples\dsh-preflight.ps1 -DumpConfig
 
 Exit code `0` = `ready:true`. Exit code `2` = one or more prerequisites are missing; the JSON output lists them in `missing_prerequisites` and `next_action`.
 
+### maintenance-round-probes.ps1
+
+Read-only orchestrator for the five deferred-acceptance probes that the patrol reruns on `2026-09-04T18:00:00+08:00`: git synchronisation, `pytest` suite, dsh preflight, the `9222`/`3080` listener + Edge window browser gate, and the repository-vs-installed skill SHA-256 check.
+
+```powershell
+# print the probe set only (default, safe)
+pwsh -NoProfile -File examples\maintenance-round-probes.ps1 -Mode List
+
+# run all five probes and write structured JSON evidence
+pwsh -NoProfile -File examples\maintenance-round-probes.ps1 -Mode Run -ReportPath "$env:TEMP\openeyes-maintenance-round.json"
+```
+
+`List` exits `0` and writes no files. `Run` requires `-ReportPath` so probe output is captured to a UTF-8 (no BOM) JSON report; it does not perform the live `browser_click` acceptance, only the listener/window preconditions for it.
+
 ### mcp-stdio-probe.py
 
 Boots the repository-local MCP server directly, sends `initialize` + `initialized` notification + `tools/list`, and exits. Run this before the dsh web acceptance to isolate the Python/MCP mount from the dsh tool-dispatch layer:
