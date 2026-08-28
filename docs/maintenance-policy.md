@@ -69,23 +69,17 @@ the runbook header so the convention is self-documenting.
 ## Superseded PR-handoff branches（已废弃的 PR handoff 分支）
 
 The 2026-08-28 decision retired the Round 95 PR-handoff machinery as a
-daily threshold. The following branches are now superseded and may be
-removed by the maintainer:
+daily threshold. Round 97 completed the corresponding local
+housekeeping: `analysis/round-95-package`,
+`analysis/round-96-pr-handoff`, and `analysis/round-93-candidate` no
+longer exist as local refs. Their commits remain recoverable from the
+standard reflog window. Remote refs were intentionally left untouched
+because remote ref deletion remains a destructive action.
 
-- `analysis/round-95-package` — remote-mirrored, but currently sits at the
-  same commit as `main` (`aa608b3`); only useful again if a real diff
-  accumulates.
-- `analysis/round-96-pr-handoff` — local-only branch carrying the
-  `examples/round95-pr-handoff.ps1` Round 95 PR-handoff checker at commit
-  `2db53e6`. The new flow no longer requires a dedicated PR-handoff script
-  for docs-only changes, so this branch and its commit may be discarded.
-- `analysis/round-93-candidate` — local-only, diverged older tip carrying
-  the round 93 candidate analysis (`6b80b70`). Already subsumed by the
-  `aa608b3` commit on `main`; safe to remove.
-
-These deletions are local housekeeping and require no additional user
-authorization beyond this policy doc. The branch commits remain in the
-reflog for the standard recovery window.
+If the same stale handoff branches reappear, remove the local refs only
+after confirming that their commits are subsumed by `main` or safely
+recoverable. Keep remote branches, tags, and history rewrites on the
+risky-change path.
 
 ## Provenance / 决策来源
 
