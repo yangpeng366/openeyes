@@ -1,6 +1,8 @@
 """Tests for the direct MCP stdio browser_click acceptance probe."""
 from __future__ import annotations
 
+import importlib.util
+import json
 from pathlib import Path
 
 
@@ -29,3 +31,14 @@ def test_direct_acceptance_distinguishes_target_and_missing_markers():
     assert "got targets=" in text
     assert "matched call was not a dry-run" in text
     assert "missing call did not fail closed" in text
+
+
+def test_result_content_parses_single_text_payload():
+    spec = importlib.util.spec_from_file_location(
+        "browser_click_acceptance", PROBE,
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    result = {"content": [{"type": "text", "text": json.dumps({"ok": True})}]}
+    assert module._result_content(result) == {"ok": True}
