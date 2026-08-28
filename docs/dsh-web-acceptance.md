@@ -2092,3 +2092,62 @@ The five probes are now scripted in `examples/maintenance-round-probes.ps1`
 evidence). Run that script on `2026-09-04T18:00:00+08:00` instead of
 assembling the commands by hand; it does not perform the live
 `browser_click` acceptance, only the listener/window preconditions.
+
+## Round 98 patrol evidence - 2026-08-29 00:08 +08:00 (Asia/Shanghai)
+
+Reran the five-probe set early (before the 2026-09-04 schedule) because
+both remaining defer-triggers in the Round 96 recommendation fired:
+`origin/main` advanced `314ee13..ce520f2` (a concurrent round added the
+`examples/maintenance-round-probes.ps1` orchestrator plus
+`tests/test_maintenance_round_probes.py`), and the browser-acceptance
+gate state changed. The probes were run with the canonical orchestrator
+rather than assembled by hand:
+
+    pwsh -NoProfile -File examples\maintenance-round-probes.ps1 -Mode Run -ReportPath .codex\r98-probes.json
+
+The JSON report is saved at `.codex/r98-probes.json` (gitignored, local
+evidence only). All five probes returned `ok: true`.
+
+- `git_state` - `git rev-parse HEAD` and `git rev-parse origin/main` both
+  report `ce520f2b4fc7edddb9a136ab434210fa9ebec52c`;
+  `git rev-list --left-right --count origin/main...HEAD` reports zero
+  ahead and zero behind. The local checkout is byte-synchronised with the
+  public `main` branch; no push is pending this round.
+- `pytest_suite` - `python -m pytest tests\ -q --no-header` passed
+  `67 / 67` in `12.31s`. The catalogue grew by 2 versus the Round 96
+  baseline (`tests\test_maintenance_round_probes.py`), staying at or above
+  the `65 / 65` floor with no regression.
+- `dsh_preflight` - `examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh_mcp_client_version:0.1.1-rc.2`, and `missing_prerequisites:[]`.
+  The repo-local `mcp-openeyes` profile still mounts
+  `python -m openeyes.mcp.server` over stdio with `failOnStartupError`.
+- `browser_gate` - **This is the state change that justified the early
+  rerun.** `Get-NetTCPConnection -State Listen` reports `127.0.0.1:9222`
+  in `Listen`, owned by `msedge` (PID 164,
+  `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`). The
+  CDP endpoint `http://127.0.0.1:9222/json/version` returns
+  `Browser: Edg/152.0.4191.19` with a live `webSocketDebuggerUrl`, and
+  `/json` lists two page targets titled 多媒体稿 at
+  `https://moc.sobey.mbuysxt.com.cn/articleeditor/index.html#/notification?view=send`
+  plus an `edge://newtab/` page. The user-side precondition that Round 96
+  said was missing ("the user opening a debug Edge instance") is now met.
+  However, `127.0.0.1:3080` is still NOT listening, so the dsh web host is
+  absent and the two-tab `browser_click` `url_contains` acceptance probe
+  remains deferred; no `browser_*` tool is exercised against a live CDP
+  target this round. `openeyes windows list --title-contains Edge` found
+  two Edge Beta windows (多媒体稿 和另外 1 个页面 ...).
+- `skill_hash` - The repository-local `skills\openeyes\SKILL.md` and the
+  installed Codex skill at `E:\AI-Portable\codex-home\skills\openeyes\SKILL.md`
+  both have SHA-256 `E551C097AD4F8D291AEDE8AC03BDA2049C5F3BB25F93CB15166569E74E930F25`,
+  so the documented skill surface is not drifting.
+
+### Recommended next action
+
+The acceptance gate is closer but still closed: `9222` is up (a debug
+Edge with MOC articleeditor tabs), `3080` is not. The two-tab
+`browser_click` `url_contains` acceptance can run as soon as `3080`
+listens. Re-run the same orchestrator when `3080` comes up, or on the
+scheduled `2026-09-04T18:00:00+08:00` recheck, whichever is first. This
+round is docs-only (evidence only); no source / release / dependency /
+permissions change, so it fast-forwards `main` under the 2026-08-28
+simplified-maintenance policy.
