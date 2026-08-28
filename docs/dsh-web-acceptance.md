@@ -2037,3 +2037,52 @@ gate. The accumulated Round 94 evidence section is appended to
 `docs/dsh-web-acceptance.md` and will be committed locally on top of
 `03aaa1a`; push/PR remains gated on explicit user approval per the
 row annotation `放权 + 高频推进`.
+
+
+## Round 96 patrol evidence — 2026-08-28 22:00 +08:00 (Asia/Shanghai)
+
+This round closes the loop after the 2026-08-28 simplified-maintenance
+decision. The previous evidence sections describe the state leading up
+to `origin/main = aa608b3`; the Row 96 state is the post-policy state
+on `e2ff7ba`. Per `docs/maintenance-policy.md`, this is a docs-only
+round and can fast-forward straight to `main` without a PR.
+
+- `git rev-parse HEAD` and `git rev-parse origin/main` both report
+  `e2ff7ba3fc67ae534c3b12e8eb7de75d4260cdc1`. `git rev-list --count
+  origin/main..HEAD` reports `0`; the local checkout is byte-synchronised
+  with the public `main` branch. No push is pending this round.
+- `pytest tests\ -q --no-header` passed `65 / 65` in `12.73s`. The
+  catalogue is unchanged: 17 cdp + 9 dsh-fetch + 2 dsh-mount + 11 hints
+  + 3 launch-debug-edge + 10 mcp-contract + 1 mcp-stdio-probe + 12
+  smoke = 65. The maintenance-policy commit does not touch any path
+  covered by the test suite, so the gate remains stable.
+- `examples\dsh-preflight.ps1` returned `ready:true`,
+  `dsh_mcp_client_version:0.1.1-rc.2`, and `missing_prerequisites:[]`.
+  The repo-local `mcp-openeyes` profile still mounts
+  `python -m openeyes.mcp.server` over stdio with `failOnStartupError`.
+- `Get-NetTCPConnection -State Listen` returned zero listeners on
+  `127.0.0.1:9222` and `127.0.0.1:3080`. The two-tab `browser_click`
+  `url_contains` acceptance probe therefore remains deferred; no
+  `browser_*` tool is exercised against a live CDP target this round.
+- The repository-local `skills\openeyes\SKILL.md` and the installed
+  Codex skill at `E:\AI-Portable\codex-home\skills\openeyes\SKILL.md`
+  both have SHA-256 `E551C097AD4F8D291AEDE8AC03BDA2049C5F3BB25F93CB15166569E74E930F25`,
+  so the documented skill surface is not drifting.
+- The branches enumerated in the maintenance policy
+  (`analysis/round-93-candidate`, `analysis/round-95-package`,
+  `analysis/round-96-pr-handoff`) are still present locally and on
+  `origin`. They are now stale with respect to `origin/main` because
+  `e2ff7ba` includes `docs/maintenance-policy.md` and the prior two
+  analysis commits have been subsumed by the canonical policy doc.
+  Per the policy doc, the local references are local housekeeping and
+  may be removed by the maintainer; the remote refs are left intact
+  until an explicit decision lands.
+
+### Recommended next action
+
+Continue the 6-hour local cadence. The next `Round 97 patrol evidence`
+section should re-run the same five probes, then either (a) commit a
+docs-only fast-forward if and only if a new docs/tests/skills change
+warrants one, or (b) record `inspected` byte-stable status and skip a
+new commit. Browser-side acceptance remains gated on the user opening
+a debug Edge instance and a dsh web tab.
