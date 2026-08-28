@@ -67,6 +67,16 @@ Ensure the connected browser has two disposable page targets: one target whose U
 
 Ready-made fixtures live in `examples/acceptance-pages/` (`target-a.html` with a `Learn more` link, and `decoy.html`). Open both as new tabs in the debug Edge with `python examples/open-acceptance-tabs.py --go` (dry-run by default); clean them up with `--close`.
 
+The launcher uses the CDP `/json/new` HTTP endpoint instead of the browser-level
+CDP WebSocket. On the current Edge 152 debug instance, the browser-level
+WebSocket is refused while `/json/new`, page-target WebSockets, and
+`browser_click` remain usable.
+
+While `3080` remains unavailable, `examples/browser-click-acceptance.py`
+verifies the same two-tab dry-run and fail-closed behavior over repository-local
+MCP stdio. It isolates OpenEyes dispatch from the dsh web client but does not
+replace the dsh end-to-end acceptance.
+
 Ask the dsh agent to call:
 
 ```json

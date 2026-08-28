@@ -4,8 +4,9 @@ The dsh-web acceptance runbook (docs/dsh-web-acceptance.md section 4) requires
 two disposable page targets: one whose URL contains ``target-a`` and a decoy
 whose URL does not. This launcher opens ``examples/acceptance-pages/target-a.html``
 and ``examples/acceptance-pages/decoy.html`` as new tabs in an already-running
-Chromium debug browser (default port 9222) via the browser-level CDP WebSocket
-``Target.createTarget`` method.
+Chromium debug browser (default port 9222) via the CDP `/json/new` HTTP
+endpoint, which remains compatible when Edge disables the browser-level
+WebSocket.
 
 Default behaviour is **dry-run**: it prints the file URLs it would open and
 reports whether the debug port is listening, but creates no tabs. Pass ``--go``
@@ -20,10 +21,9 @@ import argparse
 import json
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
-
-import websocket
 
 CDP_DEFAULT_PORT = 9222
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -46,14 +46,6 @@ def _port_listening(port: int, timeout: float = 2.0) -> bool:
         return False
 
 
-def _browser_ws_url(port: int) -> str:
-    url = f"http://127.0.0.1:{port}/json/version"
-    req = urllib.request.Request(url, headers={"Host": "127.0.0.1"})
-    with urllib.request.urlopen(req, timeout=5) as r:
-        raw = r.read().decode("utf-8", errors="replace")
-    return json.loads(raw)["webSocketDebuggerUrl"]
-
-
 def _list_tabs(port: int) -> list[dict]:
     url = f"http://127.0.0.1:{port}/json"
     req = urllib.request.Request(url, headers={"Host": "127.0.0.1"})
@@ -62,35 +54,25 @@ def _list_tabs(port: int) -> list[dict]:
     return [t for t in json.loads(raw) if t.get("type") == "page"]
 
 
-def _cdp_call(ws_url: str, method: str, params: dict | None = None,
-              timeout: float = 10.0) -> dict:
-    ws = websocket.create_connection(ws_url, timeout=timeout,
-                                     origin="http://127.0.0.1")
-    try:
-        msg_id = 1
-        ws.send(json.dumps({"id": msg_id, "method": method,
-                            "params": params or {}}))
-        ws.settimeout(timeout)
-        while True:
-            raw = ws.recv()
-            if not raw:
-                raise RuntimeError("empty recv for " + method)
-            obj = json.loads(raw)
-            if obj.get("id") == msg_id:
-                if "error" in obj:
-                    raise RuntimeError(method + ": " + str(obj["error"]))
-                return obj.get("result", {})
-    finally:
-        ws.close()
+def _request_text(url: str, method: str = "GET", timeout: float = 10.0) -> str:
+    req = urllib.request.Request(url, method=method, headers={"Host": "127.0.0.1"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def _request_json(url: str, method: str = "GET", timeout: float = 10.0) -> dict:
+    raw = _request_text(url, method=method, timeout=timeout)
+    return json.loads(raw) if raw.strip() else {}
 
 
 def open_tabs(port: int) -> list[dict]:
-    ws_url = _browser_ws_url(port)
     opened: list[dict] = []
     for page in (TARGET_A, DECOY):
-        result = _cdp_call(ws_url, "Target.createTarget",
-                           {"url": _file_url(page)})
-        target_id = result.get("targetId", "")
+        encoded_url = urllib.parse.quote(_file_url(page), safe="")
+        result = _request_json(
+            f"http://127.0.0.1:{port}/json/new?{encoded_url}", method="PUT"
+        )
+        target_id = result.get("id", "")
         opened.append({"file": page.name, "url": _file_url(page),
                         "targetId": target_id})
         time.sleep(0.3)
@@ -99,12 +81,10 @@ def open_tabs(port: int) -> list[dict]:
 
 def close_acceptance_tabs(port: int) -> list[str]:
     tabs = _list_tabs(port)
-    ws_url = _browser_ws_url(port)
     closed: list[str] = []
     for t in tabs:
         if ACCEPTANCE_MARKER in (t.get("url") or ""):
-            _cdp_call(ws_url, "Target.closeTarget",
-                      {"targetId": t["id"]})
+            _request_text(f"http://127.0.0.1:{port}/json/close/{t['id']}")
             closed.append(t["id"])
     return closed
 

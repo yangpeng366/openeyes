@@ -87,7 +87,7 @@ pwsh -NoProfile -File examples\maintenance-round-probes.ps1 -Mode Run -ReportPat
 
 ### open-acceptance-tabs.py
 
-Opens the two disposable acceptance pages (`examples/acceptance-pages/target-a.html` and `decoy.html`) as new tabs in an already-running debug Edge (port 9222) via the browser-level CDP `Target.createTarget` method. Use this before the dsh-web `browser_click` acceptance so the `url_contains` probe has the right tabs.
+Opens the two disposable acceptance pages (`examples/acceptance-pages/target-a.html` and `decoy.html`) as new tabs in an already-running debug Edge (port 9222) via the CDP `/json/new` HTTP endpoint. Use this before the dsh-web `browser_click` acceptance so the `url_contains` probe has the right tabs.
 
 ```powershell
 # dry-run (default): print fixture URLs and report port 9222 status
@@ -101,6 +101,18 @@ python examples\open-acceptance-tabs.py --close
 ```
 
 `target-a.html` and `decoy.html` each contain a `Learn more` link so the acceptance verifies `url_contains` tab scoping rather than element absence.
+
+### browser-click-acceptance.py
+
+Runs the two-tab `browser_click` acceptance over direct MCP stdio while the dsh web host is unavailable. Open both fixture tabs first, run the probe, then close them:
+
+```powershell
+python examples\open-acceptance-tabs.py --go
+python examples\browser-click-acceptance.py
+python examples\open-acceptance-tabs.py --close
+```
+
+The probe passes only when the target tab remains a dry-run (`clicked:false`, `would_click:true`) and an unmatched `url_contains` fails closed with `no page target matched`.
 
 ### mcp-stdio-probe.py
 

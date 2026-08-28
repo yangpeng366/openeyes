@@ -36,8 +36,9 @@ def test_launcher_defaults_to_dry_run_and_references_both_pages():
     text = LAUNCHER.read_text(encoding="utf-8")
     assert 'action="store_true"' in text
     assert '"--go"' in text
-    assert "Target.createTarget" in text
-    assert "Target.closeTarget" in text
+    assert "/json/new" in text
+    assert "/json/close/" in text
+    assert "browser-level" in text
     assert "target-a.html" in text
     assert "decoy.html" in text
     assert "CDP_DEFAULT_PORT = 9222" in text
