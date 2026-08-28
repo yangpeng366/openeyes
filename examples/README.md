@@ -85,6 +85,23 @@ pwsh -NoProfile -File examples\maintenance-round-probes.ps1 -Mode Run -ReportPat
 
 `List` exits `0` and writes no files. `Run` requires `-ReportPath` so probe output is captured to a UTF-8 (no BOM) JSON report; it does not perform the live `browser_click` acceptance, only the listener/window preconditions for it.
 
+### open-acceptance-tabs.py
+
+Opens the two disposable acceptance pages (`examples/acceptance-pages/target-a.html` and `decoy.html`) as new tabs in an already-running debug Edge (port 9222) via the browser-level CDP `Target.createTarget` method. Use this before the dsh-web `browser_click` acceptance so the `url_contains` probe has the right tabs.
+
+```powershell
+# dry-run (default): print fixture URLs and report port 9222 status
+python examples\open-acceptance-tabs.py
+
+# open both tabs in the live debug Edge
+python examples\open-acceptance-tabs.py --go
+
+# close any tab whose URL contains "acceptance-pages" (cleanup)
+python examples\open-acceptance-tabs.py --close
+```
+
+`target-a.html` and `decoy.html` each contain a `Learn more` link so the acceptance verifies `url_contains` tab scoping rather than element absence.
+
 ### mcp-stdio-probe.py
 
 Boots the repository-local MCP server directly, sends `initialize` + `initialized` notification + `tools/list`, and exits. Run this before the dsh web acceptance to isolate the Python/MCP mount from the dsh tool-dispatch layer:

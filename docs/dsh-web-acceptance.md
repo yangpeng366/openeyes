@@ -65,6 +65,8 @@ In the dsh web UI, start a fresh session and require these calls in order:
 
 Ensure the connected browser has two disposable page targets: one target whose URL contains `target-a`, and a second decoy target whose URL does not contain `target-a`. The pages may be blank or static; do not use a logged-in production page.
 
+Ready-made fixtures live in `examples/acceptance-pages/` (`target-a.html` with a `Learn more` link, and `decoy.html`). Open both as new tabs in the debug Edge with `python examples/open-acceptance-tabs.py --go` (dry-run by default); clean them up with `--close`.
+
 Ask the dsh agent to call:
 
 ```json

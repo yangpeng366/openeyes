@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes acceptance - decoy</title>
+</head>
+<body>
+<h1>decoy page</h1>
+<p>Disposable decoy page for the OpenEyes <code>browser_click</code> dry-run
+acceptance probe. The URL of this file does NOT contain
+<strong>target-a</strong>, so a <code>url_contains: "target-a"</code>
+selector must skip this tab.</p>
+<p>This page also has a <a href="#" id="learn-more" data-test="learn-more">Learn more</a>
+link so the probe verifies <code>url_contains</code> scoping, not element
+absence.</p>
+</body>
+</html>
