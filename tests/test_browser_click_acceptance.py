@@ -35,6 +35,18 @@ def test_direct_acceptance_distinguishes_target_and_missing_markers():
     assert "missing call did not fail closed" in text
 
 
+def test_direct_acceptance_tolerates_duplicate_acceptance_tabs():
+    text = PROBE.read_text(encoding="utf-8")
+    # Edge session-restore can reopen previously closed fixture tabs, so the
+    # guard must accept at least one of each rather than exactly one.
+    assert "len(target_tabs) < 1" in text
+    assert "len(decoy_tabs) < 1" in text
+    assert "expected at least one" in text
+    assert "target_tabs[:1]" in text
+    assert "decoy_tabs[:1]" in text
+    assert "len(target_tabs) != 1" not in text
+
+
 def test_result_content_parses_single_text_payload():
     spec = importlib.util.spec_from_file_location(
         "browser_click_acceptance", PROBE,

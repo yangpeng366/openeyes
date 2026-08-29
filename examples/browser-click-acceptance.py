@@ -134,12 +134,15 @@ def main() -> int:
             tab for tab in acceptance_tabs
             if TARGET_MARKER not in (tab.get("url") or "")
         ]
-        if len(target_tabs) != 1 or len(decoy_tabs) != 1:
+        if len(target_tabs) < 1 or len(decoy_tabs) < 1:
             raise RuntimeError(
-                "expected one target-a and one decoy acceptance tab; "
+                "expected at least one target-a and one decoy acceptance "
+                "tab; "
                 f"got targets={len(target_tabs)}, decoys={len(decoy_tabs)}, "
                 f"tabs={tabs!r}"
             )
+        target_tabs = target_tabs[:1]
+        decoy_tabs = decoy_tabs[:1]
 
         matched = _result_content(call(4, "tools/call", {
             "name": "browser_click",

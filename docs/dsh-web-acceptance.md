@@ -2212,3 +2212,72 @@ web host on `3080`. Recheck when `3080` comes up or on
 `2026-09-04T18:00:00+08:00`, whichever is first. This round is docs-only
 (evidence); no source / release / dependency / permissions change, so it
 fast-forwards `main` under the 2026-08-28 simplified-maintenance policy.
+
+## Round 101 patrol evidence - 2026-08-29 18:40 +08:00 (Asia/Shanghai)
+
+`9222` listens (Edge 152 debug, PID 164, MOC articleeditor tabs); `3080` does
+not listen, so the dsh web end-to-end acceptance remains deferred. However,
+unlike prior rounds that left `browser_*` unexercised against a live CDP
+target, this round ran the repo-local stdio fallback acceptance **live** for
+the first time.
+
+### First live repo-local browser_click acceptance
+
+With `9222` listening, the fixture tabs were opened with
+`python examples\open-acceptance-tabs.py --go`, then the two-tab dry-run and
+fail-closed contract was exercised over repository-local MCP stdio:
+
+    python examples\browser-click-acceptance.py --cdp-port 9222
+
+Result: `passed:true`, `acceptance_tabs:2`,
+`target_url:file:///.../acceptance-pages/target-a.html`.
+
+- matched call (`url_contains=target-a`, `name_contains=Learn more`):
+  `clicked:false`, `would_click:true`, resolved the `Learn more` hyperlink
+  (`automation_id:learn-more`, `score:1.0`) on the target-a page. No page
+  state changed because `go` is omitted.
+- unmatched call (`url_contains=missing-target`): returned
+  `no page target matched url_contains='missing-target'` and proposed no
+  `would_click`/`target`, i.e. fail-closed.
+
+This is the first live verification of the section-4 dry-run + fail-closed
+contract against a real CDP target; prior rounds only ran the static source
+tests. The dsh web client transport (`3080`) is still the remaining gate for
+the full end-to-end acceptance.
+
+### Stale-tab robustness fix
+
+The first live run failed not on the click contract but on the probe's
+exact-count guard: Edge session-restore reopened a previously closed `target-a`
+fixture, yielding `targets=2, decoys=1`. `examples/browser-click-acceptance.py`
+required exactly one target-a and one decoy, so any leftover fixture tab
+blocked the acceptance. The guard was relaxed to require at least one of each
+and select the first, leaving the dry-run and fail-closed logic untouched:
+
+- `examples/browser-click-acceptance.py`: `len(target_tabs) != 1` -> `< 1`,
+  plus `target_tabs = target_tabs[:1]` / `decoy_tabs = decoy_tabs[:1]`.
+- `tests/test_browser_click_acceptance.py`: added
+  `test_direct_acceptance_tolerates_duplicate_acceptance_tabs` locking the
+  relaxed guard and the first-of-each selection.
+
+Verified live: opening the fixtures twice (4 acceptance tabs) now passes
+(`acceptance_tabs:4`, `passed:true`) where the strict guard failed. Full
+suite: `76 passed in 12.10s` (+1 versus the Round 100 baseline).
+
+### Probe results
+
+- `pytest tests/ -q --no-header`: **76 passed in 12.10s**.
+- `examples/browser-click-acceptance.py --cdp-port 9222` (live): `passed:true`.
+- `Get-NetTCPConnection -State Listen -LocalPort 9222`: listening (msedge).
+- `Get-NetTCPConnection -State Listen -LocalPort 3080`: not listening.
+
+### Recommended next action
+
+The stdio fallback acceptance is green and now stale-tab-resilient; the only
+remaining gate is the dsh web host on `3080`. When `3080` listens and
+`http://127.0.0.1:3080/` returns HTTP 200, run
+`python examples/open-acceptance-tabs.py --go`, execute the two `browser_click`
+payloads in section 4 through the dsh web client, require
+`clicked:false`/`would_click:true` plus unmatched fail-closed, then
+`python examples/open-acceptance-tabs.py --close`. If `3080` remains down,
+recheck at `2026-09-04T18:00:00+08:00`.
