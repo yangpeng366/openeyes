@@ -2163,3 +2163,52 @@ scheduled `2026-09-04T18:00:00+08:00` recheck, whichever is first. This
 round is docs-only (evidence only); no source / release / dependency /
 permissions change, so it fast-forwards `main` under the 2026-08-28
 simplified-maintenance policy.
+
+## Round 101 patrol evidence - 2026-08-29 18:35 +08:00 (Asia/Shanghai)
+
+While `3080` remains down, exercised the designated stdio fallback
+(`examples/browser-click-acceptance.py`) against the live CDP browser on
+`9222`. Opened the two fixture tabs with
+`python examples/open-acceptance-tabs.py --go`, ran the acceptance, then
+cleaned up with `--close`.
+
+The stdio acceptance passed:
+
+    {"passed": true, "transport": "mcp-stdio", "acceptance_tabs": 2,
+     "target_url": "file:///.../acceptance-pages/target-a.html",
+     "matched_click": {"clicked": false, "would_click": true,
+       "target": {"name": "Learn more", "score": 1.0}},
+     "missing_click_error": "no page target matched url_contains='missing-target'; ..."}
+
+This satisfies the same two-tab dry-run and fail-closed contract that
+section 4 requires: the matching `url_contains=target-a` call resolves only
+the intended tab and stays a dry-run (`clicked:false`, `would_click:true`);
+the unmatched `url_contains=missing-target` call fails closed without
+scanning either tab. The exercise isolates OpenEyes dispatch from the dsh
+web client, so the dsh end-to-end acceptance remains gated on `3080`.
+
+A stale-tab hygiene note: prior rounds left acceptance fixtures served from
+`127.0.0.1:18080` (both `/acceptance-pages/...` and bare `/target-a.html` /
+`/decoy.html` variants). The `/acceptance-pages/` variants are caught by
+`--close`; the bare-path variants are not, and they caused the first
+acceptance run to see `targets=2, decoys=2` instead of `1, 1`. They were
+closed manually via CDP `/json/close` this round. Going forward the launcher
+opens `file://` fixtures that `--close` handles correctly, so this is a
+one-time cleanup.
+
+- `git_state` - `HEAD` and `origin/main` both `cfd7759`; zero ahead, zero
+  behind. Byte-stable with the public branch.
+- `pytest_suite` - `75 / 75` passed in `13.46s` (up from `67 / 67` in Round 98
+  via concurrent-round test additions; no regression).
+- `mcp_stdio_probe` - `examples/mcp-stdio-probe.py` returned `ready:true`,
+  `tool_count:13`.
+- `browser_gate` - `9222` listens (Edge 152 debug, MOC articleeditor tabs);
+  `3080` does not listen. The dsh web end-to-end acceptance remains deferred.
+
+### Recommended next action
+
+The stdio fallback acceptance is green; the only remaining gate is the dsh
+web host on `3080`. Recheck when `3080` comes up or on
+`2026-09-04T18:00:00+08:00`, whichever is first. This round is docs-only
+(evidence); no source / release / dependency / permissions change, so it
+fast-forwards `main` under the 2026-08-28 simplified-maintenance policy.
