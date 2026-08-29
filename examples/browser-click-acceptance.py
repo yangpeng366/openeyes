@@ -2,21 +2,33 @@
 
 This probe intentionally bypasses the dsh web client so repository-local MCP
 dispatch can be accepted independently while the web-host gate remains closed.
-Open the fixture tabs with ``open-acceptance-tabs.py --go`` first.
+
+It is self-contained: it starts a transient local HTTP server that serves the
+``examples/acceptance-pages/`` fixtures, opens the two disposable tabs via the
+CDP ``/json/new`` endpoint, runs the dry-run acceptance, then closes the tabs
+and stops the server. Edge discards ``file://`` tabs created through CDP, so
+the fixtures are served over HTTP whose URL path retains the
+``acceptance-pages`` marker required by the tab filter.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
+import http.server
 import json
 import queue
 import subprocess
 import sys
 import threading
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+EXAMPLES_DIR = REPO_ROOT / "examples"
 ACCEPTANCE_MARKER = "acceptance-pages"
 TARGET_MARKER = "target-a"
 
@@ -58,12 +70,61 @@ def _result_content(result: dict) -> dict:
     return json.loads(content[0]["text"])
 
 
+def _port_listening(port: int, host: str = "127.0.0.1",
+                    timeout: float = 2.0) -> bool:
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _start_fixture_server(
+    directory: Path,
+) -> tuple[http.server.ThreadingHTTPServer, int]:
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler, directory=str(directory)
+    )
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, server.server_address[1]
+
+
+def _open_tab(cdp_port: int, url: str) -> str:
+    encoded = urllib.parse.quote(url, safe="")
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{cdp_port}/json/new?{encoded}",
+        method="PUT",
+        headers={"Host": "127.0.0.1"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as response:
+        raw = response.read().decode("utf-8", errors="replace")
+    return json.loads(raw).get("id", "") if raw.strip() else ""
+
+
+def _close_tab(cdp_port: int, target_id: str) -> None:
+    if not target_id:
+        return
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{cdp_port}/json/close/{target_id}",
+        headers={"Host": "127.0.0.1"},
+    )
+    try:
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception:
+        pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cdp-port", type=int, default=9222)
     parser.add_argument("--timeout", type=float, default=20.0)
     args = parser.parse_args()
 
+    fixture_server = None
+    opened_ids: list[str] = []
     process = subprocess.Popen(
         [sys.executable, "-m", "openeyes.mcp.server"],
         cwd=REPO_ROOT,
@@ -96,6 +157,22 @@ def main() -> int:
             return message["result"]
 
     try:
+        if not _port_listening(args.cdp_port):
+            raise RuntimeError(
+                f"debug port {args.cdp_port} not listening - "
+                f"start Edge with --remote-debugging-port={args.cdp_port}"
+            )
+        fixture_server, http_port = _start_fixture_server(EXAMPLES_DIR)
+        target_url = (
+            f"http://127.0.0.1:{http_port}/acceptance-pages/target-a.html"
+        )
+        decoy_url = (
+            f"http://127.0.0.1:{http_port}/acceptance-pages/decoy.html"
+        )
+        opened_ids.append(_open_tab(args.cdp_port, target_url))
+        opened_ids.append(_open_tab(args.cdp_port, decoy_url))
+        time.sleep(0.8)
+
         call(
             1,
             "initialize",
@@ -179,6 +256,11 @@ def main() -> int:
             "stderr": stderr[-2000:],
         }, ensure_ascii=False))
         return 2
+    finally:
+        for target_id in opened_ids:
+            _close_tab(args.cdp_port, target_id)
+        if fixture_server is not None:
+            fixture_server.shutdown()
 
     _stop_process(process)
     print(json.dumps({

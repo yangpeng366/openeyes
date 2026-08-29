@@ -2213,7 +2213,7 @@ web host on `3080`. Recheck when `3080` comes up or on
 (evidence); no source / release / dependency / permissions change, so it
 fast-forwards `main` under the 2026-08-28 simplified-maintenance policy.
 
-## Round 101 patrol evidence - 2026-08-29 18:40 +08:00 (Asia/Shanghai)
+## Round 102 patrol evidence - 2026-08-29 18:40 +08:00 (Asia/Shanghai)
 
 `9222` listens (Edge 152 debug, PID 164, MOC articleeditor tabs); `3080` does
 not listen, so the dsh web end-to-end acceptance remains deferred. However,
