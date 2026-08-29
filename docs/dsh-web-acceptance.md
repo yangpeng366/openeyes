@@ -74,8 +74,11 @@ WebSocket is refused while `/json/new`, page-target WebSockets, and
 
 While `3080` remains unavailable, `examples/browser-click-acceptance.py`
 verifies the same two-tab dry-run and fail-closed behavior over repository-local
-MCP stdio. It isolates OpenEyes dispatch from the dsh web client but does not
-replace the dsh end-to-end acceptance.
+MCP stdio. The fallback is self-contained: it starts a transient HTTP server,
+opens the two fixture tabs, runs the acceptance, then cleans up. Edge discards
+``file://`` tabs created through CDP, so HTTP serving is required to keep the
+fixture URL paths intact. It isolates OpenEyes dispatch from the dsh web client
+but does not replace the dsh end-to-end acceptance.
 
 Ask the dsh agent to call:
 
