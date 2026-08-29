@@ -80,6 +80,19 @@ opens the two fixture tabs, runs the acceptance, then cleans up. Edge discards
 fixture URL paths intact. It isolates OpenEyes dispatch from the dsh web client
 but does not replace the dsh end-to-end acceptance.
 
+`examples/browser-type-acceptance.py` extends the same repository-local
+surrogate to the `browser_type` write tool. It reuses the self-contained
+transient HTTP server and two-tab fixture, then calls `browser_type` (not
+`browser_click`) over MCP stdio: a matched `url_contains=target-a` dry-run must
+resolve the `Learn more` element with `sent:false` and `would_send_chars`
+populated (no text inserted), and an unmatched `url_contains=missing-target`
+call must fail closed with `no page target matched url_contains` and propose no
+`would_send_chars`/`target`. Run it live with:
+
+```powershell
+python examples\browser-type-acceptance.py --cdp-port 9222
+```
+
 Ask the dsh agent to call:
 
 ```json
