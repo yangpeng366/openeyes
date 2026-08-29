@@ -262,6 +262,74 @@ def test_browser_type_unmatched_url_filter_fails_before_type(monkeypatch):
     assert result["tool"] == "browser_type"
 
 
+def test_browser_shot_without_url_filter_keeps_dry_run_payload(monkeypatch, tmp_path):
+    def fail(*args, **kwargs):
+        raise AssertionError("filtered dry-run should not be required")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", fail)
+    monkeypatch.setattr(mcp_server.browser_backend, "screenshot", fail)
+
+    result = _call("browser_shot", {"out": str(tmp_path / "shot.png")})
+
+    assert result == {
+        "captured": False,
+        "dry_run": True,
+        "path": str(tmp_path / "shot.png"),
+    }
+    assert not (tmp_path / "shot.png").exists()
+
+
+def test_browser_shot_url_filter_resolves_target_without_capture(monkeypatch, tmp_path):
+    seen = {}
+    conn = MagicMock()
+    conn.current_url.return_value = "https://example.com/target-a"
+
+    def connect(*, port, url_contains=None):
+        seen["port"] = port
+        seen["url_contains"] = url_contains
+        return conn
+
+    def screenshot(*args, **kwargs):
+        raise AssertionError("browser_shot captured during dry-run")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "screenshot", screenshot)
+
+    result = _call("browser_shot", {
+        "out": str(tmp_path / "shot.png"),
+        "url_contains": "target-a",
+    })
+
+    assert seen == {"port": 9222, "url_contains": "target-a"}
+    assert result["captured"] is False
+    assert result["dry_run"] is True
+    assert result["target_url"] == "https://example.com/target-a"
+    assert not (tmp_path / "shot.png").exists()
+
+
+def test_browser_shot_unmatched_url_filter_fails_before_capture(monkeypatch, tmp_path):
+    def connect(*, port, url_contains=None):
+        raise CDPError(
+            "no page target matched url_contains='missing-tab'; "
+            "available URLs: 'https://tab-a', 'https://tab-b'"
+        )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("browser_shot captured after url_contains mismatch")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "screenshot", fail)
+
+    result = _call("browser_shot", {
+        "out": str(tmp_path / "shot.png"),
+        "url_contains": "missing-tab",
+    })
+
+    assert "no page target matched url_contains='missing-tab'" in result["error"]
+    assert result["tool"] == "browser_shot"
+    assert not (tmp_path / "shot.png").exists()
+
+
 def test_browser_type_schema_advertises_url_contains():
     tools = asyncio.run(mcp_server.list_tools())
     by_name = {tool.name: tool for tool in tools}

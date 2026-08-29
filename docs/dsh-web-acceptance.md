@@ -93,6 +93,16 @@ call must fail closed with `no page target matched url_contains` and propose no
 python examples\browser-type-acceptance.py --cdp-port 9222
 ```
 
+`examples/browser-shot-acceptance.py` extends the URL-scoped surrogate to
+`browser_shot`. The matched dry-run call must resolve the target URL and return
+`captured:false`; the unmatched call must fail closed with
+`no page target matched url_contains`. Neither call may create
+`shots/browser-shot-acceptance.png`. Run it live with:
+
+```powershell
+python examples\browser-shot-acceptance.py --cdp-port 9222
+```
+
 Ask the dsh agent to call:
 
 ```json
@@ -2349,3 +2359,50 @@ listens and `http://127.0.0.1:3080/` returns HTTP 200, run the section-4
 down, the next incremental surrogate candidate is a stdio `browser_scan`
 dry-run or a `browser_tabs` stub, though both need a live CDP page to be
 meaningful.
+
+## Round 104 patrol evidence - 2026-08-30 07:05 +08:00 (Asia/Shanghai)
+
+The interrupted Round 104 attempt left only a partial `browser_shot` service
+change. This round recovered that candidate, completed its two-tab probe,
+added URL-filter contract tests, and verified the dry-run behavior live.
+
+### browser_shot URL-scoped acceptance
+
+`browser_shot` now accepts `url_contains` consistently with `browser_click`
+and `browser_type`:
+
+- No `url_contains`: the existing no-filter dry-run payload remains unchanged
+  (`captured:false`, `dry_run:true`, `path` echo) without connecting to CDP.
+- Matched `url_contains`: dry-run connects only to the matching page target,
+  reports its `target_url`, and does not call `Page.captureScreenshot`.
+- Unmatched `url_contains`: fails closed with
+  `no page target matched url_contains` before any screenshot.
+
+`examples/browser-shot-acceptance.py` reuses the transient HTTP fixtures and
+tolerates duplicate acceptance tabs. The live run returned `passed:true`,
+`acceptance_tabs:2`, matched `captured:false`/`dry_run:true` with the target
+URL echoed, and unmatched `no page target matched url_contains`. The probe did
+not create `shots/browser-shot-acceptance.png`.
+
+### Probe results
+
+- `python -m pytest tests -q`: **88 passed in 11.47s** (was 81; +7 tests).
+- `Test-NetConnection 127.0.0.1:3080`: False (external dsh gate remains down).
+- `Test-NetConnection 127.0.0.1:9222`: True (live CDP available).
+- `python examples/browser-shot-acceptance.py --cdp-port 9222`: `passed:true`.
+- `shots/browser-shot-acceptance.png`: absent after the live probe.
+
+### Changed files
+
+- `openeyes/mcp/server.py` - URL-filtered `browser_shot` dispatch.
+- `examples/browser-shot-acceptance.py` - two-tab dry-run + fail-closed probe.
+- `tests/test_browser_shot_acceptance.py` - probe source guards.
+- `tests/test_mcp_contract.py` - three `browser_shot` URL-filter contracts.
+- `docs/dsh-web-acceptance.md` - runbook and Round 104 evidence.
+
+### Recommended next action
+
+When `3080` listens and `http://127.0.0.1:3080/` returns HTTP 200, run the
+section-4 `browser_click` end-to-end acceptance through the dsh web client.
+Until then, the remaining useful surrogate coverage is `browser_scan` with a
+URL filter and a dry-run/fail-closed probe.

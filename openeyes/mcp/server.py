@@ -248,12 +248,14 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="browser_shot",
-            description="Capture the page viewport as PNG.",
+            description="Capture the page viewport as PNG. Pass "
+                        "--url-contains to scope capture to one page target.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "port": {"type": "integer", "default": 9222},
                     "out": {"type": "string"},
+                    "url_contains": {"type": "string"},
                     "dry_run": {"type": "boolean", "default": True},
                 },
                 "required": ["out"],
@@ -573,13 +575,27 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if name == "browser_shot":
             try:
                 out = arguments["out"]
+                url_contains = arguments.get("url_contains")
+                target_url = None
                 if arguments.get("dry_run", True):
-                    return [TextContent(type="text", text=_to_json({
+                    if url_contains:
+                        conn = browser_backend.connect(
+                            port=arguments.get("port", 9222),
+                            url_contains=url_contains,
+                        )
+                        target_url = conn.current_url()
+                    payload = {
                         "captured": False,
                         "dry_run": True,
                         "path": out,
-                    }))]
-                conn = browser_backend.connect(port=arguments.get("port", 9222))
+                    }
+                    if url_contains:
+                        payload["target_url"] = target_url
+                    return [TextContent(type="text", text=_to_json(payload))]
+                conn = browser_backend.connect(
+                    port=arguments.get("port", 9222),
+                    url_contains=url_contains,
+                )
                 path = browser_backend.screenshot(conn, out)
                 return [TextContent(type="text", text=_to_json({
                     "captured": True,
