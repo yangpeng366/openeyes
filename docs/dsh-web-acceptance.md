@@ -29,7 +29,7 @@ Before opening dsh, verify the repository-local MCP process independently:
 python examples\mcp-stdio-probe.py
 ```
 
-The command must print `ready:true`, report `tool_count:13`, and exit `0`.
+The command must print `ready:true`, report `tool_count:13`, and exit `0`. It also drives two `tools/call` requests (`browser_type` and `browser_shot`) in dry-run mode, verifying the full tool-dispatch path over stdio without touching a real browser.
 This isolates MCP startup and `tools/list` from the dsh model/tool-dispatch
 layer. If it fails, fix the local Python/MCP mount first; if it passes but the
 dsh session still shows assistant text instead of `mcp__openeyes__*` tool
@@ -2284,3 +2284,55 @@ payloads in section 4 through the dsh web client, require
 `clicked:false`/`would_click:true` plus unmatched fail-closed, then
 `python examples/open-acceptance-tabs.py --close`. If `3080` remains down,
 recheck at `2026-09-04T18:00:00+08:00`.
+
+## Round 103 patrol evidence - 2026-08-30 00:51 +08:00 (Asia/Shanghai)
+
+`3080` still refuses connections (`Test-NetConnection` False, 15th+
+consecutive reading), so the dsh web end-to-end acceptance remains
+deferred. Per the round's fallback directive, the stdio acceptance
+coverage was broadened from handshake-only to include live
+`browser_type` and `browser_shot` dry-run tool calls, exercising the
+full MCP tool-dispatch path over the repository-local stdio transport.
+
+### stdio probe broadened to tool-call dispatch
+
+`examples/mcp-stdio-probe.py` previously verified only `initialize` and
+`tools/list`. It now also sends two `tools/call` requests:
+
+- `browser_type` with `{text: "acceptance", dry_run: true}` - exercises
+  the no-target dry-run branch and asserts `sent:false`,
+  `would_send_chars:10`.
+- `browser_shot` with `{out: "shots/stdio-acceptance.png", dry_run: true}`
+  - exercises the screenshot dry-run branch and asserts `captured:false`,
+  `path` echoed back.
+
+Both run without touching a real browser or the dsh web host, broadening
+the repository-local surrogate that stays green while `3080` is down.
+`tests/test_mcp_stdio_probe.py` now asserts the `tool_calls` payload.
+
+### Probe results
+
+- `python examples/mcp-stdio-probe.py`: `ready:true`, `tool_count:13`,
+  `tool_calls.browser_type = {sent:false, dry_run:true, would_send_chars:10}`,
+  `tool_calls.browser_shot = {captured:false, dry_run:true, path:"shots/stdio-acceptance.png"}`.
+- `python -m pytest tests/ -v`: **76 passed in 11.42s** (unchanged count;
+  the stdio probe test gained deeper assertions, no new test file).
+- `Test-NetConnection 127.0.0.1:3080`: False (refused).
+- `Test-NetConnection 127.0.0.1:9222`: True (Edge DevTools listening).
+
+### Changed files
+
+- `examples/mcp-stdio-probe.py` - added `tools/call` dispatch for
+  `browser_type` and `browser_shot` dry-run paths.
+- `tests/test_mcp_stdio_probe.py` - assert the new `tool_calls` payload.
+- `docs/dsh-web-acceptance.md` - section 2 and round 103 evidence.
+
+### Recommended next action
+
+The stdio surrogate now covers handshake + tool-list + two dry-run tool
+calls. The only remaining gate is the dsh web host on `3080`. When it
+listens and `http://127.0.0.1:3080/` returns HTTP 200, run the section-4
+`browser_click` acceptance through the dsh web client. If `3080` stays
+down, the next incremental surrogate candidate is a stdio `browser_scan`
+dry-run or a `browser_tabs` stub, though both need a live CDP page to be
+meaningful.

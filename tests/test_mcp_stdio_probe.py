@@ -22,3 +22,17 @@ def test_mcp_stdio_probe_passes():
     payload = json.loads(result.stdout)
     assert payload["ready"] is True
     assert payload["tool_count"] == 13
+
+    type_call = payload["tool_calls"]["browser_type"]
+    assert type_call == {
+        "sent": False,
+        "dry_run": True,
+        "would_send_chars": len("acceptance"),
+    }
+
+    shot_call = payload["tool_calls"]["browser_shot"]
+    assert shot_call == {
+        "captured": False,
+        "dry_run": True,
+        "path": "shots/stdio-acceptance.png",
+    }

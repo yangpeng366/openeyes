@@ -1,4 +1,13 @@
-"""Verify the OpenEyes MCP stdio handshake without starting a browser."""
+"""Verify the OpenEyes MCP stdio handshake without starting a browser.
+
+The probe drives the full JSON-RPC stdio transport end-to-end: it sends
+``initialize``, ``notifications/initialized``, ``tools/list``, and two
+``tools/call`` requests (``browser_type`` and ``browser_shot``) in dry-run
+mode.  The dry-run tool calls exercise the server's tool-dispatch path over
+stdio without touching a real browser or the dsh web host, broadening the
+repository-local surrogate acceptance while the 127.0.0.1:3080 gate stays
+closed.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +34,9 @@ EXPECTED_TOOLS = [
     "browser_type",
     "browser_shot",
 ]
+
+PROBE_TEXT = "acceptance"
+PROBE_SHOT_PATH = "shots/stdio-acceptance.png"
 
 
 def _request(request_id: int, method: str, params: dict | None = None) -> str:
@@ -89,6 +101,22 @@ def main() -> int:
             ),
             _notification("notifications/initialized"),
             _request(2, "tools/list"),
+            _request(
+                3,
+                "tools/call",
+                {
+                    "name": "browser_type",
+                    "arguments": {"text": PROBE_TEXT, "dry_run": True},
+                },
+            ),
+            _request(
+                4,
+                "tools/call",
+                {
+                    "name": "browser_shot",
+                    "arguments": {"out": PROBE_SHOT_PATH, "dry_run": True},
+                },
+            ),
         ]
     ) + "\n"
 
@@ -98,10 +126,10 @@ def main() -> int:
         process.stdin.flush()
         messages = []
         deadline = 15
-        while len(messages) < 2:
+        while len(messages) < 4:
             line = lines.get(timeout=deadline)
             message = json.loads(line)
-            if message.get("id") in (1, 2):
+            if message.get("id") in (1, 2, 3, 4):
                 messages.append(message)
         initialize = next(message for message in messages if message.get("id") == 1)
         tools_list = next(message for message in messages if message.get("id") == 2)
@@ -114,6 +142,27 @@ def main() -> int:
             raise RuntimeError(
                 f"unexpected tools/list names: expected {EXPECTED_TOOLS!r}, got {tool_names!r}"
             )
+        type_resp = next(message for message in messages if message.get("id") == 3)
+        shot_resp = next(message for message in messages if message.get("id") == 4)
+        for resp, label in ((type_resp, "browser_type"), (shot_resp, "browser_shot")):
+            if "error" in resp:
+                raise RuntimeError(f"{label} tools/call failed: {resp['error']}")
+        type_result = json.loads(type_resp["result"]["content"][0]["text"])
+        shot_result = json.loads(shot_resp["result"]["content"][0]["text"])
+        if type_result.get("sent") is not False:
+            raise RuntimeError(f"browser_type dry-run sent should be False: {type_result}")
+        if type_result.get("dry_run") is not True:
+            raise RuntimeError(f"browser_type dry_run should be True: {type_result}")
+        if type_result.get("would_send_chars") != len(PROBE_TEXT):
+            raise RuntimeError(
+                f"browser_type would_send_chars mismatch: {type_result}"
+            )
+        if shot_result.get("captured") is not False:
+            raise RuntimeError(f"browser_shot dry-run captured should be False: {shot_result}")
+        if shot_result.get("dry_run") is not True:
+            raise RuntimeError(f"browser_shot dry_run should be True: {shot_result}")
+        if shot_result.get("path") != PROBE_SHOT_PATH:
+            raise RuntimeError(f"browser_shot path mismatch: {shot_result}")
     except (AssertionError, OSError, queue.Empty, TypeError, ValueError, KeyError, RuntimeError) as exc:
         stderr = _stop_process(process)
         print(json.dumps({"ready": False, "error": str(exc), "stderr": stderr[-2000:]}))
@@ -127,6 +176,18 @@ def main() -> int:
                 "protocol": "stdio",
                 "tool_count": len(tool_names),
                 "tool_names": tool_names,
+                "tool_calls": {
+                    "browser_type": {
+                        "sent": type_result["sent"],
+                        "dry_run": type_result["dry_run"],
+                        "would_send_chars": type_result["would_send_chars"],
+                    },
+                    "browser_shot": {
+                        "captured": shot_result["captured"],
+                        "dry_run": shot_result["dry_run"],
+                        "path": shot_result["path"],
+                    },
+                },
             },
             ensure_ascii=False,
         )
