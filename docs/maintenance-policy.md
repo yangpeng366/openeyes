@@ -66,6 +66,16 @@ occupies the top of that file (sections 1–4 + Pass criteria). If a future
 flow change redirects the evidence log, update both this policy doc and
 the runbook header so the convention is self-documenting.
 
+### Deferred live-acceptance cadence
+
+When live acceptance is deferred solely because `127.0.0.1:3080` is not
+listening, a later patrol performs one TCP listener check instead of
+rerunning the full probe suite. If the port remains closed and no
+trigger fired, return an inspected result, preserve the recorded recheck
+time, and do not append duplicate patrol evidence. Re-run the full probe
+set when the recheck time arrives, when `3080` starts listening, or when
+`origin/main`, the acceptance candidate, or the user decision changes.
+
 ## Superseded PR-handoff branches（已废弃的 PR handoff 分支）
 
 The 2026-08-28 decision retired the Round 95 PR-handoff machinery as a
