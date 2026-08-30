@@ -262,6 +262,61 @@ def test_browser_type_unmatched_url_filter_fails_before_type(monkeypatch):
     assert result["tool"] == "browser_type"
 
 
+def test_browser_type_dry_run_resolves_url_filter_without_selector(monkeypatch):
+    seen = {}
+    conn = MagicMock()
+    conn.current_url.return_value = "https://example.com/target-a"
+
+    def connect(*, port, url_contains=None):
+        seen["port"] = port
+        seen["url_contains"] = url_contains
+        return conn
+
+    def fail(*args, **kwargs):
+        raise AssertionError("browser_type dry-run touched a page element")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", fail)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+
+    result = _call("browser_type", {
+        "text": "hello",
+        "url_contains": "target-a",
+        "dry_run": True,
+    })
+
+    assert seen == {"port": 9222, "url_contains": "target-a"}
+    assert result["sent"] is False
+    assert result["sent_chars"] == 0
+    assert result["would_send_chars"] == 5
+    assert result["into"] == "(focused)"
+    assert result["target_url"] == "https://example.com/target-a"
+
+
+def test_browser_type_dry_run_unmatched_url_filter_fails_closed(monkeypatch):
+    def connect(*, port, url_contains=None):
+        raise CDPError(
+            "no page target matched url_contains='missing-tab'; "
+            "available URLs: 'https://tab-a', 'https://tab-b'"
+        )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("browser_type dry-run touched a mismatched page")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", fail)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+
+    result = _call("browser_type", {
+        "text": "hello",
+        "url_contains": "missing-tab",
+        "dry_run": True,
+    })
+
+    assert "no page target matched url_contains='missing-tab'" in result["error"]
+    assert result["tool"] == "browser_type"
+
+
 def test_browser_shot_without_url_filter_keeps_dry_run_payload(monkeypatch, tmp_path):
     def fail(*args, **kwargs):
         raise AssertionError("filtered dry-run should not be required")

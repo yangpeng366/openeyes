@@ -34,7 +34,7 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 
 `browser_click` uses the compatibility switch `go: false`. Omitting `go`, passing `false`, or passing no value must return the resolved target with `clicked: false` and `would_click: true`. Only `go: true` may click.
 
-`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent. File captures return the requested output path without creating it.
+`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent, even when no element selector is supplied. `browser_shot` dry-run resolves a matching page URL but returns the requested output path without creating it.
 
 ## dsh stdio mount
 
@@ -91,11 +91,8 @@ Add
 2. Call `tools/list` and require exactly the 13 names in the matrix above.
 3. Call `browser_click` with a selector and no `go` field; require `clicked: false`, `would_click: true`, and a resolved target. When the browser has multiple page targets, include `url_contains` for the disposable page so resolution is deterministic rather than relying on the first tab.
 4. Verify no application state changed during step 3.
-If `url_contains` is supplied but no page target matches, the browser operation
-must fail instead of falling back to the first tab. This prevents a stale or
-mistyped page selector from actuating an unrelated page.
 
-`browser_click` retains the compatibility switch `go`; clients should treat `go` and `dry_run` as separate wire-contract fields until a future version unifies them.
+`browser_click` retains the compatibility switch `go`; clients should treat `go` and `dry_run` as separate wire-contract fields until a future version unifies them. If `url_contains` is supplied but no page target matches, the browser operation must fail instead of falling back to the first tab; this prevents a stale or mistyped page selector from actuating an unrelated page.
 
 For the dsh web-host procedure, use [docs/dsh-web-acceptance.md](dsh-web-acceptance.md).
 

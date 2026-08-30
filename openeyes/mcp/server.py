@@ -514,21 +514,32 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             try:
                 dry_run = arguments.get("dry_run", True)
                 text = arguments["text"]
+                url_contains = arguments.get("url_contains")
                 press_enter = bool(arguments.get("press_enter", False))
                 has_target = any(arguments.get(k) is not None for k in
                                  ("hint", "idx", "name_contains", "control_type"))
                 if dry_run and not has_target:
-                    return [TextContent(type="text", text=_to_json({
+                    target_url = None
+                    if url_contains:
+                        conn = browser_backend.connect(
+                            port=arguments.get("port", 9222),
+                            url_contains=url_contains,
+                        )
+                        target_url = conn.current_url()
+                    payload = {
                         "sent": False,
                         "sent_chars": 0,
                         "would_send_chars": len(text),
                         "into": "(focused)",
                         "press_enter": press_enter,
                         "dry_run": True,
-                    }))]
+                    }
+                    if url_contains:
+                        payload["target_url"] = target_url
+                    return [TextContent(type="text", text=_to_json(payload))]
                 conn = browser_backend.connect(
                     port=arguments.get("port", 9222),
-                    url_contains=arguments.get("url_contains"),
+                    url_contains=url_contains,
                 )
                 chosen = None
                 if has_target:
