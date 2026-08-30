@@ -263,3 +263,105 @@ def test_edge_exe_rejects_missing_environment_override(monkeypatch, tmp_path):
 
     with pytest.raises(cdpmod.CDPError, match="EDGE_EXE does not point to a file"):
         cdpmod._edge_exe()
+
+
+# ---------------------------------------------------------------------------
+# launch_edge: bounded diagnostic + stale-lock fallback
+# ---------------------------------------------------------------------------
+
+class _FakeProc:
+    def __init__(self, *, exited: bool, pid: int = 24001):
+        self._exited = exited
+        self.pid = pid
+        self.terminate = MagicMock()
+        self.wait = MagicMock()
+
+    def poll(self):
+        return 0 if self._exited else None
+
+
+def _patch_launch(monkeypatch, tmp_path, *, list_tabs_side):
+    monkeypatch.setattr(cdpmod, "_edge_exe", lambda: str(tmp_path / "edge.exe"))
+    monkeypatch.setattr(cdpmod, "list_tabs", MagicMock(side_effect=list_tabs_side))
+    clock = {"v": 0.0}
+    monkeypatch.setattr(cdpmod.time, "time", lambda: clock["v"])
+    monkeypatch.setattr(cdpmod.time, "sleep", lambda s, *a, **k: clock.__setitem__("v", clock["v"] + s))
+
+
+def test_launch_edge_diagnostic_when_cdp_never_exposes(monkeypatch, tmp_path):
+    _patch_launch(monkeypatch, tmp_path, list_tabs_side=ConnectionError("refused"))
+    fake_proc = _FakeProc(exited=True)
+    monkeypatch.setattr(cdpmod.subprocess, "Popen", MagicMock(return_value=fake_proc))
+    profile = tmp_path / "openeyes-edge"
+    with pytest.raises(cdpmod.CDPError) as ei:
+        cdpmod.launch_edge(port=9333, profile_dir=profile, seed=False, wait_ms=1, retries=0)
+    msg = str(ei.value)
+    assert "Edge did not expose CDP" in msg
+    assert "port=9333" in msg
+    assert "process=exited" in msg
+    assert "last_error=" in msg
+
+
+def test_launch_edge_reports_process_alive_and_terminates(monkeypatch, tmp_path):
+    _patch_launch(monkeypatch, tmp_path, list_tabs_side=ConnectionError("refused"))
+    fake_proc = _FakeProc(exited=False)
+    monkeypatch.setattr(cdpmod.subprocess, "Popen", MagicMock(return_value=fake_proc))
+    profile = tmp_path / "openeyes-edge"
+    with pytest.raises(cdpmod.CDPError) as ei:
+        cdpmod.launch_edge(port=9333, profile_dir=profile, seed=False, wait_ms=1, retries=1)
+    assert "process=alive" in str(ei.value)
+    fake_proc.terminate.assert_called_once()
+    fake_proc.wait.assert_called_once()
+
+
+def test_launch_edge_retries_after_clearing_stale_singleton_lock(monkeypatch, tmp_path):
+    _patch_launch(monkeypatch, tmp_path, list_tabs_side=ConnectionError("refused"))
+    fake_proc = _FakeProc(exited=True)
+    popen = MagicMock(return_value=fake_proc)
+    monkeypatch.setattr(cdpmod.subprocess, "Popen", popen)
+    profile = tmp_path / "openeyes-edge"
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "SingletonLock").write_bytes(b"x")
+    with pytest.raises(cdpmod.CDPError):
+        cdpmod.launch_edge(port=9333, profile_dir=profile, seed=False, wait_ms=1, retries=1)
+    # bounded single retry happened after the process exited early
+    assert popen.call_count == 2
+    # stale lock was cleared before the retry
+    assert not (profile / "SingletonLock").exists()
+
+
+def test_launch_edge_no_retry_when_process_alive(monkeypatch, tmp_path):
+    _patch_launch(monkeypatch, tmp_path, list_tabs_side=ConnectionError("refused"))
+    fake_proc = _FakeProc(exited=False)
+    popen = MagicMock(return_value=fake_proc)
+    monkeypatch.setattr(cdpmod.subprocess, "Popen", popen)
+    profile = tmp_path / "openeyes-edge"
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "SingletonLock").write_bytes(b"x")
+    with pytest.raises(cdpmod.CDPError):
+        cdpmod.launch_edge(port=9333, profile_dir=profile, seed=False, wait_ms=1, retries=1)
+    # still-alive process: no retry, lock untouched
+    assert popen.call_count == 1
+    assert (profile / "SingletonLock").exists()
+
+
+def test_profile_is_disposable_true_under_temp(tmp_path):
+    assert cdpmod._profile_is_disposable(tmp_path) is True
+
+
+def test_profile_is_disposable_false_outside_temp():
+    assert cdpmod._profile_is_disposable(cdpmod.Path(r"C:\Program Files\openeyes-fake-profile")) is False
+
+
+def test_clear_singleton_locks_removes_only_lock_files(tmp_path):
+    d = tmp_path / "prof"
+    d.mkdir()
+    for name in cdpmod._SINGLETON_LOCK_NAMES:
+        (d / name).write_bytes(b"x")
+    keeper = d / "Preferences"
+    keeper.write_bytes(b"keep")
+    removed = cdpmod._clear_singleton_locks(d)
+    assert set(removed) == set(cdpmod._SINGLETON_LOCK_NAMES)
+    for name in cdpmod._SINGLETON_LOCK_NAMES:
+        assert not (d / name).exists()
+    assert keeper.exists()

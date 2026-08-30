@@ -196,38 +196,130 @@ def seed_user_data(target, profile: str = "Default") -> None:
             _copy_dir(src_prof / name, dst_prof / name)
 
 
-def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, seed: bool = True, headless: bool = False, wait_ms: int = 4500) -> dict:
-    """Launch a dedicated Edge with remote debugging enabled."""
-    profile_dir = Path(profile_dir or DEFAULT_USER_DIR)
-    if seed:
-        seed_user_data(profile_dir)
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    args = [
-        _edge_exe(),
-        "--remote-debugging-port=" + str(port),
-        "--remote-allow-origins=*",
-        "--user-data-dir=" + str(profile_dir),
-        "--profile-directory=Default",
-        "--no-first-run", "--no-default-browser-check",
-        "--ignore-certificate-errors",
-        "--disable-features=Translate,InfinitePrefetch",
-        "--no-sandbox",
-    ]
-    if headless:
-        args.append("--headless=new")
-    if url:
-        args.append(url)
-    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
-    deadline = time.time() + max(5.0, wait_ms / 1000.0)
-    last_err = None
-    while time.time() < deadline:
+_SINGLETON_LOCK_NAMES = ("SingletonLock", "SingletonCookie", "SingletonSocket")
+
+
+def _profile_is_disposable(profile_dir: Path) -> bool:
+    """True when profile_dir lives under the system TEMP tree (safe to scrub).
+
+    Only disposable profile dirs (the default temp user-data-dir or anything
+    under %TEMP%) are ever touched by the stale-lock fallback; the live Edge
+    profile is never modified.
+    """
+    try:
+        temp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
+        if not temp:
+            return False
+        temp_root = Path(temp).resolve()
+        resolved = profile_dir.resolve()
+        return resolved == temp_root or temp_root in resolved.parents
+    except OSError:
+        return False
+
+
+def _stale_singleton_locks(profile_dir: Path) -> list:
+    """Return the Chromium singleton lock names present in profile_dir."""
+    out = []
+    for name in _SINGLETON_LOCK_NAMES:
+        lock = profile_dir / name
         try:
-            list_tabs(port)
-            return {"port": port, "pid": proc.pid, "profile_dir": str(profile_dir)}
-        except Exception as e:
-            last_err = e
-            time.sleep(0.4)
-    raise CDPError("Edge did not expose CDP within wait_ms")
+            if lock.is_symlink() or lock.exists():
+                out.append(name)
+        except OSError:
+            pass
+    return out
+
+
+def _clear_singleton_locks(profile_dir: Path) -> list:
+    """Remove stale Chromium singleton lock files from a disposable profile dir."""
+    removed = []
+    for name in _SINGLETON_LOCK_NAMES:
+        lock = profile_dir / name
+        try:
+            if lock.is_symlink() or lock.exists():
+                lock.unlink()
+                removed.append(name)
+        except OSError:
+            pass
+    return removed
+
+
+def _diagnose_launch(proc, port, profile_dir, last_err, *, proc_exited) -> str:
+    """Build a bounded diagnostic string for a failed CDP launch."""
+    parts = ["port=" + str(port)]
+    parts.append("process=" + ("exited" if proc_exited else "alive"))
+    if last_err is not None:
+        parts.append("last_error=" + repr(last_err))
+    locks = _stale_singleton_locks(profile_dir)
+    if locks:
+        parts.append("stale_locks=" + ",".join(locks))
+    return "; ".join(parts)
+
+
+def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, seed: bool = True, headless: bool = False, wait_ms: int = 4500, retries: int = 1) -> dict:
+    """Launch a dedicated Edge with remote debugging enabled.
+
+    On failure the raised CDPError carries a bounded diagnostic (process
+    state, last connection error, and any stale Chromium singleton locks in
+    the profile dir) so a failed launch on a dedicated port (e.g. 9333) can
+    be diagnosed without a second tool. When the spawned process exits early
+    and the profile dir is disposable (under %TEMP%), a single bounded retry
+    clears stale singleton locks before re-launching, so a crashed prior
+    launch does not wedge the requested port. Disposable cleanup is
+    preserved: only lock files inside the temp profile dir are touched, and
+    the spawned process is best-effort terminated when it never opened CDP.
+    """
+    profile_dir = Path(profile_dir or DEFAULT_USER_DIR)
+    attempts = 1 + max(0, retries)
+    last_msg = "Edge did not expose CDP within " + str(wait_ms) + "ms"
+    for attempt in range(attempts):
+        if attempt > 0 and _profile_is_disposable(profile_dir):
+            _clear_singleton_locks(profile_dir)
+        if seed:
+            seed_user_data(profile_dir)
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        args = [
+            _edge_exe(),
+            "--remote-debugging-port=" + str(port),
+            "--remote-allow-origins=*",
+            "--user-data-dir=" + str(profile_dir),
+            "--profile-directory=Default",
+            "--no-first-run", "--no-default-browser-check",
+            "--ignore-certificate-errors",
+            "--disable-features=Translate,InfinitePrefetch",
+            "--no-sandbox",
+        ]
+        if headless:
+            args.append("--headless=new")
+        if url:
+            args.append(url)
+        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+        deadline = time.time() + max(5.0, wait_ms / 1000.0)
+        last_err = None
+        while time.time() < deadline:
+            try:
+                list_tabs(port)
+                return {"port": port, "pid": proc.pid, "profile_dir": str(profile_dir)}
+            except Exception as e:
+                last_err = e
+                time.sleep(0.4)
+        proc_exited = proc.poll() is not None
+        diag = _diagnose_launch(proc, port, profile_dir, last_err, proc_exited=proc_exited)
+        try:
+            if not proc_exited:
+                proc.terminate()
+                proc.wait(timeout=2.0)
+        except Exception:
+            pass
+        last_msg = "Edge did not expose CDP within " + str(wait_ms) + "ms [" + diag + "]"
+        # Bounded fallback: retry only when the process exited early (the
+        # classic singleton-reuse / stale-lock failure) and the profile dir
+        # is disposable. A still-alive process that simply never opened CDP
+        # is left to the diagnostic, not a retry.
+        if attempt + 1 < attempts and proc_exited and _profile_is_disposable(profile_dir):
+            continue
+        raise CDPError(last_msg)
+    raise CDPError(last_msg)
 
 
 
