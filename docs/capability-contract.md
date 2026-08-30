@@ -34,7 +34,7 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 
 `browser_click` uses the compatibility switch `go: false`. Omitting `go`, passing `false`, or passing no value must return the resolved target with `clicked: false` and `would_click: true`. Only `go: true` may click.
 
-`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent, even when no element selector is supplied. `browser_shot` dry-run resolves a matching page URL but returns the requested output path without creating it.
+`browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent, even when no element selector is supplied. A matched call also reports the resolved page as `target_url`, including when an element selector is supplied. `browser_shot` dry-run resolves a matching page URL but returns the requested output path without creating it.
 
 ## dsh stdio mount
 

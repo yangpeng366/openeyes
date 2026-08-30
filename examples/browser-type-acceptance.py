@@ -6,11 +6,11 @@ gate remains closed. It mirrors ``browser-click-acceptance.py``:
 self-contained transient HTTP fixture server, two disposable tabs via the CDP
 ``/json/new`` endpoint, then a dry-run + fail-closed check over MCP stdio.
 
-The dry-run call must resolve the ``Learn more`` element on the ``target-a``
-page (``sent:false``, ``would_send_chars`` populated, no text inserted). The
-unmatched ``url_contains`` call must fail closed with the same
-``no page target matched url_contains`` error as ``browser_click`` and must
-not propose any ``would_send_chars``/``target``.
+A dry-run call must resolve the ``Learn more`` element (``sent:false``,
+``would_send_chars`` populated, no text inserted); a selectorless dry-run must
+return the exact ``target_url`` without resolving an element; and an unmatched
+selectorless ``url_contains`` call must fail closed without proposing
+``would_send_chars``/``target``.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 
@@ -166,11 +167,16 @@ def main() -> int:
                 f"start Edge with --remote-debugging-port={args.cdp_port}"
             )
         fixture_server, http_port = _start_fixture_server(EXAMPLES_DIR)
+        probe_id = uuid.uuid4().hex
+        target_filter = f"{TARGET_MARKER}.html?probe={probe_id}"
+        missing_filter = f"missing-{probe_id}"
         target_url = (
-            f"http://127.0.0.1:{http_port}/acceptance-pages/target-a.html"
+            "http://127.0.0.1:"
+            f"{http_port}/acceptance-pages/target-a.html?probe={probe_id}"
         )
         decoy_url = (
-            f"http://127.0.0.1:{http_port}/acceptance-pages/decoy.html"
+            "http://127.0.0.1:"
+            f"{http_port}/acceptance-pages/decoy.html?probe={probe_id}"
         )
         opened_ids.append(_open_tab(args.cdp_port, target_url))
         opened_ids.append(_open_tab(args.cdp_port, decoy_url))
@@ -208,11 +214,11 @@ def main() -> int:
         ]
         target_tabs = [
             tab for tab in acceptance_tabs
-            if TARGET_MARKER in (tab.get("url") or "")
+            if target_filter in (tab.get("url") or "")
         ]
         decoy_tabs = [
             tab for tab in acceptance_tabs
-            if TARGET_MARKER not in (tab.get("url") or "")
+            if target_filter not in (tab.get("url") or "")
         ]
         if len(target_tabs) < 1 or len(decoy_tabs) < 1:
             raise RuntimeError(
@@ -227,7 +233,7 @@ def main() -> int:
             "name": "browser_type",
             "arguments": {
                 "port": args.cdp_port,
-                "url_contains": TARGET_MARKER,
+                "url_contains": target_filter,
                 "name_contains": "Learn more",
                 "text": TYPE_TEXT,
             },
@@ -242,13 +248,31 @@ def main() -> int:
             raise RuntimeError(
                 f"matched call resolved wrong element: {matched!r}"
             )
+        if matched.get("target_url") != target_tabs[0]["url"]:
+            raise RuntimeError(
+                f"matched call reported wrong target URL: {matched!r}"
+            )
 
-        missing = _result_content(call(5, "tools/call", {
+        focused = _result_content(call(5, "tools/call", {
             "name": "browser_type",
             "arguments": {
                 "port": args.cdp_port,
-                "url_contains": "missing-target",
-                "name_contains": "Learn more",
+                "url_contains": target_filter,
+                "text": TYPE_TEXT,
+            },
+        }))
+        if focused.get("sent") is not False or focused.get("sent_chars") != 0:
+            raise RuntimeError(f"selectorless call was not a dry-run: {focused!r}")
+        if focused.get("into") != "(focused)" or focused.get("target"):
+            raise RuntimeError(f"selectorless call resolved an element: {focused!r}")
+        if focused.get("target_url") != target_url:
+            raise RuntimeError(f"selectorless call resolved wrong URL: {focused!r}")
+
+        missing = _result_content(call(6, "tools/call", {
+            "name": "browser_type",
+            "arguments": {
+                "port": args.cdp_port,
+                "url_contains": missing_filter,
                 "text": TYPE_TEXT,
             },
         }))
@@ -279,6 +303,7 @@ def main() -> int:
         "acceptance_tabs": len(acceptance_tabs),
         "target_url": target_tabs[0]["url"],
         "matched_type": matched,
+        "selectorless_type": focused,
         "missing_type_error": error,
     }, ensure_ascii=False))
     return 0

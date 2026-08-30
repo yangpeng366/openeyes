@@ -541,6 +541,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     port=arguments.get("port", 9222),
                     url_contains=url_contains,
                 )
+                target_url = conn.current_url() if url_contains else None
                 chosen = None
                 if has_target:
                     elems = browser_backend.scan_dom(conn)
@@ -578,6 +579,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "press_enter": press_enter,
                     "dry_run": dry_run,
                     "target": chosen.to_dict() if chosen else None,
+                    **({"target_url": target_url} if url_contains else {})
                 }))]
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(

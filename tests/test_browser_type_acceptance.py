@@ -16,8 +16,9 @@ def test_type_acceptance_boots_mcp_and_keeps_type_dry_run():
     assert "notifications/initialized" in text
     assert "browser_tabs" in text
     assert "browser_type" in text
-    assert '"url_contains": TARGET_MARKER' in text
+    assert '"url_contains": target_filter' in text
     assert '"name_contains": "Learn more"' in text
+    assert 'target_filter = f"{TARGET_MARKER}.html?probe={probe_id}"' in text
     assert "no page target matched url_contains" in text
     # dry_run defaults to true; the probe must never force execution
     assert '"sent": True' not in text
@@ -28,10 +29,16 @@ def test_type_acceptance_boots_mcp_and_keeps_type_dry_run():
 def test_type_acceptance_distinguishes_target_and_missing_markers():
     text = PROBE.read_text(encoding="utf-8")
     assert 'TARGET_MARKER = "target-a"' in text
-    assert '"url_contains": "missing-target"' in text
+    assert 'missing_filter = f"missing-{probe_id}"' in text
+    assert '"url_contains": missing_filter' in text
     assert "expected at least one" in text
     assert "matched call was not a dry-run" in text
     assert "missing call did not fail closed" in text
+    assert 'matched.get("target_url") != target_tabs[0]["url"]' in text
+    assert "matched call reported wrong target URL" in text
+    assert "selectorless call was not a dry-run" in text
+    assert "selectorless call resolved an element" in text
+    assert "selectorless call resolved wrong URL" in text
 
 
 def test_type_acceptance_tolerates_duplicate_acceptance_tabs():
@@ -60,3 +67,5 @@ def test_type_acceptance_checks_would_send_chars_and_resolved_target():
     assert 'would_send_chars") != len(TYPE_TEXT)' in text
     assert '"Learn more"' in text
     assert "matched call resolved wrong element" in text
+    assert 'matched.get("target_url") != target_tabs[0]["url"]' in text
+    assert "matched call reported wrong target URL" in text

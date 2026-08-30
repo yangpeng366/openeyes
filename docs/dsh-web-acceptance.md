@@ -82,11 +82,12 @@ but does not replace the dsh end-to-end acceptance.
 
 `examples/browser-type-acceptance.py` extends the same repository-local
 surrogate to the `browser_type` write tool. It reuses the self-contained
-transient HTTP server and two-tab fixture, then calls `browser_type` (not
-`browser_click`) over MCP stdio: a matched `url_contains=target-a` dry-run must
-resolve the `Learn more` element with `sent:false` and `would_send_chars`
-populated (no text inserted), and an unmatched `url_contains=missing-target`
-call must fail closed with `no page target matched url_contains` and propose no
+transient HTTP server and two session-unique tabs, then calls `browser_type`
+(not `browser_click`) over MCP stdio: a matched dry-run must resolve the
+`Learn more` element with `sent:false` and `would_send_chars` populated (no
+text inserted); a selectorless dry-run must return the exact `target_url`
+without resolving an element; and an unmatched selectorless call must fail
+closed with `no page target matched url_contains` and propose no
 `would_send_chars`/`target`. Run it live with:
 
 ```powershell
@@ -2406,3 +2407,32 @@ When `3080` listens and `http://127.0.0.1:3080/` returns HTTP 200, run the
 section-4 `browser_click` end-to-end acceptance through the dsh web client.
 Until then, the remaining useful surrogate coverage is `browser_scan` with a
 URL filter and a dry-run/fail-closed probe.
+
+## Round 105 patrol evidence - 2026-08-30 13:25 +08:00 (Asia/Shanghai)
+
+The two-tab `browser_type` live probe exposed one remaining contract gap: a
+selector-supplied matched dry-run forwarded `url_contains` and resolved the
+target element, but omitted `target_url`. The service now reports the resolved
+page URL whenever `url_contains` matches, with or without an element selector.
+
+The probe now creates a unique per-run query filter and asserts `target_url`
+exactly equals that transient target-a fixture URL. The disposable live run
+used an isolated headless Edge profile on `9333`, opened two CDP tabs, and
+returned `passed:true`, `acceptance_tabs:2`, `target_url` matching the unique
+target-a fixture, `sent:false`, `would_send_chars:5`, and the resolved
+`Learn more` hyperlink. A selectorless call returned the same exact
+`target_url`, `into:(focused)`, and no resolved element. The unmatched unique
+`url_contains` call failed closed with
+`no page target matched url_contains` and proposed no action.
+
+- `pytest tests/test_browser_type_acceptance.py tests/test_mcp_contract.py -q`:
+  20 passed before the live run.
+- `python examples/browser-type-acceptance.py --cdp-port 9333 --timeout 30`:
+  `passed:true`.
+- `python -m pytest tests -q`: 90 passed (was 88; +2 locks).
+
+Changed: `openeyes/mcp/server.py`, `examples/README.md`,
+`examples/browser-type-acceptance.py`, `tests/test_browser_type_acceptance.py`,
+`tests/test_mcp_contract.py`, `docs/capability-contract.md`, and this runbook.
+The isolated Edge process and its two fixture tabs were closed after evidence
+capture.

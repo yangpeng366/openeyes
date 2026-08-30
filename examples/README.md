@@ -114,6 +114,17 @@ python examples\open-acceptance-tabs.py --close
 
 The probe passes only when the target tab remains a dry-run (`clicked:false`, `would_click:true`) and an unmatched `url_contains` fails closed with `no page target matched`.
 
+### browser-type-acceptance.py
+
+Runs the two-tab `browser_type` acceptance over direct MCP stdio. A matched
+selector call stays dry-run, a selectorless call resolves and returns the exact
+`target_url` without touching an element, and an unmatched selectorless filter
+fails closed. The script starts and cleans up its disposable HTTP fixture tabs:
+
+```powershell
+python examples\browser-type-acceptance.py --cdp-port 9222
+```
+
 ### mcp-stdio-probe.py
 
 Boots the repository-local MCP server directly, sends `initialize` + `initialized` notification + `tools/list`, and exits. Run this before the dsh web acceptance to isolate the Python/MCP mount from the dsh tool-dispatch layer:

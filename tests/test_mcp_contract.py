@@ -202,11 +202,14 @@ def test_browser_click_unmatched_url_filter_fails_before_scan_or_click(monkeypat
 
 def test_browser_type_forwards_url_filter(monkeypatch):
     seen = {}
+    conn = MagicMock()
+    conn.current_url.return_value = "https://example.com/target-a"
+    conn.evaluate = MagicMock(return_value=True)
 
     def connect(*, port, url_contains=None):
         seen["port"] = port
         seen["url_contains"] = url_contains
-        return object()
+        return conn
 
     def scan(_conn):
         return [Element(
@@ -219,8 +222,6 @@ def test_browser_type_forwards_url_filter(monkeypatch):
 
     monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
     monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", scan)
-    conn = MagicMock()
-    conn.evaluate = MagicMock(return_value=True)
     monkeypatch.setattr(mcp_server.browser_backend, "type_text", lambda *a, **k: None)
 
     result = _call("browser_type", {
@@ -235,6 +236,7 @@ def test_browser_type_forwards_url_filter(monkeypatch):
     assert result["sent_chars"] == len("hello")
     assert result["into"] == "Search"
     assert result["target"]["name"] == "Search"
+    assert result["target_url"] == "https://example.com/target-a"
 
 
 def test_browser_type_unmatched_url_filter_fails_before_type(monkeypatch):
