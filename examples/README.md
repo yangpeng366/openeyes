@@ -114,6 +114,17 @@ python examples\open-acceptance-tabs.py --close
 
 The probe passes only when the target tab remains a dry-run (`clicked:false`, `would_click:true`) and an unmatched `url_contains` fails closed with `no page target matched`.
 
+### browser-scan-acceptance.py
+
+Runs the two-tab `browser_scan` read-only acceptance over direct MCP stdio.
+The script starts and cleans up its disposable HTTP fixture tabs. A unique
+`target-a` scan resolves only the target page's `Secondary action`; the matching
+decoy scan resolves `Learn more`; and an unmatched filter fails closed:
+
+```powershell
+python examples\browser-scan-acceptance.py --cdp-port 9222
+```
+
 ### browser-type-acceptance.py
 
 Runs the two-tab `browser_type` acceptance over direct MCP stdio. A matched
