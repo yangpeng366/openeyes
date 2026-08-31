@@ -365,3 +365,36 @@ def test_clear_singleton_locks_removes_only_lock_files(tmp_path):
     for name in cdpmod._SINGLETON_LOCK_NAMES:
         assert not (d / name).exists()
     assert keeper.exists()
+
+
+def test_launch_edge_surfaces_exit_code_on_early_exit(monkeypatch, tmp_path):
+    _patch_launch(monkeypatch, tmp_path, list_tabs_side=ConnectionError("refused"))
+    fake_proc = _FakeProc(exited=True)
+    monkeypatch.setattr(cdpmod.subprocess, "Popen", MagicMock(return_value=fake_proc))
+    profile = tmp_path / "openeyes-edge"
+    with pytest.raises(cdpmod.CDPError) as ei:
+        cdpmod.launch_edge(port=9333, profile_dir=profile, seed=False, wait_ms=1, retries=0)
+    msg = str(ei.value)
+    assert "exit_code=0" in msg
+
+
+def test_diagnose_launch_includes_exit_code_and_stderr_tail(tmp_path):
+    proc = _FakeProc(exited=True)
+    msg = cdpmod._diagnose_launch(proc, 9333, tmp_path, ConnectionError("refused"),
+                                  proc_exited=True, exit_code=42,
+                                  stderr_tail="another instance is running")
+    assert "exit_code=42" in msg
+    assert "stderr_tail=another instance is running" in msg
+    assert "last_error=" in msg
+
+
+def test_read_stderr_tail_returns_empty_for_missing_file(tmp_path):
+    assert cdpmod._read_stderr_tail(str(tmp_path / "nope.err")) == ""
+
+
+def test_read_stderr_tail_truncates_long_output(tmp_path):
+    p = tmp_path / "long.err"
+    p.write_text("x" * 1000, encoding="utf-8")
+    tail = cdpmod._read_stderr_tail(str(p), max_chars=40)
+    assert tail.startswith("...")
+    assert len(tail) <= 44

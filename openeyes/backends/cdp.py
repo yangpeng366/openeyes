@@ -10,8 +10,10 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -244,12 +246,38 @@ def _clear_singleton_locks(profile_dir: Path) -> list:
     return removed
 
 
-def _diagnose_launch(proc, port, profile_dir, last_err, *, proc_exited) -> str:
+def _read_stderr_tail(path, max_chars=300) -> str:
+    """Best-effort short tail of a captured Edge stderr temp file.
+
+    Only read after the spawned process has exited so the file is quiescent;
+    never used to block a live process. Returns "" on any I/O trouble.
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return ""
+    if not data:
+        return ""
+    try:
+        text = data.decode("utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+    if len(text) > max_chars:
+        text = "..." + text[-max_chars:]
+    return text
+
+
+def _diagnose_launch(proc, port, profile_dir, last_err, *, proc_exited, exit_code=None, stderr_tail="") -> str:
     """Build a bounded diagnostic string for a failed CDP launch."""
     parts = ["port=" + str(port)]
     parts.append("process=" + ("exited" if proc_exited else "alive"))
+    if proc_exited and exit_code is not None:
+        parts.append("exit_code=" + str(exit_code))
     if last_err is not None:
         parts.append("last_error=" + repr(last_err))
+    if stderr_tail:
+        parts.append("stderr_tail=" + stderr_tail)
     locks = _stale_singleton_locks(profile_dir)
     if locks:
         parts.append("stale_locks=" + ",".join(locks))
@@ -260,7 +288,7 @@ def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, see
     """Launch a dedicated Edge with remote debugging enabled.
 
     On failure the raised CDPError carries a bounded diagnostic (process
-    state, last connection error, and any stale Chromium singleton locks in
+    state, exit code, captured stderr tail, last connection error, and any stale Chromium singleton locks in
     the profile dir) so a failed launch on a dedicated port (e.g. 9333) can
     be diagnosed without a second tool. When the spawned process exits early
     and the profile dir is disposable (under %TEMP%), a single bounded retry
@@ -293,18 +321,35 @@ def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, see
             args.append("--headless=new")
         if url:
             args.append(url)
-        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+        # Capture Edge's own stderr to a temp file so an early-exit failure
+        # (process=exited) can surface *why* Edge quit, not just that it did.
+        err_fh = tempfile.NamedTemporaryFile(delete=False, suffix="-openeyes-edge.err", prefix="oe-")
+        err_path = err_fh.name
+        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=err_fh, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
         deadline = time.time() + max(5.0, wait_ms / 1000.0)
         last_err = None
-        while time.time() < deadline:
+        tail = ""
+        try:
+            while time.time() < deadline:
+                try:
+                    list_tabs(port)
+                    return {"port": port, "pid": proc.pid, "profile_dir": str(profile_dir)}
+                except Exception as e:
+                    last_err = e
+                    time.sleep(0.4)
+        finally:
             try:
-                list_tabs(port)
-                return {"port": port, "pid": proc.pid, "profile_dir": str(profile_dir)}
-            except Exception as e:
-                last_err = e
-                time.sleep(0.4)
-        proc_exited = proc.poll() is not None
-        diag = _diagnose_launch(proc, port, profile_dir, last_err, proc_exited=proc_exited)
+                err_fh.close()
+            except Exception:
+                pass
+            tail = _read_stderr_tail(err_path)
+            try:
+                os.unlink(err_path)
+            except OSError:
+                pass
+        rc = proc.poll()
+        proc_exited = rc is not None
+        diag = _diagnose_launch(proc, port, profile_dir, last_err, proc_exited=proc_exited, exit_code=rc, stderr_tail=tail)
         try:
             if not proc_exited:
                 proc.terminate()

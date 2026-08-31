@@ -4,6 +4,14 @@ All notable changes to OpenEyes are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/),
 versioning: [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- `openeyes.backends.cdp.launch_edge` now captures Edge stderr to a temp file and surfaces both the early-exit return code and a bounded stderr tail in the `CDPError` message, so a failed CDP launch on a dedicated port (e.g. 9333) reports *why* Edge quit instead of only that it did. `_diagnose_launch` accepts optional `exit_code` and `stderr_tail` and the new `_read_stderr_tail` helper truncates very long output.
+
+### Tests
+- 4 new `tests/test_cdp.py` cases cover early-exit surfacing, `_diagnose_launch` exit-code/stderr-tail inclusion, missing-file stderr tail, and long-output truncation; the full network-free suite is 106 passed.
+
 ## [0.1.0] - 2026-08-11
 
 GitHub: <https://github.com/yangpeng366/openeyes>
