@@ -2436,3 +2436,41 @@ Changed: `openeyes/mcp/server.py`, `examples/README.md`,
 `tests/test_mcp_contract.py`, `docs/capability-contract.md`, and this runbook.
 The isolated Edge process and its two fixture tabs were closed after evidence
 capture.
+
+## Round 106 patrol evidence - 2026-09-02 16:26 +08:00 (Asia/Shanghai)
+
+Completed the remaining live surrogate identified by Round 104: the two-tab
+`browser_scan` URL-filter acceptance over repository-local MCP stdio.
+
+The run used an isolated headless Edge process on `9333` with a one-run temp
+profile and no session seeding. The transient fixture server exposed unique
+`target-a` and `decoy` URLs, so the browser already held two acceptance tabs.
+The probe then performed three stdio tool calls:
+
+- `browser_scan` scoped by the unique `target-a` URL and
+  `name_contains:"Secondary action"` returned exactly one
+  `Secondary action` button.
+- `browser_scan` scoped by the unique `decoy` URL and
+  `name_contains:"Learn more"` returned exactly one `Learn more` hyperlink.
+- `browser_scan` scoped by a nonexistent unique URL failed closed with
+  `no page target matched url_contains` and returned no element list.
+
+Command and result:
+
+```text
+python examples\browser-scan-acceptance.py --cdp-port 9333 --timeout 30
+{"passed": true, "transport": "mcp-stdio", "acceptance_tabs": 2, ...}
+```
+
+The isolated Edge process was stopped and the probe closed both disposable
+fixture tabs. No application state changed; `browser_scan` is read-only.
+
+### Recommended next action
+
+The repository-local stdio surrogate now has live evidence for `browser_scan`,
+`browser_click`, `browser_type`, and `browser_shot` URL filtering. Recheck the
+external dsh web host when `3080` listens and `/` returns HTTP 200, then run
+the section-4 end-to-end acceptance. Until that external gate changes, do not
+repeat the local surrogate; the next useful local candidate would be a
+`browser_tabs` contract probe, but it should wait for a concrete failure or
+contract drift.
