@@ -71,6 +71,12 @@ pwsh -NoProfile -File examples\dsh-preflight.ps1 -DumpConfig
 
 Exit code `0` = `ready:true`. Exit code `2` = one or more prerequisites are missing; the JSON output lists them in `missing_prerequisites` and `next_action`.
 
+### dsh-gate-readiness.py
+
+Checks whether `http://127.0.0.1:3080/` returns HTTP 200 and prints the next
+action for the Section 4 acceptance. It does not start dsh or issue any
+browser tool call.
+
 ### maintenance-round-probes.ps1
 
 Read-only orchestrator for the five deferred-acceptance probes that the patrol reruns on `2026-09-04T18:00:00+08:00`: git synchronisation, `pytest` suite, dsh preflight, the `9222`/`3080` listener + Edge window browser gate, and the repository-vs-installed skill SHA-256 check.

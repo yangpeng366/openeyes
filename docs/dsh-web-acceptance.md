@@ -51,6 +51,15 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3080/ | Select-Object -Expan
 
 Then open `http://127.0.0.1:3080/` and continue with a fresh session. If the check is not `200`, treat the web host as unavailable and record the port owner for manual follow-up.
 
+For scheduled rechecks, use the read-only readiness probe:
+
+```powershell
+python examples\dsh-gate-readiness.py
+```
+
+It returns JSON with `ready`, `status_code`, `next_recheck`, and the next
+action; it does not start dsh or send a `browser_click` request.
+
 ## 3. Verify the MCP surface
 
 In the dsh web UI, start a fresh session and require these calls in order:

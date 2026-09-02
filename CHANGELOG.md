@@ -9,8 +9,12 @@ versioning: [Semantic Versioning](https://semver.org/).
 ### Changed
 - `openeyes.backends.cdp.launch_edge` now captures Edge stderr to a temp file and surfaces both the early-exit return code and a bounded stderr tail in the `CDPError` message, so a failed CDP launch on a dedicated port (e.g. 9333) reports *why* Edge quit instead of only that it did. `_diagnose_launch` accepts optional `exit_code` and `stderr_tail` and the new `_read_stderr_tail` helper truncates very long output.
 
+### Added
+- `examples/dsh-gate-readiness.py` is a read-only HTTP 200 probe for the dsh web host at `http://127.0.0.1:3080/`. It never starts dsh, launches a browser, or issues a `browser_click` request, so it is safe for scheduled patrol rounds. It emits JSON with `ready`, `status_code`, `next_recheck`, and the next Section 4 action; exit code `0` = ready, `2` = not ready. Documented under `docs/dsh-web-acceptance.md` Section 2 and `examples/README.md`.
+
 ### Tests
-- 4 new `tests/test_cdp.py` cases cover early-exit surfacing, `_diagnose_launch` exit-code/stderr-tail inclusion, missing-file stderr tail, and long-output truncation; the full network-free suite is 106 passed.
+- 4 new `tests/test_cdp.py` cases cover early-exit surfacing, `_diagnose_launch` exit-code/stderr-tail inclusion, missing-file stderr tail, and long-output truncation.
+- 3 new `tests/test_dsh_gate_readiness.py` cases lock the readiness probe's default gate URL / safe next action, the HTTP 200 path, and the non-200 path; the full network-free suite is 109 passed.
 
 ## [0.1.0] - 2026-08-11
 
