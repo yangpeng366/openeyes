@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import socket
 import subprocess
 import sys
 import threading
@@ -29,6 +30,21 @@ def _run_server(status_code: int) -> tuple[http.server.ThreadingHTTPServer, str]
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}/"
     return server, url
+
+
+def _reserve_closed_port() -> int:
+    """Bind and release a localhost port that should refuse new connections.
+
+    Used to drive the URLError / TimeoutError / OSError branch in
+    ``_check_gate`` without depending on any external service.
+    """
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+    finally:
+        probe.close()
 
 
 def test_source_keeps_default_gate_and_safe_next_action():
@@ -88,5 +104,34 @@ def test_non_200_gate_reports_not_ready_and_recheck_time():
     data = json.loads(proc.stdout)
     assert data["ready"] is False
     assert data["status_code"] == 503
+    assert data["next_recheck"] == "2099-01-01T00:00:00+08:00"
+    assert "HTTP 200" in data["next_action"]
+
+
+def test_unreachable_gate_reports_not_ready_with_null_status():
+    closed_port = _reserve_closed_port()
+    url = f"http://127.0.0.1:{closed_port}/"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--url",
+            url,
+            "--timeout",
+            "1",
+            "--next-recheck",
+            "2099-01-01T00:00:00+08:00",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert proc.returncode == 2, proc.stdout
+    data = json.loads(proc.stdout)
+    assert data["ready"] is False
+    assert data["status_code"] is None
+    assert data["error"], "error message must be populated when the gate is unreachable"
     assert data["next_recheck"] == "2099-01-01T00:00:00+08:00"
     assert "HTTP 200" in data["next_action"]
