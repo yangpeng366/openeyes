@@ -2547,3 +2547,39 @@ on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
 `browser_click` end-to-end acceptance through the dsh web client. If still
 timeout, stay on the 7-day cadence and produce only a round-112 evidence
 note without revalidating the gate.
+
+
+## Round 112 patrol evidence - 2026-09-03 18:56 +08:00 (Asia/Shanghai)
+
+State byte-stable vs round 111: HEAD e393a2c9860e02b6981e4bc88e32da8cd5daf95c
+(3 commits ahead of origin/main 4f09c3c); working tree clean before this note;
+the only difference vs round 111 is this evidence section.
+
+External dsh gate (127.0.0.1:3080) remains unavailable. Per the round-111
+recommended next action (`stay on the 7-day cadence and produce only a
+round-112 evidence note without revalidating the gate`) and the Feishu row
+next step (`wait until 2026-09-10T16:30:00+08:00 then re-run`), the readiness
+probe was NOT re-issued this round. The next executable probe is scheduled
+for 2026-09-10T16:30:00+08:00; no `browser_click` end-to-end acceptance was
+issued, and no local surrogate (`browser_scan` / `browser_type` / `browser_shot`)
+was re-driven. Nothing changed in origin, candidate, or user decision, so the
+contract clause `for projects with an explicit external gate, prepare
+everything locally up to that gate, then stop` applies.
+
+`pytest tests -q` was not re-run because round 111 already recorded
+110 passed / 110 collected (no failures; the round-110 environmental popup
+window class `Xaml_WindowedPopupClass`, w=0/h=0, remains absent from the
+host desktop) and the working tree is byte-stable. No project code or test
+invariant was changed.
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-112 evidence section.
+
+### Recommended next action
+
+Stay on the 7-day cadence. Re-run `python examples\dsh-gate-readiness.py`
+on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
+`browser_click` end-to-end acceptance through the dsh web client. If still
+timeout, stay on the 7-day cadence and produce only a round-113 evidence
+note without revalidating the gate.
