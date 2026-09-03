@@ -2583,3 +2583,41 @@ on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
 `browser_click` end-to-end acceptance through the dsh web client. If still
 timeout, stay on the 7-day cadence and produce only a round-113 evidence
 note without revalidating the gate.
+
+
+## Round 113 patrol evidence - 2026-09-03 19:38 +08:00 (Asia/Shanghai)
+
+State byte-stable vs round 112: HEAD beee98f9415d8b9699c54368d18ce6ffab5cff05
+(4 commits ahead of origin/main 4f09c3c) before this note; working tree
+clean before this note; the only difference vs round 112 is this evidence
+section, plus the round-113 commit that will record it.
+
+External dsh gate (127.0.0.1:3080) remains unavailable. Per the round-112
+recommended next action (`stay on the 7-day cadence and produce only a
+round-113 evidence note without revalidating the gate`) and the Feishu row
+next step (`wait until 2026-09-10T16:30:00+08:00 then re-run`), the
+readiness probe was NOT re-issued this round. No `browser_click`
+end-to-end acceptance was issued, and no local surrogate (`browser_scan`
+/ `browser_type` / `browser_shot`) was re-driven. Nothing changed in
+origin, candidate, or user decision, so the contract clause `for projects
+with an explicit external gate, prepare everything locally up to that
+gate, then stop` applies.
+
+`pytest tests -q` was not re-run because round 111 already recorded
+110 passed / 110 collected (no failures; the round-110 environmental
+popup window class `Xaml_WindowedPopupClass`, w=0/h=0, remains absent from
+the host desktop) and the working tree is byte-stable. No project code or
+test invariant was changed. BOM guard re-checked: first 3 bytes of
+docs/dsh-web-acceptance.md remain `35 32 100` (`# d`, no UTF-8 BOM).
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-113 evidence section.
+
+### Recommended next action
+
+Stay on the 7-day cadence. Re-run `python examples\dsh-gate-readiness.py`
+on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
+`browser_click` end-to-end acceptance through the dsh web client. If still
+timeout, stay on the 7-day cadence and produce only a round-114 evidence
+note without revalidating the gate.
