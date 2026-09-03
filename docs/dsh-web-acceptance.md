@@ -2483,3 +2483,34 @@ the section-4 end-to-end acceptance. Until that external gate changes, do not
 repeat the local surrogate; the next useful local candidate would be a
 `browser_tabs` contract probe, but it should wait for a concrete failure or
 contract drift.
+
+
+## Round 110 patrol evidence - 2026-09-03 16:21 +08:00 (Asia/Shanghai)
+
+State byte-stable vs round 109: HEAD still fb0e6479894dc2c1868cef40279b7df211711ceb
+(1 commit ahead of origin/main 4f09c3c); working tree clean before this note;
+no new commit, push, or remote PR this round.
+
+External dsh gate (127.0.0.1:3080) remains unavailable. Per round 109 evidence,
+the recommended recheck is 2026-09-10T16:30:00+08:00 (matches the 7-day
+cadence). No probe or browser_click was issued this round; the gate was not
+revalidated because origin, candidate, and user decision are all unchanged.
+
+pytest tests -q reported 109 passed / 110 collected; the lone failure was
+tests/test_smoke.py::test_list_windows_returns_at_least_one_or_empty, which
+already surfaced in round 109 because of an environmental popup window
+(class Xaml_WindowedPopupClass, w=0/h=0) on the host desktop, not a project
+regression. The test invariant (w > 0 and h > 0) is intentionally strict
+and was not weakened.
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-110 evidence section.
+
+### Recommended next action
+
+Continue the 7-day cadence. Re-run python examples/dsh-gate-readiness.py
+on or after 2026-09-10T16:30:00+08:00. If HTTP 200, execute section 4
+browser_click end-to-end acceptance through the dsh web client. If still
+timeout, stay on the 7-day cadence and produce only a round-111 evidence
+note without revalidating the gate.
