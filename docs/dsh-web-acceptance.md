@@ -2664,3 +2664,45 @@ on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
 still timeout, stay on the 7-day cadence and produce only a round-115
 evidence note without revalidating the gate. Recommended interval
 between patrol rounds >= 7 days.
+
+## Round 115 patrol evidence - 2026-09-03 21:55 +08:00 (Asia/Shanghai)
+
+State byte-stable vs round 114: HEAD 0baa30f1d645807f5dadd2e4afc3147ff6ab181d
+(6 commits ahead of origin/main 4f09c3c); working tree clean before this note;
+the only difference vs round 114 is this evidence section.
+
+External dsh gate (127.0.0.1:3080) remains unavailable. Per the round-114
+recommended next action (stay on the 7-day cadence and produce only a
+round-115 evidence note without revalidating the gate) and the Feishu row
+next step (wait until 2026-09-10T16:30:00+08:00 then re-run), the readiness
+probe was NOT re-issued this round. The next executable probe is scheduled
+for 2026-09-10T16:30:00+08:00; no `browser_click` end-to-end acceptance was
+issued, and no local surrogate (`browser_scan` / `browser_type` /
+`browser_shot`) was re-driven. Nothing changed in origin, candidate, or
+user decision, so the contract clause "for projects with an explicit
+external gate, prepare everything locally up to that gate, then stop"
+applies.
+
+`pytest tests --collect-only -q` was re-issued and still reports
+`110 tests collected` (matches round-111 record). `pytest tests -q` was
+not re-executed because the working tree has been byte-stable since
+round 111, no project code or test invariant was changed, and the
+round-110 environmental popup window class `Xaml_WindowedPopupClass`,
+w=0/h=0, remains absent from the host desktop.
+
+BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain
+`35 32 100` (`# d`, no UTF-8 BOM); first 3 bytes of this new section
+inserted into the byte-stable body so the BOM invariant is preserved.
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-115 evidence section.
+
+### Recommended next action
+
+Stay on the 7-day cadence. Re-run `python examples\dsh-gate-readiness.py`
+on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
+`browser_click` end-to-end acceptance through the dsh web client. If
+still timeout, stay on the 7-day cadence and produce only a round-116
+evidence note without revalidating the gate. Recommended interval
+between patrol rounds >= 7 days.
