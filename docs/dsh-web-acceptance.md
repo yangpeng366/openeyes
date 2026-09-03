@@ -2514,3 +2514,36 @@ on or after 2026-09-10T16:30:00+08:00. If HTTP 200, execute section 4
 browser_click end-to-end acceptance through the dsh web client. If still
 timeout, stay on the 7-day cadence and produce only a round-111 evidence
 note without revalidating the gate.
+
+## Round 111 patrol evidence - 2026-09-03 18:02 +08:00 (Asia/Shanghai)
+
+State byte-stable vs round 110: HEAD d665092000946171a4c05fcc6b2e34ed8ddd5dee
+(2 commits ahead of origin/main 4f09c3c); working tree clean before this note;
+the only difference vs round 110 is this evidence section.
+
+External dsh gate (127.0.0.1:3080) remains unavailable. The read-only probe
+`python examples\dsh-gate-readiness.py` was issued once and returned
+`ready:false`, `status_code:null`, `error:"<urlopen error timed out>"`,
+`next_recheck:2026-09-10T16:30:00+08:00`, exit code `2`. Per round 110
+guidance, the gate was not revalidated via any `browser_click` / `browser_scan`
+/ `browser_type` / `browser_shot` surrogate; only the cheap readiness probe
+ran. No `browser_click` end-to-end acceptance was issued this round.
+
+`pytest tests -q` reported 110 passed / 110 collected (no failures this
+round). The round-110 environmental popup window (class
+`Xaml_WindowedPopupClass`, w=0/h=0) that briefly failed
+`tests/test_smoke.py::test_list_windows_returns_at_least_one_or_empty` is no
+longer present on the host desktop, so the strict invariant (w > 0 and h > 0)
+held. No project code or test invariant was changed.
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-111 evidence section.
+
+### Recommended next action
+
+Stay on the 7-day cadence. Re-run `python examples\dsh-gate-readiness.py`
+on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
+`browser_click` end-to-end acceptance through the dsh web client. If still
+timeout, stay on the 7-day cadence and produce only a round-112 evidence
+note without revalidating the gate.
