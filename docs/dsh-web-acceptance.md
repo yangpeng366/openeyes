@@ -3198,3 +3198,21 @@ BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 6
 Stay on the 7-day cadence. The round-138 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-140 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / round 127 / round 128 / round 129 / round 130 / round 131 / round 132 / round 133 / round 134 / round 135 / round 136 / round 137 / round 138).
 
 
+## Round 140 patrol evidence - 2026-09-14T19:20 +08:00 (Asia/Shanghai)
+
+State vs round 139: HEAD 3089310 (round 139 evidence commit, 2026-09-14 19:06 +08:00, 14 minutes prior). Working-tree diff unchanged from rounds 126-139: still the in-progress v0.2.0 Record and Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py modified; docs/RECORD_DESIGN.md, examples/out/, examples/record-out/, examples/record_demo_mock.py, examples/record_demo_prompt.py, examples/record_demo_real.py, openeyes/record/, tests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
+
+This NEW-patrol directive explicitly drove python examples\dsh-gate-readiness.py despite round 139's 7-day-cadence recommendation (the directive's own gate-time condition 2026-09-11T10:00:00+08:00 was already met). Probe result: ready:false, status_code:null, error:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
+
+pytest tests --collect-only -q was NOT re-issued this round - same justification as round 138/139 (project-code/test invariant under patrol scope unchanged; round-110 environmental popup window class Xaml_WindowedPopupClass, w=0/h=0, still absent). Round 126 count of 131 tests collected remains authoritative.
+
+BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 64 (# d, no UTF-8 BOM). The new round-140 section was appended using CRLF line endings to match the round-138/139 evidence sections. The BOM invariant is preserved both before and after the round-140 append.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-140 evidence section appended after the round-139 body (no semantic change to existing content).
+- .codex/round-20260914-192042.md - new round-140 evidence note written via Set-TextFile (UTF-8, no BOM).
+- .codex/last-patrol-message.md - round-140 last-message refreshed via Set-TextFile (UTF-8, no BOM).
+
+### Recommended next action
+Stay on the 7-day cadence. The round-139 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-141 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / round 127 / round 128 / round 129 / round 130 / round 131 / round 132 / round 133 / round 134 / round 135 / round 136 / round 137 / round 138 / round 139).
+
