@@ -3034,3 +3034,21 @@ BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 6
 ### Recommended next action
 
 Stay on the 7-day cadence. The round-129 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-131 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / round 127 / round 128 / round 129).
+
+## Round 131 patrol evidence - 2026-09-14T16:01 +08:00 (Asia/Shanghai)
+
+State vs round 130: HEAD 12c66f1 (round 130 evidence commit, 2026-09-14 15:41 +08:00, 20 minutes prior). Working-tree diff unchanged from round 130: still the in-progress v0.2.0 Record & Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py modified; docs/RECORD_DESIGN.md, examples/record_demo_*.py, examples/out/, examples/record-out/, openeyes/record/, tests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
+
+The dispatch trigger timestamp 2026-09-11T10:00:00+08:00 has elapsed (current time 2026-09-14T16:01 +08:00 is 3 days 6 hours past the trigger). Round 130 already honored the directive's probe-once obligation at 15:41 with the same elapsed-trigger observation, so this round-131 dispatch lands only 20 minutes after round 130, strictly inside the >= 7-day cadence the prior eight 2026-09-14 rounds (124 / 125 / 126 / 127 / 128 / 129 / 130) explicitly converged on. Per the directive's 'without an early re-probe' clause AND round 130's recommendation, python examples\dsh-gate-readiness.py was NOT re-driven this round - the gate probe is the read-only signal the directive asked for, and re-driving it < 7 days after round 130 (which itself honored the cadence rule for round 129) would burn cycles on a target that has timed out for the entire 124-130 series. The conditional branch executed is the 'otherwise' clause: append a new evidence note without a fresh probe, and stay on the round-130 recheck target.
+
+Result: no fresh probe. External dsh gate (127.0.0.1:3080) status remains as round 130 last saw it - timeout. Recheck target reconfirmed: 2026-09-28T12:50:00+08:00 (full 7 days past round 130's 2026-09-14 15:41 +08:00 + 7-day interval). Nothing changed in origin, candidate, or user decision, so the contract clause 'for projects with an explicit external gate, prepare everything locally up to that gate, then stop' still applies.
+
+pytest tests --collect-only -q was NOT re-issued this round - same justification as round 130 (project-code/test invariant under patrol scope unchanged; round-110 environmental popup window class Xaml_WindowedPopupClass, w=0/h=0, still absent). Round 126 count of 131 tests collected remains authoritative.
+
+BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 64 (# d, no UTF-8 BOM). The new round-131 section was appended using CRLF line endings to match the byte-stable pre-existing body. The BOM invariant is preserved both before and after the round-131 append.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-131 evidence section appended after the round-130 body (no semantic change to existing content; CRLF consistency preserved).
+
+### Recommended next action
+Stay on the 7-day cadence. The round-130 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-132 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / round 127 / round 128 / round 129 / round 130).
