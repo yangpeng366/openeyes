@@ -3487,3 +3487,20 @@ BOM guard re-checked: first 3 bytes of `docs/dsh-web-acceptance.md` remain `23 2
 
 ### Recommended next action
 Stay on the 7-day cadence. The round-155 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-157 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / 127 / 128 / 129 / 130 / 131 / 132 / 133 / 134 / 135 / 136 / 137 / 138 / 139 / 140 / 141 / 142 / 143 / 144 / 145 / 146 / 147 / 148 / 149 / 150 / 151 / 152 / 153 / 154 / 155).
+## Round 157 (2026-09-15T01:41:49+08:00, Asia/Shanghai) — patrol evidence
+
+This NEW-patrol directive drove python examples\dsh-gate-readiness.py once (the directive's own gate-time condition 2026-09-11T10:00:00+08:00 was already met at dispatch; today 2026-09-15 is 4 days past the gate). Probe result: eady:false, status_code:null, rror:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
+
+State vs round 156: HEAD ab664f (round 156 evidence commit, 2026-09-15T01:29:43+08:00, ~12 minutes prior). Working-tree diff unchanged from rounds 126-156: still the in-progress v0.2.0 Record and Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, 	ests/test_smoke.py modified; docs/RECORD_DESIGN.md, xamples/out/, xamples/record-out/, xamples/record_demo_mock.py, xamples/record_demo_prompt.py, xamples/record_demo_real.py, openeyes/record/, 	ests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
+
+pytest tests --collect-only -q was NOT re-issued this round - same justification as round 139/140/141/142/143/144/145/146/147/148/149/150/151/152/153/154/155/156 (project-code/test invariant under patrol scope unchanged; round-110 environmental popup window class Xaml_WindowedPopupClass, w=0/h=0, still absent). Round 126 count of 131 tests collected remains authoritative.
+
+BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 64 (# d, no UTF-8 BOM). The new round-157 section was appended using CRLF line endings to match the round-139/140/141/142/143/144/145/146/147/148/149/150/151/152/153/154/155/156 evidence sections. The BOM invariant is preserved both before and after the round-157 append. The ~12-minute cadence from round 156 to round 157 reinforces the round-126 onwards guidance that the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-157 evidence section appended after the round-156 body (no semantic change to existing content).
+- .codex\round-20260915-014149.md - new round-157 evidence note written via Set-TextFile (UTF-8, no BOM).
+- .codex/last-patrol-message.md - round-157 last-message refreshed via Set-TextFile (UTF-8, no BOM).
+
+### Recommended next action
+Stay on the 7-day cadence. The round-156 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-158 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / 127 / 128 / 129 / 130 / 131 / 132 / 133 / 134 / 135 / 136 / 137 / 138 / 139 / 140 / 141 / 142 / 143 / 144 / 145 / 146 / 147 / 148 / 149 / 150 / 151 / 152 / 153 / 154 / 155 / 156).
