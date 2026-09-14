@@ -2791,3 +2791,71 @@ on or after `2026-09-10T16:30:00+08:00`. If HTTP 200, execute section 4
 still timeout, stay on the 7-day cadence and produce only a round-118
 evidence note without revalidating the gate. Recommended interval
 between patrol rounds >= 7 days.
+
+
+## Round 124 patrol evidence - 2026-09-14 13:20 +08:00 (Asia/Shanghai)
+
+State vs round 118: HEAD a801ebc674e9d7d3f87e1f60e0e83e6bfffa9b91 (round 117
+evidence commit, unchanged since 2026-09-08). The working-tree diff still
+contains the in-progress v0.2.0 Record & Replay promotion (CHANGELOG.md,
+README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py modified;
+docs/RECORD_DESIGN.md, examples/record_demo_*.py, openeyes/record/,
+examples/out/, examples/record-out/, and tests/test_record.py untracked)
+plus the prior brief-triggered round-118 evidence section appended to
+docs/dsh-web-acceptance.md. None of those working-tree entries are inside
+this patrol directive's scope, so they were left untouched. The only new
+edit inside docs/dsh-web-acceptance.md this round is this round-124
+evidence section.
+
+Per the current patrol next step ("On or after 2026-09-11T10:00:00+08:00, run
+python examples/dsh-gate-readiness.py in E:\gitAll\openeyes; if HTTP 200,
+execute docs/dsh-web-acceptance.md section 4, otherwise append a new evidence
+note without an early re-probe."), the gate readiness probe WAS re-issued this
+round with --next-recheck 2026-09-21T12:50:00+08:00 so the reported
+next_recheck lands on the next 7-day cadence. Result:
+
+{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-21T12:50:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+
+External dsh gate (127.0.0.1:3080) STILL times out. Because the probe returned
+non-200, the conditional branch executed was the "otherwise" clause: this
+round-124 evidence note was appended, and no browser_click end-to-end
+acceptance was issued. No local surrogate (browser_scan / browser_type /
+browser_shot) was re-driven either - the gate probe alone is the read-only
+signal the patrol directive asked for. Nothing changed in origin, candidate,
+or user decision, so the contract clause "for projects with an explicit
+external gate, prepare everything locally up to that gate, then stop" still
+applies.
+
+The internal scheduled next_recheck baked into the probe default still points
+at 2026-09-10T16:30:00+08:00 (already elapsed, so this round passed it
+explicitly as --next-recheck 2026-09-21T12:50:00+08:00 to land on the next
+7-day cadence). Recommended next round: keep the 7-day cadence, re-run
+python examples\dsh-gate-readiness.py on or after 2026-09-21T12:50:00+08:00;
+if HTTP 200, execute section 4 (browser_click end-to-end acceptance through
+the dsh web client); otherwise emit only a round-125 evidence note.
+
+pytest tests --collect-only -q was re-issued and still reports 131 tests
+collected (matches the prior brief-triggered count; +21 vs round-111's 110
+remains the in-progress tests/test_record.py Record & Replay suite, still
+uncommitted). pytest tests -q was not re-executed because the project-code/
+test invariant under patrol scope (the dsh-web-acceptance runbook itself)
+has not changed since round 118, and the round-110 environmental popup
+window class Xaml_WindowedPopupClass, w=0/h=0, remains absent from the host
+desktop.
+
+BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain
+23 20 64 (# d, no UTF-8 BOM); first 3 bytes of this new section inserted
+after the byte-stable round-118 body so the BOM invariant is preserved.
+
+### Changed files
+
+- docs/dsh-web-acceptance.md - this round-124 evidence section appended
+  after the existing round-118 evidence section.
+
+### Recommended next action
+
+Stay on the 7-day cadence. Re-run python examples\dsh-gate-readiness.py on or
+after 2026-09-21T12:50:00+08:00. If HTTP 200, execute section 4 browser_click
+end-to-end acceptance through the dsh web client. If still timeout, stay on the
+7-day cadence and produce only a round-125 evidence note without revalidating
+the gate. Recommended interval between patrol rounds >= 7 days.
