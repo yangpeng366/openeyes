@@ -4054,3 +4054,19 @@ BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 6
 
 ### Recommended next action
 Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If not HTTP 200, stay on the 7-day cadence and produce only a round-202 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 200).
+## Round 202 (2026-09-15T18:45:29+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples/dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 201: the working tree still contains the in-progress v0.2.0 Record and Replay promotion outside this patrol scope; those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: `docs/dsh-web-acceptance.md` was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-202 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-184529.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-202 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. Re-run `python examples/dsh-gate-readiness.py` on or after 2026-09-28T12:50:00+08:00, or earlier only if the dsh configuration/model/tool-dispatch surface changes. If HTTP 200, execute Section 4 `browser_click` dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early.
