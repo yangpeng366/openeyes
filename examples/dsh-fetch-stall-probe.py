@@ -229,7 +229,7 @@ def main():
         ws = websocket.create_connection(
             target["webSocketDebuggerUrl"],
             timeout=args.connect_timeout,
-            origin=args.origin,
+            suppress_origin=True,
         )
         # After connect, switch to the user-controlled timeout for recv so awaited
         # promises (Runtime.evaluate with awaitPromise) have enough time to resolve.

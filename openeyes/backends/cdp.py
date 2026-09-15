@@ -73,7 +73,7 @@ class CDPConnection:
     def __init__(self, ws_url: str, *, timeout: float = 30.0) -> None:
         self.ws_url = ws_url
         self._id = 0
-        self._ws = websocket.create_connection(ws_url, timeout=timeout, origin="http://127.0.0.1")
+        self._ws = websocket.create_connection(ws_url, timeout=timeout, suppress_origin=True)
 
     def call(self, method: str, params=None, timeout: float = 20.0) -> Any:
         self._id += 1

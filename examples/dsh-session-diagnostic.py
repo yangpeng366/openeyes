@@ -62,7 +62,7 @@ class DiagnosticSession:
         self.ws = websocket.create_connection(
             ws_url,
             timeout=1.0,
-            origin="http://127.0.0.1",
+            suppress_origin=True,
         )
         self.output = output
         self.next_id = 0
