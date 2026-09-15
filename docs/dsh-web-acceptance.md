@@ -4134,4 +4134,87 @@ BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserv
 - .codex/last-patrol-message.md - round-206 last-message refreshed in UTF-8 without BOM.
 
 ### Recommended next action
-Stay on the 7-day cadence. Re-run $probe on or after 2026-09-28T12:50:00+08:00, or earlier only if the dsh configuration/model/tool-dispatch surface changes. If HTTP 200, execute Section 4 rowser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early.
+Stay on the 7-day cadence. Re-run $probe on or after 2026-09-28T12:50:00+08:00, or earlier only if the dsh configuration/model/tool-dispatch surface changes. If HTTP 200, execute Section 4 rowser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early.## Round 207 (2026-09-15T20:20:20+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 206: HEAD unchanged from round 206 (round-206 evidence commit on top of round-201 CDP `suppress_origin=True` fix). The working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope; those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style. First-3 bytes re-verified at `35 32 100` (`# 2 d`) before and after this append.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-207 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-202020.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-207 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 206).
+## Round 208 (2026-09-15T20:40:51+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 207: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style. First-3 bytes re-verified at `35 32 100` (`# 2 d`) before and after this append.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-208 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-204051.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-208 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 207).
+
+
+## Round 209 (2026-09-15T21:00:45+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 208: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-209 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-210045.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-209 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 208).
+
+## Round 210 (2026-09-15T21:20:43+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 209: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-210 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-212043.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-210 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 209).
+
+## Round 211 (2026-09-15T21:40:39+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 210: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-211 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex\round-20260915-214039.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-211 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 210).
