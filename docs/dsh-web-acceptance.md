@@ -4676,3 +4676,12 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231..251 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（timed out，与 round-248 / round-250 同源 dsh web 未起）。
 - 证据: .codex/patrol/openeyes-2026-09-17-round-252-gate-readiness.md。
+
+## Round 253 — 2026-09-17T03:20:49+08:00 — gate-readiness probe (auto-patrol NEW round-253)
+
+- 命令: python examples/dsh-gate-readiness.py
+- 退出码: 2（脚本以 sys.exit(2) 标记非 ready）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231..252 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（timed out，与 round-250 / round-252 同源 dsh web 未起；与 round-249 / round-251 WinError 10061 积极拒绝互见，源相同：端口监听缺位）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-253-gate-readiness.md。
