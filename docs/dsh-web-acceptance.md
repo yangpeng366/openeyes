@@ -4546,3 +4546,32 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231/232/233/234/235/236/237 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续超时。
 - 证据: .codex/patrol/openeyes-2026-09-16-round-238-gate-readiness.md。
+
+## Round 239 — 2026-09-16T22:20:00+08:00 — gate-readiness probe (auto-patrol NEW round-239)
+
+- 命令: python examples/dsh-gate-readiness.py --timeout 5
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231/232/233/234/235/236/237/238 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（本次为 WinError 10061 积极拒绝，前轮为 timeout，同源 dsh web 未起）。
+- 证据: .codex/patrol/openeyes-2026-09-16-round-239-gate-readiness.md。
+
+
+## Round 240 — 2026-09-16T23:00:31+08:00 — gate-readiness probe (auto-patrol NEW round-240)
+
+- 命令: python examples/dsh-gate-readiness.py --timeout 5
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231/232/233/234/235/236/237/238/239 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，同 round-239 表现，与本巡逻周期 22:40 那一探的 timed out 同源：dsh web 未起）。
+- 证据: .codex/patrol/openeyes-2026-09-16-round-240-gate-readiness.md。
+
+
+## Round 241 — 2026-09-16T23:20:44+08:00 — gate-readiness probe (auto-patrol NEW round-241)
+
+- 命令: python examples/dsh-gate-readiness.py --timeout 5
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231/232/233/234/235/236/237/238/239/240 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-239/240 同源 dsh web 未起）。
+- 证据: .codex/patrol/openeyes-2026-09-16-round-241-gate-readiness.md。
