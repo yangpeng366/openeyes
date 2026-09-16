@@ -4575,3 +4575,23 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231/232/233/234/235/236/237/238/239/240 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-239/240 同源 dsh web 未起）。
 - 证据: .codex/patrol/openeyes-2026-09-16-round-241-gate-readiness.md。
+
+
+## Round 242 — 2026-09-16T23:40:21+08:00 — gate-readiness probe (auto-patrol NEW round-242)
+
+- 命令: python examples/dsh-gate-readiness.py --timeout 5
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231/232/233/234/235/236/237/238/239/240/241 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-239/240/241 同源 dsh web 未起）。
+- 证据: .codex/patrol/openeyes-2026-09-16-round-242-gate-readiness.md。
+
+
+## Round 243 — 2026-09-17T00:02:03+08:00 — gate-readiness probe (auto-patrol NEW round-243)
+
+- 命令: python examples/dsh-gate-readiness.py --timeout 5
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231..242 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-239..242 同源 dsh web 未起）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-243-gate-readiness.md。
