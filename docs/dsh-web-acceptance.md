@@ -3489,7 +3489,8 @@ BOM guard re-checked: first 3 bytes of `docs/dsh-web-acceptance.md` remain `23 2
 Stay on the 7-day cadence. The round-155 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-157 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / 127 / 128 / 129 / 130 / 131 / 132 / 133 / 134 / 135 / 136 / 137 / 138 / 139 / 140 / 141 / 142 / 143 / 144 / 145 / 146 / 147 / 148 / 149 / 150 / 151 / 152 / 153 / 154 / 155).
 ## Round 157 (2026-09-15T01:41:49+08:00, Asia/Shanghai) — patrol evidence
 
-This NEW-patrol directive drove python examples\dsh-gate-readiness.py once (the directive's own gate-time condition 2026-09-11T10:00:00+08:00 was already met at dispatch; today 2026-09-15 is 4 days past the gate). Probe result: eady:false, status_code:null, rror:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
+This NEW-patrol directive drove python examples\dsh-gate-readiness.py once (the directive's own gate-time condition 2026-09-11T10:00:00+08:00 was already met at dispatch; today 2026-09-15 is 4 days past the gate). Probe result: 
+eady:false, status_code:null, rror:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
 
 State vs round 156: HEAD ab664f (round 156 evidence commit, 2026-09-15T01:29:43+08:00, ~12 minutes prior). Working-tree diff unchanged from rounds 126-156: still the in-progress v0.2.0 Record and Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, 	ests/test_smoke.py modified; docs/RECORD_DESIGN.md, xamples/out/, xamples/record-out/, xamples/record_demo_mock.py, xamples/record_demo_prompt.py, xamples/record_demo_real.py, openeyes/record/, 	ests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
 
@@ -3506,7 +3507,8 @@ BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 6
 Stay on the 7-day cadence. The round-156 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-158 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / 127 / 128 / 129 / 130 / 131 / 132 / 133 / 134 / 135 / 136 / 137 / 138 / 139 / 140 / 141 / 142 / 143 / 144 / 145 / 146 / 147 / 148 / 149 / 150 / 151 / 152 / 153 / 154 / 155 / 156).
 ## Round 158 (2026-09-15T02:00:29+08:00, Asia/Shanghai) — patrol evidence
 
-This NEW-patrol directive carried the directive's own gate-time condition (2026-09-11T10:00:00+08:00 already met at dispatch; today 2026-09-15 is 4 days past the gate), but the directive's without an early re-probe clause was applied: round 157 already invoked python examples\dsh-gate-readiness.py at 2026-09-15T01:41:49+08:00 (~19 minutes prior) and reported eady:false, status_code:null, error:<urlopen error timed out>. Re-running the probe now would be an early re-probe and would consume the dispatch budget on an unchanged gate state. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
+This NEW-patrol directive carried the directive's own gate-time condition (2026-09-11T10:00:00+08:00 already met at dispatch; today 2026-09-15 is 4 days past the gate), but the directive's without an early re-probe clause was applied: round 157 already invoked python examples\dsh-gate-readiness.py at 2026-09-15T01:41:49+08:00 (~19 minutes prior) and reported 
+eady:false, status_code:null, error:<urlopen error timed out>. Re-running the probe now would be an early re-probe and would consume the dispatch budget on an unchanged gate state. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
 
 State vs round 157: HEAD caa05c0 (round 157 evidence commit, 2026-09-15T01:41:49+08:00, ~19 minutes prior). Working-tree diff unchanged from rounds 126-157: still the in-progress v0.2.0 Record and Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py modified; docs/RECORD_DESIGN.md, examples/out/, examples/record-out/, examples/record_demo_mock.py, examples/record_demo_prompt.py, examples/record_demo_real.py, openeyes/record/, tests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
 
@@ -3617,7 +3619,8 @@ BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 6
 Stay on the 7-day cadence. The round-164 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run python examples\dsh-gate-readiness.py on or after that timestamp. If HTTP 200, execute section 4 browser_click end-to-end acceptance through the dsh web client. If still timeout, stay on the 7-day cadence and produce only a round-166 evidence note without revalidating the gate. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 / 127 / 128 / 129 / 130 / 131 / 132 / 133 / 134 / 135 / 136 / 137 / 138 / 139 / 140 / 141 / 142 / 143 / 144 / 145 / 146 / 147 / 148 / 149 / 150 / 151 / 152 / 153 / 154 / 155 / 156 / 157 / 158 / 159 / 160 / 161 / 162 / 163 / 164).
 
 ## Round 166 (2026-09-15T04:40:34+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive carried the directive's own gate-time condition (2026-09-11T10:00:00+08:00 already met at dispatch; today 2026-09-15 is 4 days past the gate). The directive explicitly required a single run of python examples\dsh-gate-readiness.py and the otherwise clause if HTTP != 200. The probe was issued once this round and reported eady:false, status_code:null, rror:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
+This NEW-patrol directive carried the directive's own gate-time condition (2026-09-11T10:00:00+08:00 already met at dispatch; today 2026-09-15 is 4 days past the gate). The directive explicitly required a single run of python examples\dsh-gate-readiness.py and the otherwise clause if HTTP != 200. The probe was issued once this round and reported 
+eady:false, status_code:null, rror:<urlopen error timed out>. The conditional branch executed is the otherwise clause: append a new evidence note without further probing, and stay on the 2026-09-28T12:50:00+08:00 recheck target carried from round 136.
 State vs round 165: HEAD 599e490 (round 165 evidence commit, 2026-09-15T04:21:00+08:00, ~20 minutes prior). Working-tree diff unchanged from rounds 126-165: still the in-progress v0.2.0 Record and Replay promotion (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py modified; docs/RECORD_DESIGN.md, examples/out/, examples/record-out/, examples/record_demo_mock.py, examples/record_demo_prompt.py, examples/record_demo_real.py, openeyes/record/, tests/test_record.py untracked). None of those working-tree entries are inside this patrol directive scope, so they were left untouched.
 pytest tests --collect-only -q was NOT re-issued this round - same justification as rounds 139-165 (project-code/test invariant under patrol scope unchanged; round-110 environmental popup window class Xaml_WindowedPopupClass, w=0/h=0, still absent). Round 126 count of 131 tests collected remains authoritative.
 BOM guard re-checked: first 3 bytes of docs/dsh-web-acceptance.md remain 23 20 64 (# d, no UTF-8 BOM). The new round-166 section was appended using CRLF line endings to match the round-139 through round-165 evidence sections. The BOM invariant is preserved both before and after the round-166 append. The ~20-minute cadence from round 165 to round 166 again reinforces the round-126 onwards guidance that the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch.
@@ -4120,7 +4123,8 @@ BOM guard: `docs/dsh-web-acceptance.md` was appended as UTF-8 without BOM, prese
 ### Recommended next action
 Stay on the 7-day cadence. Re-run `python examples\dsh-gate-readiness.py` on or after 2026-09-28T12:50:00+08:00, or earlier only if the dsh configuration/model/tool-dispatch surface changes. If HTTP 200, execute Section 4 `browser_click` dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early.
 ## Round 206 (2026-09-15T20:01:01+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe $probe was executed exactly once and reported eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe $probe was executed exactly once and reported 
+eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
 
 State vs round 205: the working tree still contains the in-progress v0.2.0 Record and Replay promotion outside this patrol scope; those entries were left untouched. No application or test files were changed in this round.
 
@@ -4220,7 +4224,8 @@ BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserv
 Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch (per the explicit guidance from round 126 through round 210).
 
 ## Round 212 (2026-09-15T22:00:25+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported 
+eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
 
 State vs round 211: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
 
@@ -4238,7 +4243,8 @@ Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+0
 
 
 ## Round 213 (2026-09-15T22:20:28+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported 
+eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
 
 State vs round 212: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
 
@@ -4275,9 +4281,12 @@ Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+0
 
 
 ## Round 215 (2026-09-15T23:00:34+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported 
+eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
 
-State vs round 214: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round. The pre-existing line-wrap artifact in the round-213 section (eported  at end of line 4246 with ady: / ror: continuation) was noted but not patched, consistent with the round-214 stance (out of this directive's scope).
+State vs round 214: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round. The pre-existing line-wrap artifact in the round-213 section (
+eported  at end of line 4246 with ady: / 
+ror: continuation) was noted but not patched, consistent with the round-214 stance (out of this directive's scope).
 
 The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-201) remain the latest available evidence; this round adds only the gate-timeout evidence.
 
@@ -4327,7 +4336,8 @@ Stay on the 7-day cadence. The round-200 recheck target of 2026-09-28T12:50:00+0
 
 
 ## Round 224 (2026-09-16T16:40:49+08:00, Asia/Shanghai) - patrol evidence
-This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe python examples\dsh-gate-readiness.py was executed exactly once and reported 
+eady:false, status_code:null, and rror:<urlopen error timed out> for http://127.0.0.1:3080/. Per the otherwise clause, no early re-probe was performed.
 
 State vs round 223: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py); those entries were left untouched. No application or test files were changed in this round.
 
@@ -4492,3 +4502,47 @@ BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserv
 
 ### Recommended next action
 Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch. Round 235 was triggered ~19 minutes after round 234 despite that guidance, so this last-message repeats the recommendation for the dispatcher.
+
+
+## Round 236 (2026-09-16T21:20:36+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 235: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py, docs/RECORD_DESIGN.md, examples/record_demo_mock.py, examples/record_demo_prompt.py, examples/record_demo_real.py, openeyes/record/, tests/test_record.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-235) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-236 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex/patrol/openeyes-2026-09-16-round-236-gate-readiness.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-236 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch. Round 236 was triggered ~20 minutes after round 235 despite that guidance, so this last-message repeats the recommendation for the dispatcher.
+## Round 237 (2026-09-16T21:41:14+08:00, Asia/Shanghai) - patrol evidence
+This NEW-patrol directive required one gate readiness run because the directive threshold of 2026-09-11T10:00:00+08:00 had passed. The read-only probe `python examples\dsh-gate-readiness.py` was executed exactly once and reported `ready:false`, `status_code:null`, and `error:<urlopen error timed out>` for `http://127.0.0.1:3080/`. Per the otherwise clause, no early re-probe was performed.
+
+State vs round 236: the working tree still carries the in-progress v0.2.0 Record and Replay promotion outside this patrol scope (CHANGELOG.md, README.md, openeyes/__init__.py, pyproject.toml, tests/test_smoke.py, docs/RECORD_DESIGN.md, examples/record_demo_mock.py, examples/record_demo_prompt.py, examples/record_demo_real.py, openeyes/record/, tests/test_record.py); those entries were left untouched. No application or test files were changed in this round.
+
+The dsh web gate remains unavailable, so Section 4 of this runbook was not executed. The previously recorded OpenEyes/MCP local acceptance results (rounds 1-236) remain the latest available evidence; this round adds only the gate-timeout evidence.
+
+BOM guard: docs/dsh-web-acceptance.md was appended as UTF-8 without BOM, preserving the existing runbook content and line-ending style.
+
+### Changed files
+- docs/dsh-web-acceptance.md - round-237 gate-timeout evidence appended; no semantic change to acceptance instructions.
+- .codex/patrol/openeyes-2026-09-16-round-237-gate-readiness.md - patrol evidence note written in UTF-8 without BOM.
+- .codex/last-patrol-message.md - round-237 last-message refreshed in UTF-8 without BOM.
+
+### Recommended next action
+Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00 is reconfirmed unchanged. Re-run `python examples\dsh-gate-readiness.py` on or after that timestamp. If HTTP 200, execute Section 4 browser_click dry-run through the dsh web client; if the gate still times out, append the next evidence note without repeating the probe early. Recommended interval between patrol rounds >= 7 days; the external scheduler should be raised to a 7-day minimum rather than re-probing on every dispatch. Round 237 was triggered ~20 minutes after round 236 despite that guidance, so this last-message repeats the recommendation for the dispatcher.
+
+## Round 238 — 2026-09-16T21:55:00+08:00 — gate-readiness probe (auto-patrol NEW round-238)
+
+- 命令: python examples/dsh-gate-readiness.py
+- 退出码: 2
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 处置: 沿用 round-231/232/233/234/235/236/237 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续超时。
+- 证据: .codex/patrol/openeyes-2026-09-16-round-238-gate-readiness.md。
