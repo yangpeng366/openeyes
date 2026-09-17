@@ -4930,3 +4930,13 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231..282 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 同源；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 timed out 互见，源相同：3080 端口监听缺位）。
 - 证据: .codex/patrol/openeyes-2026-09-17-round-283-gate-readiness.md。
+
+
+## Round 285 — 2026-09-17T15:00:51+08:00 — gate-readiness probe (auto-patrol NEW round-285)
+
+- 命令: python examples\dsh-gate-readiness.py --timeout 5 --next-recheck 2026-09-30T12:00:00+08:00
+- 退出码: 2（脚本以 sys.exit(2) 标记非 ready）
+- 结果: ready=false, status_code=null, error=<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>, next_recheck=2026-09-30T12:00:00+08:00
+- 处置: 沿用 round-231..284 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 同源；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 timed out 互见，源相同：3080 端口监听缺位）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-285-gate-readiness.md。
