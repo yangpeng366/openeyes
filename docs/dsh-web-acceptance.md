@@ -4821,3 +4821,12 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231..270 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（timed out，与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 同源；3080 端口监听缺位）。
 - 证据: .codex/patrol/openeyes-2026-09-17-round-271-gate-readiness.md。
+## Round 272 — 2026-09-17T10:01:00+08:00 — gate-readiness probe (auto-patrol NEW round-272)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（脚本以 sys.exit(2) 标记非 ready）
+- 结果: ready=false, status_code=null, error=<urlopen error timed out>, next_recheck=2026-09-10T16:30:00+08:00
+- 处置: 沿用 round-231..271 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00
+- blocker: high — http://127.0.0.1:3080/ 持续不可连接（timed out，与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 同源；端口监听缺位）
+- 证据: .codex/patrol/openeyes-2026-09-17-round-272-gate-readiness.md；docs/dsh-web-acceptance.md 已追加 round 272 节
+- 下一步: 等 2026-09-30T12:00:00+08:00 后再触发一次只读 gate-readiness 探测；如届时仍 timed out，照本轮模板续记 round-273
