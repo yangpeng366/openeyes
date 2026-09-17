@@ -5029,3 +5029,31 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231..293 结论；不启 dsh、不跑 section 4、不发 browser_click；本轮按 NEW 触发条件仅一次只读探测即止，不做早复探；下次复探维持 round-291 设定的 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 / round-288 / round-290 / round-291 同源 10061 积极拒绝；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 / round-289 / round-292 / round-293 timed out 互见，源相同：3080 端口监听缺位 + AnyVPN 路由抖动）。
 - 证据: .codex/patrol/openeyes-2026-09-17-round-294-gate-readiness.md。
+
+
+## Round 295 — 2026-09-17T18:40:29+08:00 — gate-readiness probe (auto-patrol NEW round-295)
+
+- 命令: python examples\dsh-gate-readiness.py（沿用脚本默认 --timeout 2.0 与 --next-recheck 2026-09-10T16:30:00+08:00）
+- 退出码: 2（脚本内部 sys.exit(2) 标记非 ready；PowerShell 包裹层 echo EXIT=2）
+- 结果: ready=false, status_code=null, error=<urlopen error timed out>, next_recheck=2026-09-10T16:30:00+08:00
+- 处置: 沿用 round-231..294 结论；不启 dsh、不跑 section 4、不发 browser_click；本轮按 NEW 触发条件仅一次只读探测即止，不做早复探；下次复探维持 round-291 设定的 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 / round-288 / round-290 / round-291 同源 10061 积极拒绝；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 / round-289 / round-292 / round-293 / round-294 timed out 互见，源相同：3080 端口监听缺位 + AnyVPN 路由抖动）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-295-gate-readiness.md。
+
+## Round 296 — 2026-09-17T19:00:29+08:00 — gate-readiness probe (auto-patrol NEW round-296)
+
+- 命令: python examples\dsh-gate-readiness.py（沿用脚本默认 --timeout 2.0 与 --next-recheck 2026-09-10T16:30:00+08:00）
+- 退出码: 2（脚本内部 sys.exit(2) 标记非 ready；PowerShell 包裹层 echo EXIT=2）
+- 结果: ready=false, status_code=null, error=<urlopen error timed out>, next_recheck=2026-09-10T16:30:00+08:00
+- 处置: 沿用 round-231..295 结论；不启 dsh、不跑 section 4、不发 browser_click；本轮按 NEW 触发条件仅一次只读探测即止，不做早复探；下次复探维持 round-291 设定的 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 / round-288 / round-290 / round-291 同源 10061 积极拒绝；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 / round-289 / round-292 / round-293 / round-294 / round-295 timed out 互见，源相同：3080 端口监听缺位 + AnyVPN 路由抖动）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-296-gate-readiness.md。
+
+## Round 298 — 2026-09-17T19:40:48+08:00 — gate-readiness probe (auto-patrol NEW round-298)
+
+- 命令: python examples\dsh-gate-readiness.py（沿用脚本默认 --timeout 2.0 与 --next-recheck 2026-09-10T16:30:00+08:00）
+- 退出码: 2（脚本内部 sys.exit(2) 标记非 ready；PowerShell 包裹层 echo EXIT=2）
+- 结果: ready=false, status_code=null, error=<urlopen error timed out>, next_recheck=2026-09-10T16:30:00+08:00
+- 处置: 沿用 round-231..297 结论；不启 dsh、不跑 section 4、不发 browser_click；本轮按 NEW 触发条件仅一次只读探测即止，不做早复探；下次复探维持 round-291 设定的 FIXED 2026-09-30T12:00:00+08:00。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 / round-288 / round-290 / round-291 同源 10061 积极拒绝；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 / round-289 / round-292 / round-293 / round-294 / round-295 / round-296 / round-297 timed out 互见，源相同：3080 端口监听缺位 + AnyVPN 路由抖动）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-298-gate-readiness.md。
