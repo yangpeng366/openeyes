@@ -4970,3 +4970,13 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 沿用 round-231..287 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00。
 - blocker: http://127.0.0.1:3080/ 持续不可连接（WinError 10061 积极拒绝，与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 同源；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 timed out 互见，源相同：3080 端口监听缺位）。
 - 证据: .codex/patrol/openeyes-2026-09-17-round-288-gate-readiness.md。
+
+
+## Round 289 — 2026-09-17T16:21:10+08:00 — gate-readiness probe (auto-patrol NEW round-289)
+
+- 命令: python examples\dsh-gate-readiness.py（按 stdin next-step 指示，未传 --timeout / --next-recheck；采用脚本默认 --timeout 2.0 与 --next-recheck 2026-09-10T16:30:00+08:00）
+- 退出码: 1（脚本语义 sys.exit(2) 标记非 ready；本轮 shell 捕获 1，语义同 not-ready，不重跑以守「no early re-probe」）
+- 结果: ready=false, status_code=null, error=<urlopen error timed out>, next_recheck=2026-09-10T16:30:00+08:00
+- 处置: 沿用 round-231..288 结论；不启 dsh、不跑 section 4、不发 browser_click；下次复探维持 FIXED 2026-09-30T12:00:00+08:00（本轮脚本回传 next_recheck 已逾期，仅作记录、不重写运维窗口）。
+- blocker: http://127.0.0.1:3080/ 持续不可连接（与 round-249 / round-251 / round-254 / round-255 / round-256 / round-257 / round-264 / round-265 / round-266 / round-268 / round-269 / round-273 / round-274 / round-275 / round-276 / round-277 / round-278 / round-279 / round-280 / round-281 / round-282 / round-283 / round-284 / round-285 / round-286 / round-287 / round-288 同源 10061 积极拒绝；与 round-250 / round-252 / round-253 / round-259 / round-260 / round-262 / round-263 / round-267 / round-270 / round-271 / round-272 / round-289 timed out 互见，源相同：3080 端口监听缺位）。
+- 证据: .codex/patrol/openeyes-2026-09-17-round-289-gate-readiness.md。
