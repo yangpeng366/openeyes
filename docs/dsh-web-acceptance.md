@@ -5820,3 +5820,16 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 下次动作: 到 FIXED 复探点 2026-09-30T12:00:00+08:00 后重跑 readiness probe；若 HTTP 200，执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run。
 - blocker (high): http://127.0.0.1:3080/ 请求超时（<urlopen error timed out>），未确认 HTTP 200；继续等待 dsh web host 恢复。
 - 证据: .codex/patrol/openeyes-2026-09-19-round-381-gate-readiness.md（本地仅参考，git 忽略）。
+## Round 382 — 2026-09-19T01:51:12+08:00 — gate-readiness root-cause probe (auto-patrol NEW round-382)
+
+- 命令: python examples\dsh-gate-readiness.py --next-recheck 2026-09-30T12:00:00+08:00
+- 退出码: 2（ready=false；第 8 次连续非 ready）
+- 结果:
+  ```json
+  {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-30T12:00:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+  ```
+- 根因诊断（本轮新增，超越前 7 轮"仅记超时"）: `Get-NetTCPConnection -LocalPort 3080`（全状态）→ 无监听者；`netsh interface portproxy show all` → 空；代理 env 全空；`Get-NetFirewallProfile` 三档均关闭；原生 TcpClient 连 127.0.0.1:3080（2s）→ TIMEOUT（SYN 静默丢弃，非 refused，≈2083ms）；`Get-Process` 无 dsh 进程。结论: 双层根因——(1) dsh web host 进程未运行、未绑定 :3080；(2) HNS/虚拟网络层仍在静默丢弃 :3080 loopback SYN（host 启动后若丢包层仍在仍不可达）。
+- 处置: 仅只读诊断；不启 dsh、不跑 section 4、不发 browser_click。本轮首次定位根因，非"再等一次"。复探条件由定时(2026-09-30)改为事件驱动：仅当 `Get-NetTCPConnection -LocalPort 3080 -State Listen` 出现监听者后再重跑 probe；无监听者则不重跑、不新增 note（止空转）。planner 下一步文本仍停留在 2026-09-11 门控（已过期，持续触发重复探测），建议用户更新项目方向表下一步为"当 :3080 出现监听者后重跑 probe"。工作区未提交业务改动（CHANGELOG/README/openeyes/__init__.py/pyproject.toml/tests/test_smoke.py 的 M + record/ 新模块等）维持原样。
+- 下次动作（事件驱动）: 先 `Get-NetTCPConnection -LocalPort 3080 -State Listen`；有监听者→重跑 readiness probe，ready=true 执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run；无监听者→不重跑、不新增 note。用户侧待办: 启动 dsh web host 绑定 :3080；若 dsh 跑在 WSL2 则 `wsl --shutdown` 重启清陈旧 HNS 策略；排查 EDR/安全代理拦截 :3080。
+- blocker (high): :3080 无监听者 + loopback SYN 被静默丢弃（防火墙已关、无 portproxy、无代理）→ dsh web host 进程未运行且 HNS/虚拟网络层丢包；section 4 不可执行。
+- 证据: .codex/patrol/openeyes-2026-09-19-round-382-gate-readiness.md（本地仅参考，git 忽略）。
