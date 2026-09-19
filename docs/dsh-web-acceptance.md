@@ -6321,3 +6321,13 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker(high): :3080 无监听者 -> section 4 不可执行。用户侧待办: (a) dsh --profile web 绑 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦 :3080。
 - blocker(medium): runbook ~6314 行/707KB(455 轮同质 evidence)，section 4 正文被淹没；建议 planner 改方向表为「当 :3080 出现监听者后重跑 probe」或授权一次性归档历史 note。
 - 时间: 2026-09-20T03:22:31+08:00
+## Round 456 - 2026-09-20T03:43:45+08:00 - gate-readiness probe (auto-patrol NEW round-456)
+
+- 命令: python examples/dsh-gate-readiness.py；退出码 2（ready=false；"<urlopen error timed out>"）。
+- 诊断: :3080 监听者 0；dsh 进程 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因未变(round-382 起): dsh web host 未运行，:3080 loopback SYN 超时。
+- 时间门: 方向表 `On or after 2026-09-11T10:00:00+08:00` 已过；今 2026-09-20T03:43:45+08:00，按要求跑一次 probe(2s timeout，HTTP 仍超时)，结论同前。
+- 处置: 追加本轮 note 后即停，不早复探；不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M5+??8)与本轮无关，不染指；本轮仅提交 docs/dsh-web-acceptance.md + .codex/last-message.md。
+- blocker(high): :3080 无监听者 -> section 4 不可执行。用户侧待办: (a) dsh --profile web 绑 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦 :3080。
+- blocker(medium): runbook ~6335 行/707KB(456 轮同质 evidence)，section 4 正文被淹没；建议 planner 改方向表为「当 :3080 出现监听者后重跑 probe」或授权一次性归档历史 note。
+- 时间: 2026-09-20T03:43:45+08:00
