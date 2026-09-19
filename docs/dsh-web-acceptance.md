@@ -5930,3 +5930,45 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 处置: 按 planner 字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
 - blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080。
 - 证据: .codex/patrol/openeyes-2026-09-19-round-414-gate-readiness.md（本地仅参考，git 忽略）。
+
+## Round 415 — 2026-09-19T14:00:51+08:00 — gate-readiness probe (auto-patrol NEW round-415)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process -Name dsh -> 0。根因未变（round-382）: dsh web host 未运行 + HNS/虚拟网络层静默丢弃 :3080 loopback SYN（FW 已关、无 portproxy、无代理）。
+- 处置: 按方向表字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080。
+- 证据: .codex/patrol/openeyes-2026-09-19-round-415-gate-readiness.md（本地仅参考，git 忽略）。
+
+## Round 416 — 2026-09-19T14:20:58+08:00 — gate-readiness probe (auto-patrol NEW round-416)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process -Name dsh -> 0。根因未变（round-382）: dsh web host 未运行 + HNS/虚拟网络层静默丢弃 :3080 loopback SYN（FW 已关、无 portproxy、无代理）。
+- 处置: 按方向表字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080。
+- 证据: .codex/patrol/openeyes-2026-09-19-round-416-gate-readiness.md（本地仅参考，git 忽略）。
+
+## Round 426 — 2026-09-19T17:50:23+08:00 — gate-readiness probe (auto-patrol NEW round-426)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process -Name dsh -> 0。根因未变（round-382）: dsh web host 未运行 + HNS/虚拟网络层静默丢弃 :3080 loopback SYN（FW 已关、无 portproxy、无代理）。细化（round-419）: dsh 已装于 E:\npm-global\dsh.ps1；阻塞纯为"未启动 dsh web host"。
+- 处置: 按方向表字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh（持久 web host 超 30min 单轮预算且违反"不留后台跑死进程"）、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- 文档积压: 本 doc 自 round-416（14:22）起 doc-append 失败 9 轮（417–425 仅有 .codex/patrol/ 证据文件，未入 doc），今 round-426 恢复追加。建议: (a) 排查 doc-append 失败根因 / (b) 评估是否回填 417–425 / (c) 采纳 round-419 建议改方向表为事件驱动复探。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080（dsh 已装可直接 dsh --profile web）/ (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080 / (d) 修复 doc-append 失败。
+- 证据: .codex/patrol/openeyes-2026-09-19-round-426-gate-readiness.md（本地仅参考，git 忽略）。
+## Round 427 — 2026-09-19T18:02:31+08:00 — gate-readiness probe (auto-patrol NEW round-427)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process -Name dsh -> 0；Get-Command dsh -> E:\npm-global\dsh.ps1（dsh 已装，仅未启动）。根因未变（round-382）: dsh web host 未运行 + HNS/虚拟网络层静默丢弃 :3080 loopback SYN（FW 已关、无 portproxy、无代理）。
+- 处置: 按方向表字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh（持久 web host 超 30min 单轮预算且违反"不留后台跑死进程"）、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- fold-in: 上轮 round-426（17:50）证据块此前未提交（last-message 仍指向 round-425）；本轮一次性 fold-in round-426 + round-427 两块入 doc 并 commit，避免 doc 长期 M 漂移。record/ 业务改动与既有 M 文件维持原样未动。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080（dsh 已装可直接 dsh --profile web）/ (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080 / (d) 修复 doc-append 失败（round-426 起已恢复追加，417–425 仍缺）。
+- 重申 round-418/419/426 建议: 方向表下一步宜改为"当 :3080 出现监听者后重跑 probe"，以止每轮定时复探空转（已连 427 轮同结论）。
+- 时间: 2026-09-19T18:02:31+08:00
