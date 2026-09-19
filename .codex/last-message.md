@@ -1,13 +1,19 @@
-# Round 461 last-patrol handoff (auto-patrol NEW)
+## 本轮推进
+- 跑 python examples\dsh-gate-readiness.py；exit 2，ready=false（http://127.0.0.1:3080/ timed out）。:3080 仍无监听者，0 个 dsh 进程；根因同 round-382 起。
+- docs/dsh-web-acceptance.md 追加 Round 464 evidence note 并提交（commit 本轮）：docs-only 改动，无 source 变更。
+- .codex/last-message.md 同步刷新 round-464 handoff；本轮按 460/458 惯例一并入库（上轮 463 漏提交 last-message.md，本次已补齐）。
 
-- 命令: python examples/dsh-gate-readiness.py
-- 退出码: 2（ready=false；持续 timeout）
-- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
-- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process dsh -> 0；E:\npm-global\dsh.ps1 已装未启。根因未变(round-382 起): dsh web host 未运行，:3080 loopback SYN 超时。
-- 时间门: 方向表 On or after 2026-09-11T10:00:00+08:00 已过；今 2026-09-20T05:20:34+08:00，按要求跑一次 probe(2s timeout，HTTP 仍超时)，结论同前。
-- 处置: 按方向表 otherwise append a new evidence note without an early re-probe 已追加 docs/dsh-web-acceptance.md round-461 note 并提交(仅 doc + handoff 两处，record/ 未染指)。不早复探、不启 dsh、不跑 section 4、不发 browser_click。
-- 工作树: 仍存 record/ 特征改(M5+??8: CHANGELOG/README/openeyes/__init__/pyproject/tests/test_smoke + docs/RECORD_DESIGN.md + examples/record_demo_*.py + examples/record-out/ + openeyes/record/ + tests/test_record.py)，与本轮无关。
-- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启 dsh web host 绑 :3080 (dsh --profile web) / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦 :3080。
-- blocker (medium): docs/dsh-web-acceptance.md 同质 evidence 已连 461 轮，section 4 正文被淹没。本轮未自主重构(方向仅授权 append)。
-- 下次动作(事件驱动): 先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe，ready=true 执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run；无监听者 -> 不重跑、不新增 evidence。强烈建议更新项目方向表下一步为 当 :3080 出现监听者后重跑 probe 以止每轮定时复探空转与 runbook 增噪(已连 461 轮同结论)。
-- 证据: docs/dsh-web-acceptance.md ## Round 461(已提交)。
+## 下一轮要看
+- 事件驱动复探：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe，ready=true 即执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run；无监听者 -> 按方向表 otherwise 仍追加 note（除非 planner 已改方向表为事件驱动）。
+- 强烈建议：planner 将方向表下一步改为「当 :3080 出现监听者后重跑 probe」以停每轮定时复探空转 + runbook 增噪；或授权一次性归档历史 Round note（已连 464 轮同结论）。
+- 与本轮无关的 record/ 特征改（M5+??8：CHANGELOG/README/openeyes/__init__/pyproject/tests/test_smoke + docs/RECORD_DESIGN.md + examples/record_demo_*.py + examples/record-out/ + openeyes/record/ + tests/test_record.py）仍挂工作树；不在方向表授权范围内，本轮不染指。
+
+## blocker
+- (high) :3080 无监听者 → section 4 不可执行；用户侧待办：dsh --profile web 绑 :3080 / wsl --shutdown 清陈旧 HNS / 排查 EDR 拦 :3080。
+- (medium) runbook 同质 evidence 已连 464 轮，section 4 正文被淹没；建议改方向表为事件驱动，或授权归档历史 note。
+
+## 命令复盘（实测）
+- python examples\dsh-gate-readiness.py → {"gate_url":"http://127.0.0.1:3080/","ready":false,"status_code":null,"error":"<urlopen error timed out>","next_recheck":"2026-09-10T16:30:00+08:00","next_action":"Wait for the dsh web host to return HTTP 200, then rerun this probe."}；exit 2。
+- Get-NetTCPConnection -LocalPort 3080 -State Listen → 0。
+- Get-Process -Name dsh → 0。
+- 时间: 2026-09-20T06:21:10+08:00
