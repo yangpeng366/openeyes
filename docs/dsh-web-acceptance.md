@@ -6218,3 +6218,17 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启 dsh web host 绑 :3080（dsh --profile web）/ (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦 :3080。
 - 重申建议: 方向表下一步宜改为 "当 :3080 出现监听者后重跑 probe"，以止每轮空转（已连 447 轮同结论）。
 - 时间: 2026-09-20T00:44:27+08:00
+
+## Round 448 - 2026-09-20T01:01:50+08:00 - gate-readiness probe (auto-patrol NEW round-448)
+
+- 命令: python examples/dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 复诊: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process -Name dsh -> 0；Get-Command dsh -> E:\npm-global\dsh.ps1（dsh 已装仅未启动）。根因未变（round-382 起）: dsh web host 未运行，:3080 loopback SYN 超时。
+- 字节码: examples/__pycache__ 内无 dsh-gate-readiness.cpython-311.pyc，结果为源码忠实；next_recheck=2026-09-10T16:30:00+08:00 与 source line 18 一致。
+- 时间门: 方向表 "On or after 2026-09-11T10:00:00+08:00" 重跑；今 2026-09-20T01:01:50+08:00，门已过，按要求跑一次 probe（2s timeout，HTTP 仍超时），结论同前。
+- 处置: 按方向表 "otherwise append a new evidence note without an early re-probe" 追加本轮 note 后即停，不早复探。不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- 工作树: 仍存 record/ 特征改（M 5 + ?? 8，共 13），与本轮无关，不染指。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启 dsh web host 绑 :3080（dsh --profile web）/ (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦 :3080。
+- 重申建议: 方向表下一步宜改为 "当 :3080 出现监听者后重跑 probe"，以止每轮空转（已连 448 轮同结论）。
+- 时间: 2026-09-20T01:01:50+08:00
