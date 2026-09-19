@@ -5897,3 +5897,15 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080。
 - 下次动作（事件驱动）: 先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者->重跑 probe，ready=true 执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run；无监听者->不重跑、不新增 note。强烈建议更新项目方向表下一步为"当 :3080 出现监听者后重跑 probe"以止每轮定时复探空转。
 - 证据: .codex/patrol/openeyes-2026-09-19-round-398-gate-readiness.md（本地仅参考，git 忽略）。
+
+## Round 410 — 2026-09-19T12:21:39+08:00 — gate-readiness probe (auto-patrol NEW round-410)
+
+- 命令: python examples\dsh-gate-readiness.py
+- 退出码: 2（ready=false；持续 timeout）
+- 结果: {"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> NO_LISTENER_ON_3080；Get-Process -Name dsh -> NO_DSH_PROCESS。根因未变（round-382）: dsh web host 未运行 + HNS/虚拟网络层静默丢弃 :3080 loopback SYN（FW 已关、无 portproxy、无代理）。
+- 处置: 按 planner 字面"otherwise append a new evidence note without an early re-probe"追加本轮 note 后即停，不早复探。不启 dsh、不跑 section 4、不发 browser_click。复探保持事件驱动: 仅当 :3080 出现监听者后重跑 probe。
+- blocker (high): :3080 无监听者 -> dsh web host 未运行；section 4 不可执行。用户侧待办: (a) 启动 dsh web host 绑定 :3080 / (b) wsl --shutdown 清陈旧 HNS / (c) 排查 EDR 拦截 :3080。
+- 下次动作（事件驱动）: 先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者->重跑 probe，ready=true 执行 docs/dsh-web-acceptance.md section 4 两 tab 点击 dry-run；无监听者->不重跑、不新增 note。强烈建议更新项目方向表下一步为"当 :3080 出现监听者后重跑 probe"以止每轮定时复探空转。
+- 证据: .codex/patrol/openeyes-2026-09-19-round-410-gate-readiness.md（本地仅参考，git 忽略）。
+
