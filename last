@@ -1,17 +1,18 @@
 
-## Round 531 — 2026-09-21T06:40:54+08:00
-- Round 531，2026-09-21T06:40:54+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+
+## Round 532 — 2026-09-21T07:01:05+08:00
+- Round 532，2026-09-21T07:01:05+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
 - 命令：python examples\dsh-gate-readiness.py
 - 输出：ready=false，status_code=null，error=<urlopen error timed out>；exit 2。
 - 旁证：本轮未复跑 Get-NetTCPConnection -LocalPort 3080 -State Listen，沿用 round-530 结论（:3080 无监听者），节省 token；HNS 或 EDR 根因仍未复核。
-- 已追加 docs\dsh-web-acceptance.md ## Round 531 evidence；last 刷新为本节；未启动服务、未执行 section 4、未早期复探；既有业务改动保留，不提交 main、不创建分支。
+- 已追加 docs\dsh-web-acceptance.md ## Round 532 evidence；last 刷新为本节；未启动服务、未执行 section 4、未早期复探；既有业务改动保留，不提交 main、不创建分支。
 - 本轮无推进；事件驱动复探仅偶尔触 Get-NetTCPConnection（518/520/523/528/530 等），余轮次沿用上轮端口证据。
 
 ## 下一轮要看的具体点
 - 服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 docs\dsh-web-acceptance.md section 4。
-- 建议 planner 改为事件驱动触发：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe；无监听者 -> 仅刷新 last-message.md（不再每轮追加 runbook note，以止连续空转；本轮已是 round-516 起第 16 次）。
+- 建议 planner 改为事件驱动触发：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe；无监听者 -> 仅刷新 last-message.md（不再每轮追加 runbook note，以止连续空转；本轮已是 round-516 起第 17 次）。
 - 脚本 next_recheck=2026-09-10T16:30:00+08:00 是过期默认值，不据此立即复探。
 
 ## blocker
 - high：gate 未就绪，需服务负责人恢复 :3080 HTTP 服务；HNS 或 EDR 根因仍未复核。
-- medium：runbook 同质 evidence 已连 16 轮（516-531），建议改方向表为事件驱动复探，或授权归档历史 Round note。
+- medium：runbook 同质 evidence 已连 17 轮（516-532），建议改方向表为事件驱动复探，或授权归档历史 Round note。
