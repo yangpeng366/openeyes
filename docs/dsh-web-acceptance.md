@@ -7044,3 +7044,34 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
 - blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮确认 :3080 无监听者，HNS 或 EDR 根因仍未复核。
 - 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 13 次连续空转（516-528）。
+
+
+## Round 529 evidence — 2026-09-21 (dsh gate-readiness not ready) [auto-patrol]
+
+- 记录时间：2026-09-21T06:00:51+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py
+- 原始输出：{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}；exit 2。
+- 旁证：本轮未复跑 Get-NetTCPConnection -LocalPort 3080 -State Listen，沿用 round-528 结论（:3080 无监听者），节省 token；HNS 或 EDR 根因仍未复核。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮沿用上轮端口证据，HNS 或 EDR 根因仍未复核。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 14 次连续空转（516-529）。
+
+## Round 530 evidence — 2026-09-21 (dsh gate-readiness not ready) [auto-patrol]
+
+- 记录时间：2026-09-21T06:20:54+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py
+- 原始输出：{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}；exit 2。
+- 旁证：本轮补跑一次 Get-NetTCPConnection -LocalPort 3080 -State Listen（采纳 round 528 建议后 round 529 暂停一次），返回空，确认 :3080 仍无监听者；沿用 round-446 结论（dsh 已装未启、HNS/EDR 阻断），节省 token。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮再次确认 :3080 无监听者，HNS 或 EDR 根因仍未复核。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 15 次连续空转（516-530）。
+
+## Round 531 evidence — 2026-09-21 (dsh gate-readiness not ready) [auto-patrol]
+
+- 记录时间：2026-09-21T06:40:54+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py
+- 原始输出：{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}；exit 2。
+- 旁证：本轮未复跑 Get-NetTCPConnection -LocalPort 3080 -State Listen，沿用 round-530 结论（:3080 无监听者），节省 token；HNS 或 EDR 根因仍未复核。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮沿用上轮端口证据，HNS 或 EDR 根因仍未复核。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 16 次连续空转（516-531）。
