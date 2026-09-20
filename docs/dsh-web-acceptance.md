@@ -6665,3 +6665,14 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
 - blocker(medium): 同结论已连 490 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 .codex/last-message.md。
 - 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / error=urlopen timeout / exit 2。
+
+## Round 491 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过 (now=2026-09-20T15:42:59.2228405+08:00)。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, ready=false（<urlopen error timed out>，:3080 无响应）。
+- 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process -Name dsh -> 0；Test-NetConnection 127.0.0.1:3080 -> False；dsh 已装(E:\npm-global\dsh.ps1)未启。
+- 处置：按方向表 otherwise 分支——追加本条 evidence note + 刷新 .codex/last-message.md + .codex/last-round.md；未启 dsh、未跑 section 4、未碰 record/。
+- 旁路验证：python -m pytest tests/ -x -q -> 131 passed in 14.53s（与方向表授权范围无关，仅复盘环境健康）。
+- blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
+- blocker(medium): 同结论已连 491 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 .codex/last-message.md。
+- 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / error=urlopen timeout / exit 2。
