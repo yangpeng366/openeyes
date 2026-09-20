@@ -6711,3 +6711,76 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker(medium): 同结论已连 494 轮；强烈建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案：「当 Get-NetTCPConnection -LocalPort 3080 -State Listen 出现 ≥1 行时重跑 python examples/dsh-gate-readiness.py；ready=true 即执行 docs/dsh-web-acceptance.md section 4（两 tab 各一次 browser_click dry-run），否则仅刷新 .codex/last-message.md（不再追加 runbook note）」。
 - 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / error=urlopen timeout / exit 2；pytest -x -q -> 131 passed in 23.04s。
 
+## Round 495 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过；本轮记录时间为 2026-09-20T17:53:30+08:00。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, ready=false（<urlopen error timed out>，:3080 无响应）。
+- 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process -Name dsh -> 0；Test-NetConnection 127.0.0.1:3080 -> False；dsh 已装(E:\npm-global\dsh.ps1)未启。
+- 处置：按方向表 otherwise 分支——追加本条 evidence note + 刷新 .codex/last-message.md + .codex/last-round.md；未启 dsh、未跑 section 4、未发 browser_click。
+- blocker(high)：本次 HTTP 请求超时且 :3080 无监听者，section 4 不可执行；需先恢复 dsh web host。此次未验证 HNS 或 EDR 原因，不据此建议重启 WSL 或修改安全设置。
+- 下一轮：待服务恢复后再探测；HTTP 200 才执行 section 4。本轮不复探。脚本输出的 next_recheck=2026-09-10T16:30:00+08:00 为过期默认值，不作新调度时间。
+- 验证：python -m pytest tests/test_dsh_gate_readiness.py -q -> 4 passed in 3.22s（单元测试，非 gate 复探）。
+- 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / error=urlopen timeout / exit 2；旁证命令均确认无监听与 TCP 连接失败。
+
+## Round 496 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过；本轮记录时间为 2026-09-20T18:03:34+08:00。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, ready=false（<urlopen error timed out>，:3080 无响应）。
+- 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process -Name dsh -> 0；Test-NetConnection 127.0.0.1:3080 -> False；dsh 已装(E:\npm-global\dsh.ps1)未启。
+- 处置：按方向表 otherwise 分支——追加本条 evidence note + 刷新 .codex/last-message.md + .codex/last-round.md；未启 dsh、未跑 section 4、未发 browser_click。
+- blocker(high)：本次 HTTP 请求超时且 :3080 无监听者，section 4 不可执行；需先恢复 dsh web host。此次未验证 HNS 或 EDR 原因，不据此建议重启 WSL 或修改安全设置。
+- 下一轮：待服务恢复后再探测；HTTP 200 才执行 section 4。本轮不复探。脚本输出的 next_recheck=2026-09-10T16:30:00+08:00 为过期默认值，不作新调度时间。
+- 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / error=urlopen timeout / exit 2；旁证命令均确认无监听与 TCP 连接失败。
+
+## Round 497 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过；本轮记录时间为 2026-09-20T18:23:06+08:00。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, ready=false（<urlopen error timed out>，:3080 无响应）。
+- 处置：按 otherwise 分支追加本条 evidence note + 刷新 .codex/last-message.md + .codex/last-round.md；未启动 dsh、未执行 section 4、未发送 browser_click；不做早期复探。
+- blocker(high)：本次 HTTP 请求超时，section 4 不可执行；需先恢复 dsh web host。此次未验证 HNS 或 EDR 原因，不据此建议重启 WSL 或修改安全设置。
+- 下一轮：待服务恢复后再探测；HTTP 200 才执行 section 4。本轮不复探。脚本输出的 next_recheck=2026-09-10T16:30:00+08:00 为过期默认值，不作新调度时间。
+- 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / status_code=null / error=urlopen timeout / exit 2。
+
+## Round 498 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过；本轮记录时间为 2026-09-20T18:45:36+08:00。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, ready=false（<urlopen error timed out>，:3080 无响应）。
+- 处置：按 otherwise 分支追加本条 evidence note + 刷新 .codex/last-message.md + .codex/last-round.md；未启动 dsh、未执行 section 4、未发送 browser_click；不做早期复探。
+- blocker(high)：本次 HTTP 请求超时，section 4 不可执行；需先恢复 dsh web host。此次未验证 HNS 或 EDR 原因，不据此建议重启 WSL 或修改安全设置。
+- 下一轮：待服务恢复后再探测；HTTP 200 才执行 section 4。本轮不复探。脚本输出的 next_recheck=2026-09-10T16:30:00+08:00 为过期默认值，不作新调度时间。
+- 命令复盘（实测）：python examples/dsh-gate-readiness.py -> ready=false / status_code=null / error=urlopen timeout / exit 2。
+## Round 499 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 2026-09-11T10:00:00+08:00 已过；本轮记录时间为 2026-09-20T19:03:14+08:00。
+- 执行 `python examples/dsh-gate-readiness.py` -> exit 2，ready=false，status_code=null，error=`<urlopen error timed out>`。
+- 处置：按 otherwise 分支追加本条 evidence；未启动 dsh、未执行 section 4、未发送 browser_click；不做早期复探。
+- blocker(high)：`:3080` gate 请求超时，section 4 不可执行；需先恢复 dsh web host。此次未验证 HNS 或 EDR 原因。
+- 下一轮：待服务恢复且 `:3080` 返回 HTTP 200 后再执行 section 4；本轮不复探。脚本 `next_recheck=2026-09-10T16:30:00+08:00` 为过期默认值，不作新调度时间。
+- 命令复盘（实测）：`python examples/dsh-gate-readiness.py` -> `ready=false / status_code=null / error=urlopen timeout / exit 2`。
+## Round 500 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 时间窗 `2026-09-11T10:00:00+08:00` 已过；本轮记录时间为 `2026-09-20T19:24:24+08:00`。
+- 命令：`python examples/dsh-gate-readiness.py`
+- 输出：`ready=false`，`status_code=null`，`error=<urlopen error timed out>`；exit 2。
+- 处置：按 otherwise 分支追加证据；未启动 dsh、未执行 section 4、未发送 browser_click、未早期复探；保留既有业务改动，不提交 main、不创建分支。
+- blocker(high)：`:3080` gate 请求超时，section 4 不可执行；需服务负责人恢复 dsh web host。本轮未查明 HNS 或 EDR 根因。
+- 下一轮：服务恢复后再运行 readiness probe；仅 HTTP 200 时执行 section 4。脚本 `next_recheck=2026-09-10T16:30:00+08:00` 为过期默认值，不作新调度时间。
+
+## Round 501 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 记录时间：2026-09-20T19:48:36+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：`python examples/dsh-gate-readiness.py`
+- 原始输出：`{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}`；exit 2。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮未验证监听状态、HNS 或 EDR 根因。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。
+
+## Round 502 evidence — 2026-09-20 (dsh gate-readiness not ready)
+
+- 记录时间：2026-09-20T20:22:01+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：`python examples/dsh-gate-readiness.py`
+- 原始输出：`{"gate_url": "http://127.0.0.1:3080/", "ready": false, "status_code": null, "error": "<urlopen error timed out>", "next_recheck": "2026-09-10T16:30:00+08:00", "next_action": "Wait for the dsh web host to return HTTP 200, then rerun this probe."}`；exit 2（PowerShell 包裹层报 `$LASTEXITCODE=1`）。
+- 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process -Name dsh -> 0。dsh 已装（Get-Command dsh -> `E:\npm-global\dsh.ps1`），未启动。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动保留，不提交 main、不创建分支。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮未验证监听状态、HNS 或 EDR 根因。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。
