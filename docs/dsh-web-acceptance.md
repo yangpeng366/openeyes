@@ -6540,3 +6540,30 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
 - blocker(medium): 同结论已连 477 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 last-message.md。
 - 时间: 2026-09-20T11:01:35+08:00
+
+## Round 478 - 2026-09-20T11:22:30+08:00 - gate-readiness probe (auto-patrol NEW round-478)
+
+## Round 479 - 2026-09-20T11:40:49+08:00 - gate-readiness probe (auto-patrol NEW round-479)
+- 命令: python examples/dsh-gate-readiness.py；exit 2（ready=false；"<urlopen error timed out>"）。
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因同 round-382 起。
+- 处置: otherwise 分支——追加本 note + 刷新 .codex/last-message.md 后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M5+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + .codex/last-message.md 两处 doc-only。
+- blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
+- blocker(medium): 同结论已连 479 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 last-message.md。
+- 时间: 2026-09-20T11:40:49+08:00
+- 命令: python examples/dsh-gate-readiness.py；exit 2（ready=false；"<urlopen error timed out>"）。
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因同 round-382 起。
+- 处置: otherwise 分支——追加本 note + 刷新 .codex/last-message.md 后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M5+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + .codex/last-message.md 两处 doc-only。
+- blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
+- blocker(medium): 同结论已连 478 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 last-message.md。
+- 时间: 2026-09-20T11:22:30+08:00
+
+## Round 480 - 2026-09-20T12:02:09+08:00 - gate-readiness probe (auto-patrol NEW round-480)
+- 命令: python examples/dsh-gate-readiness.py；exit 2（ready=false；"<urlopen error timed out>"）。
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因同 round-382 起。
+- 处置: otherwise 分支——追加本 note + 刷新 .codex/last-message.md 后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M5+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + .codex/last-message.md 两处 doc-only。
+- blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
+- blocker(medium): 同结论已连 480 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。可粘贴文案见 last-message.md。
+- 时间: 2026-09-20T12:02:09+08:00
