@@ -7195,3 +7195,14 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动（README.md / openeyes/__init__.py / pyproject.toml / tests/test_smoke.py 修订 + docs/RECORD_DESIGN.md / openeyes/record/ / tests/test_record.py / examples/record_*.py / examples/out/ / examples/record-out/ 新增）维持『与本轮 gate-readiness 无关、本轮不携入』，留待后续人工评审后再处理。
 - blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮再次确认 :3080 无监听者，HNS 或 EDR 根因仍未复核。
 - 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 27 次连续空转（516-542）。
+
+
+## Round 543 evidence - 2026-09-21 (dsh gate-readiness not ready) [auto-patrol]
+
+- 记录时间：2026-09-21T10:41:54+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py
+- 原始输出：ready=false, status_code=null, error=urlopen error timed out, next_recheck=2026-09-10T16:30:00+08:00；exit 2。
+- 旁证：本轮复跑一次 Get-NetTCPConnection -LocalPort 3080 -State Listen，返回空，与 round-530/533/534/535/536/537/538/541/542 一致（:3080 仍无监听者），节省 token；HNS 或 EDR 根因仍未复核。
+- 按 otherwise 分支留证；验收无进展。仅探测一次，未启动服务、未执行 section 4、未发送 browser_click、未复探；既有业务改动（README.md / openeyes/__init__.py / pyproject.toml / tests/test_smoke.py 修订 + docs/RECORD_DESIGN.md / openeyes/record/ / tests/test_record.py / examples/record_*.py / examples/out/ / examples/record-out/ 新增）维持『与本轮 gate-readiness 无关、本轮不携入』，留待后续人工评审后再处理。
+- blocker(high)：本次 gate 请求超时，需服务负责人恢复 dsh web host；本轮再次确认 :3080 无监听者，HNS 或 EDR 根因仍未复核。
+- 下一轮：服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 section 4。过期默认 next_recheck 不作新调度时间，建议 planner 改为服务恢复事件触发。本轮为 round-516 起第 28 次连续空转（516-543）。
