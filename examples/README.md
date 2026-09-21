@@ -184,3 +184,24 @@ python examples\feishu_first_test.py --go
 # target a specific element
 python examples\feishu_first_test.py --target "通讯录" --go
 ```
+
+
+## record_edge_demo.js
+
+Reproducible headless Edge recording via the vendored `chrome-recorder-bridge`.
+Launches Edge, loads a data-URL page with buttons and an input, performs 5 user
+actions (click x3 + type), and writes a Trajectory JSONL that Python
+`Trajectory.load()` can parse.
+
+```powershell
+# default output: examples/record-out/trajectory-edge-example.jsonl
+node examples/record_edge_demo.js
+
+# custom output path
+node examples/record_edge_demo.js --out path/to/output.jsonl
+
+# verify Python round-trip
+python -c "from openeyes.record import Trajectory; t=Trajectory.load(r'examples/record-out/trajectory-edge-example.jsonl'); print(len(t.steps), 'steps loaded OK')"
+```
+
+Prerequisites: puppeteer-core, Microsoft Edge. No absolute D:/ paths required.
