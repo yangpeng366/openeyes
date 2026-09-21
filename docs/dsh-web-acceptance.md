@@ -7442,3 +7442,10 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；无监听者，本轮不重跑 readiness probe（节省本机额度，避免与上一轮 HTTP 超时结果重复）。未启动服务、未执行 section 4、未发送 browser_click；既有 record/ 相关改动原状，与本轮 gate-readiness 无关。
 - blocker(high)：gate 不可达，:3080 仍无监听者，需服务负责人恢复 dsh web host；HNS 或 EDR 根因仍未复核。
 - 下一轮：先作事件驱动旁证；:3080 无监听者则不重跑 probe，仅按方向表追加 evidence 并刷新 last。同质记录已连 60 轮（516-575），建议 planner 改为恢复事件触发或授权归档历史 Round note。
+## Round 576 evidence - 2026-09-21 (dsh gate-readiness not ready) [auto-patrol]
+- 记录时间：2026-09-21T21:41:34+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：Get-NetTCPConnection -LocalPort 3080 -State Listen；Get-Process -Name dsh。
+- 旁证：listener_count=0；dsh_count=0，与 round-530/.../575 一致。
+- 按 otherwise 分支留证；无监听者，本轮不重跑 readiness probe（节省本机额度，避免与 round 575 HTTP 超时结果重复）。未启动服务、未执行 section 4、未发送 browser_click；既有 record/ 相关改动原状，与本轮 gate-readiness 无关。
+- blocker(high)：gate 不可达，:3080 仍无监听者，需服务负责人恢复 dsh web host；HNS 或 EDR 根因仍未复核。
+- 下一轮：先作事件驱动旁证；:3080 无监听者则不重跑 probe，仅按方向表追加 evidence 并刷新 last。同质记录已连 61 轮（516-576），建议 planner 改为恢复事件触发或授权归档历史 Round note。
