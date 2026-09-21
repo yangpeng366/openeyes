@@ -1,15 +1,11 @@
-## 本轮推进
-- Round 545, 2026-09-21T11:21:32+08:00；仅探测一次，验收未推进，原因是 gate 请求超时。
-- 命令：python examples\dsh-gate-readiness.py --next-recheck 2026-09-21T10:30:00+08:00
-- 输出：ready=false，status_code=null，error=<urlopen error timed out>，next_recheck=2026-09-21T10:30:00+08:00；exit 2。
-- 旁证：按 round-544 last-message.md 之事件驱动建议，先跑 Get-NetTCPConnection -LocalPort 3080 -State Listen，返回空，确认 :3080 无监听者；与 round-530/533/534/535/536/537/538/541/542/543/544 一致；沿用 round-446 结论（dsh 已装未启、HNS/EDR 阻断），未复跑 Get-Process / Get-Command。
-- 已追加 docs/dsh-web-acceptance.md ## Round 545 evidence 与本 last 文件；未启动服务、未执行 section 4、未早期复探；既有业务改动保留，不提交 main、不创建分支。
-
-## 下一轮要看的具体点
-- 服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 docs/dsh-web-acceptance.md section 4。
-- 沿用 round-544 建议：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe；无监听者 -> 仅刷新 last-message.md（不再每轮追加 runbook note，以止 545 轮同结论空转）。
-- 事件驱动复探更经济；脚本默认 next_recheck=2026-09-10T16:30:00+08:00 是过期默认值，不据此立即复探。
-
-## blocker
-- high：gate 未就绪，需服务负责人恢复 :3080 HTTP 服务；本轮确认 :3080 无监听者，未查明 HNS 或 EDR 根因。
-- medium：runbook 同质 evidence 已连 30 轮(516-545)，建议改方向表为事件驱动复探，或授权归档历史 Round note。
+## Round 553 - 2026-09-21T14:01:59+08:00
+- Round 553, 2026-09-21T14:01:59+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py；exit 2（ready=false；urlopen error timed out）。
+- 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因同 round-382 起。
+- 处置: otherwise 分支——追加 docs/dsh-web-acceptance.md ## Round 553 note + 刷新 last + last-message.md + last-patrol-message.md + patrol log，提交后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M6+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + last 两处 doc-only（[auto-patrol]）。M6 其它 4 处（README.md / openeyes/__init__.py / pyproject.toml / tests/test_smoke.py + .codex/last-patrol-message.md）均非本轮引入，与 record/ 同批留待后续人工评审。
+- 提交: docs/dsh-web-acceptance.md + last，[auto-patrol] round-553；HEAD 仍 ahead origin/main ~186 commits，本地 commit / 不 push。
+- 下一轮要看（planner 友好）：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe，ready=true 即执行 docs/dsh-web-acceptance.md section 4 两 tab browser_click dry-run；无监听者 -> 按方向表 otherwise 追加 docs/dsh-web-acceptance.md Round 554 note + 刷新 last + last-message.md。建议改方向表下一步为当 :3080 出现监听者后重跑 probe，以止每轮定时复探空转（已连 553 轮同结论）；或授权一次性归档历史 Round note。
+- blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
+- blocker(medium): 同结论已连 553 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。
+- 时间: 2026-09-21T14:01:59+08:00

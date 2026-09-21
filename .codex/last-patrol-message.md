@@ -1,10 +1,11 @@
-# Round 477 last-patrol handoff (auto-patrol NEW)
+# Round 553 last-patrol handoff (auto-patrol NEW)
 
-- 命令: python examples/dsh-gate-readiness.py；exit 2（ready=false；"<urlopen error timed out>"）。
+- 命令: python examples\dsh-gate-readiness.py；exit 2（ready=false；urlopen error timed out）。
 - 诊断: Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-Process dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。根因同 round-382 起。
-- 处置: otherwise 分支——追加 docs/dsh-web-acceptance.md ## Round 477 note + 刷新 .codex/last-message.md，提交后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
-- 工作树: record/ 特征改(M5+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + .codex/last-message.md 两处 doc-only（[auto-patrol]）。
-- 下一轮要看（planner 友好）：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe，ready=true 即执行 docs/dsh-web-acceptance.md section 4 两 tab browser_click dry-run；无监听者 -> 按方向表 otherwise 仅追加 note + 刷新 last-message.md。建议改方向表下一步为「当 :3080 出现监听者后重跑 probe」，以止每轮定时复探空转（已连 477 轮同结论）；或授权一次性归档历史 Round note。
+- 处置: otherwise 分支——追加 docs/dsh-web-acceptance.md ## Round 553 note + 刷新 last + last-message.md + last-patrol-message.md + patrol log，提交后即停；不早复探、不启 dsh、不跑 section 4。复探事件驱动: :3080 出现监听者后重跑 probe。
+- 工作树: record/ 特征改(M6+??8)仍挂工作树，与本轮无关，不染指；本轮仅 docs/dsh-web-acceptance.md + last 两处 doc-only（[auto-patrol]）。M6 其它 4 处（README.md / openeyes/__init__.py / pyproject.toml / tests/test_smoke.py + .codex/last-patrol-message.md）均非本轮引入，与 record/ 同批留待后续人工评审。
+- 提交: docs/dsh-web-acceptance.md + last，[auto-patrol] round-553；HEAD 仍 ahead origin/main ~186 commits，本地 commit / 不 push。
+- 下一轮要看（planner 友好）：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe，ready=true 即执行 docs/dsh-web-acceptance.md section 4 两 tab browser_click dry-run；无监听者 -> 按方向表 otherwise 追加 docs/dsh-web-acceptance.md Round 554 note + 刷新 last + last-message.md。建议改方向表下一步为当 :3080 出现监听者后重跑 probe，以止每轮定时复探空转（已连 553 轮同结论）；或授权一次性归档历史 Round note。
 - blocker(high): :3080 无监听者 -> section 4 不可执行；用户待办: (a) dsh --profile web 绑 :3080 (b) wsl --shutdown 清陈旧 HNS (c) 排查 EDR 拦 :3080。
-- blocker(medium): 同结论已连 477 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。
-- 时间: 2026-09-20T11:01:35+08:00
+- blocker(medium): 同结论已连 553 轮；建议改方向表下一步为事件驱动复探，或授权归档历史 Round note。
+- 时间: 2026-09-21T14:01:59+08:00
