@@ -7540,3 +7540,12 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；本轮 probe 已跑一次，不再早期复探；未启动服务、未执行 section 4、未发送 browser_click。
 - blocker(high)：gate 不可达，需服务负责人恢复 dsh web host。
 - 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 74 轮（516-589），建议 planner 改为恢复事件触发或授权归档历史 Round note。
+
+## Round 590 evidence - 2026-09-22 (dsh gate-readiness not ready) [auto-patrol]
+- 记录时间：2026-09-22T02:21:36+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples/dsh-gate-readiness.py --next-recheck 2026-09-22T02:51:01+08:00；Get-NetTCPConnection -LocalPort 3080 -State Listen；Get-Process -Name dsh。
+- 原始输出：ready=false；status_code=null；error=<urlopen error timed out>；next_recheck=2026-09-22T02:51:01+08:00；probe 观测退出码 2。
+- 旁证：listener_count=0；dsh_count=0；:3080 无监听者，且无 dsh 进程。
+- 按 otherwise 分支留证；未启动服务、未执行 section 4、未发送 browser_click；既有 record/ 相关改动原状，与本轮 gate-readiness 无关。
+- blocker(high)：gate 不可达，:3080 仍无监听者，需服务负责人恢复 dsh web host。
+- 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 75 轮（516-590），建议 planner 改为恢复事件触发或授权归档历史 Round note。

@@ -1,8 +1,9 @@
-## Round 589 - 2026-09-22T02:01:39+08:00
-- Round 589，本地当前时间已过指定触发时间 2026-09-11T10:00:00+08:00。
+## Round 590 - 2026-09-22T02:21:36+08:00
+- Round 590，本地当前时间已过指定触发时间 2026-09-11T10:00:00+08:00。
 - 命令：python examples\dsh-gate-readiness.py。
 - 输出：ready=false；status_code=null；error=<urlopen error timed out>；probe 观测退出码 2。
-- 落地：追加 docs/dsh-web-acceptance.md Round 589 evidence；刷新 last、last-message、last-round。
+- 旁证：listener_count=0；dsh_count=0；:3080 无监听者，且无 dsh 进程。
+- 落地：追加 docs/dsh-web-acceptance.md Round 590 evidence；刷新 last、last-message、last-round。
 - 未启动服务、未执行 section 4、未发送 browser_click、未早期复探；record/ 既有改动原状，本轮未染指。
 - 提交本轮 patrol files，标 [auto-patrol]；维持本地 commit、不 push。
 
@@ -13,4 +14,4 @@
 
 ## blocker
 - high：gate 未就绪，probe 连续超时，需服务负责人恢复 dsh web host。
-- medium：同质 evidence 已连 74 轮（516-589），继续逐轮追加浪费巡检额度。
+- medium：同质 evidence 已连 75 轮（516-590），继续逐轮追加浪费巡检额度。
