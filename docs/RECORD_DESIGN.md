@@ -136,6 +136,7 @@ graph.to_dot()                                      # DAG DOT
 | `python examples/demo_prompt.py` | prompt (mock backend) | 跑通：2 个 trajectory / DAG 8 nodes / 3 种格式 |
 | `python examples/demo_real.py Edge` | show (真实 OpenEyes) | 跑通：真实 Edge 50 元素 / 5 步 trajectory |
 | `python examples/record_demo_real.py Edge` + chrome bridge probe | 双路径 schema | 2026-09-22：真实 Edge 428 元素 / 5 步；Python `Trajectory.load` 可读 bridge 13 步，JS `parseJSONL` 可读 native 5 步 |
+| temporary headless Edge bridge runner | 双路径 schema | 2026-09-22 Round 593：真实 Edge 5 步 artifact `examples/record-out/trajectory-edge-real.jsonl`；与 UIA 基线同为 5 步，Python load + JSONL reparse 双向一致 |
 | `LLM_API_KEY=... python examples/demo_prompt.py --real` | prompt (real backend) | 待用户配置 key 后跑 |
 
 输出在 `examples/out/`：

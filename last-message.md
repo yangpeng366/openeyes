@@ -1,15 +1,15 @@
-## Round 592 - 2026-09-22T04:31:13+08:00
-- 方向：OpenEyes Record；复测真实 Edge bridge 与 backend=jev。
-- 落地：commit 2e6a8b3，修复 FakeJevScorer 单候选 fallback 时 prob=1.01 越界，新增边界回归测试。
-- 实测：临时 headless Edge CDP 9334 跑 bridge-five.js，header/actual 均 5 steps，actions=[click,click,type,type,type]，stopReason=idle。
-- 双向 schema：CDP bridge 与真实 UIA JSONL 均通过 Trajectory.load；steps 5/5。
-- JEV smoke：backend=jev 命中 FakeJevScorer，thresholds low=0.60、high=0.85。
-- 测试：python -m pytest tests -q，188 passed；改动文件 BOM=false；本地 commit，不 push。
+## Round 593 - 2026-09-22T07:11:03+08:00
+- 方向：OpenEyes Record；复验真实 Edge bridge 与 UIA schema 双向对齐。
+- 落地：真实 Edge 5 步产物 examples/record-out/trajectory-edge-real.jsonl，docs/RECORD_DESIGN.md 增补 Round 593 证据。
+- 实测：headless Edge 执行 click、sendCharacter、click；actions=[click,click,type,click,click]。
+- 对比：examples/record-out/trajectory_real.jsonl 与 Edge 产物均 5 步，均可 Trajectory.load 并 JSONL reparse。
+- 测试：python -m pytest tests -q，188 passed；产物/记录 BOM=false。
+- 维持本地分支不 push；未改 openeyes 核心源码。
 
 ## 下一轮要看的具体点
+- 将临时 Edge runner 沉淀为不依赖绝对 D:/ 路径的可复现 example。
 - 用真实 TYPESAFE_API_KEY 手工 smoke TypesafeJevScorer 路径。
-- 评估是否将 feat/decision-jev-layer 本地领先提交推送 origin（本轮仍不 push）。
-- 若 Edge 非 headless 常规调试链路需要验收，用可见窗口复跑一次 bridge-five。
+- 评估 feat/decision-jev-layer 本地 ahead 28 是否推送 origin。
 
 ## blocker
-- low：本机未配置 TYPESAFE_API_KEY，真实 TypeSafe JEV 无法实测。
+- low：本机仍未配置 TYPESAFE_API_KEY，真实 TypeSafe JEV 无法实测。
