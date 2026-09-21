@@ -1,17 +1,15 @@
-## Round 590 - 2026-09-22T02:21:36+08:00
-- Round 590，本地当前时间已过指定触发时间 2026-09-11T10:00:00+08:00。
-- 命令：python examples\dsh-gate-readiness.py。
-- 输出：ready=false；status_code=null；error=<urlopen error timed out>；probe 观测退出码 2。
-- 旁证：listener_count=0；dsh_count=0；:3080 无监听者，且无 dsh 进程。
-- 落地：追加 docs/dsh-web-acceptance.md Round 590 evidence；刷新 last、last-message、last-round。
-- 未启动服务、未执行 section 4、未发送 browser_click、未早期复探；record/ 既有改动原状，本轮未染指。
-- 提交本轮 patrol files，标 [auto-patrol]；维持本地 commit、不 push。
+## Round 591 - 2026-09-22T04:09:58+08:00
+- 方向：OpenEyes Record；本轮推进 `backend=jev` 与真实 Edge schema 对齐。
+- 落地：commit e422610（feat/decision-jev-layer），新增 record 包、Jev generator、RECORD_DESIGN、record demo 与 29 条 record tests。
+- 实测：`python examples\record_demo_real.py Edge` 输出 5 steps，actions=[click x5]。
+- 反向校验：真实 UIA JSONL 与既有 CDP bridge JSONL 均可 `Trajectory.load`，round-trip steps 完全相等。
+- 既有 bridge 产物 5 steps，actions=[click, click, type, type, type]；header.source=chrome-recorder-bridge。
+- 测试：`python -m pytest tests -q`，187 passed；BOM check OK；本地 commit，不 push。
 
 ## 下一轮要看的具体点
-- 优先等待事件触发旁证（人工确认 dsh 服务恢复 / :3080 监听恢复），再决定是否重跑 readiness probe。
-- 仅 HTTP 200 时执行 docs/dsh-web-acceptance.md section 4；否则只追加同轮 evidence。
-- 建议方向表改为恢复事件触发，或在授权后归档历史 Round note（516-589 共 74 轮同质 evidence）。
+- 若 Edge 9222 debug 端口已开，重跑 `D:\gitAll\auto-deploy\bridge-five.js` 刷新 CDP 5-step 实测产物。
+- 用真实 `TYPESAFE_API_KEY` 手工 smoke `backend=jev` 的 TypesafeJevScorer 路径。
+- 评估是否将 feat/decision-jev-layer 本地 25 个领先提交推送 origin。
 
 ## blocker
-- high：gate 未就绪，probe 连续超时，需服务负责人恢复 dsh web host。
-- medium：同质 evidence 已连 75 轮（516-590），继续逐轮追加浪费巡检额度。
+- low：当前无 9333/9222 Edge debug 监听，本轮复用既有真实 bridge 产物，未重复拉起浏览器。
