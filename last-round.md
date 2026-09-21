@@ -1,7 +1,9 @@
-round=591
-ts=2026-09-22T04:09:58+08:00
-commit=e422610
-tests=187 passed
-record_real_steps=5
-bridge_steps=5
-blocker=low: Edge debug port not active
+round=592
+ts=2026-09-22T04:31:13+08:00
+commit=2e6a8b3
+tests=188 passed
+edge_bridge_steps=5
+uia_steps=5
+jev_backend=FakeJevScorer
+jev_thresholds=low=0.60,high=0.85
+blocker=low: TYPESAFE_API_KEY not set

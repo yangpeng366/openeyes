@@ -1,15 +1,15 @@
-## Round 591 - 2026-09-22T04:09:58+08:00
-- 方向：OpenEyes Record；本轮推进 `backend=jev` 与真实 Edge schema 对齐。
-- 落地：commit e422610（feat/decision-jev-layer），新增 record 包、Jev generator、RECORD_DESIGN、record demo 与 29 条 record tests。
-- 实测：`python examples\record_demo_real.py Edge` 输出 5 steps，actions=[click x5]。
-- 反向校验：真实 UIA JSONL 与既有 CDP bridge JSONL 均可 `Trajectory.load`，round-trip steps 完全相等。
-- 既有 bridge 产物 5 steps，actions=[click, click, type, type, type]；header.source=chrome-recorder-bridge。
-- 测试：`python -m pytest tests -q`，187 passed；BOM check OK；本地 commit，不 push。
+## Round 592 - 2026-09-22T04:31:13+08:00
+- 方向：OpenEyes Record；复测真实 Edge bridge 与 backend=jev。
+- 落地：commit 2e6a8b3，修复 FakeJevScorer 单候选 fallback 时 prob=1.01 越界，新增边界回归测试。
+- 实测：临时 headless Edge CDP 9334 跑 bridge-five.js，header/actual 均 5 steps，actions=[click,click,type,type,type]，stopReason=idle。
+- 双向 schema：CDP bridge 与真实 UIA JSONL 均通过 Trajectory.load；steps 5/5。
+- JEV smoke：backend=jev 命中 FakeJevScorer，thresholds low=0.60、high=0.85。
+- 测试：python -m pytest tests -q，188 passed；改动文件 BOM=false；本地 commit，不 push。
 
 ## 下一轮要看的具体点
-- 若 Edge 9222 debug 端口已开，重跑 `D:\gitAll\auto-deploy\bridge-five.js` 刷新 CDP 5-step 实测产物。
-- 用真实 `TYPESAFE_API_KEY` 手工 smoke `backend=jev` 的 TypesafeJevScorer 路径。
-- 评估是否将 feat/decision-jev-layer 本地 25 个领先提交推送 origin。
+- 用真实 TYPESAFE_API_KEY 手工 smoke TypesafeJevScorer 路径。
+- 评估是否将 feat/decision-jev-layer 本地领先提交推送 origin（本轮仍不 push）。
+- 若 Edge 非 headless 常规调试链路需要验收，用可见窗口复跑一次 bridge-five。
 
 ## blocker
-- low：当前无 9333/9222 Edge debug 监听，本轮复用既有真实 bridge 产物，未重复拉起浏览器。
+- low：本机未配置 TYPESAFE_API_KEY，真实 TypeSafe JEV 无法实测。
