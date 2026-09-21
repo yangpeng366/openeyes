@@ -342,6 +342,13 @@ def test_jevscore_probabilities_field_is_frozen():
     assert isinstance(r.probabilities, frozenset)
 
 
+def test_fake_jev_single_candidate_fallback_probability_is_valid():
+    score = FakeJevScorer().ask(goal="click the Save button", candidates=["Save"])
+    assert score.target_index == 0
+    assert score.prob == 1.0
+    assert score.probabilities == frozenset({("0", 1.0)})
+
+
 def test_jevscore_rejects_non_dict_probabilities():
     """probabilities must be dict or frozenset."""
     with pytest.raises(TypeError):

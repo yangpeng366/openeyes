@@ -204,7 +204,7 @@ class FakeJevScorer(JevScorer):
         # Default fallback: low confidence + uniform-ish probabilities
         # (just above 1/n so top-1 == choice under the contract).
         n = len(candidates)
-        prob_floor = (1.0 / n) + 0.01 if n > 0 else 0.0
+        prob_floor = 1.0 if n == 1 else ((1.0 / n) + 0.01 if n > 0 else 0.0)
         return self._build(0, 0.55, prob_floor, candidates)
 
 
