@@ -136,12 +136,74 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
 ---
 
+<a id="record"></a>
+
+## Record & Replay (v0.2.0)
+
+**No screenshots, no vision model required.** Every recorded step is a structured `(element, action)` pair — pure text that any LLM can read, reason about, and replay.
+
+### Two capture paths (not mutually exclusive)
+
+| Path | How | When |
+|---|---|---|
+| **A — Show** | Human demonstrates; `Recorder.record_click()` / `record_type()` captures element schema | monkeybot-style, real workflow |
+| **B — Prompt** | Human describes intent; LLM or optional JEV backend generates a `Trajectory` from prompt + element inventory | WorkBuddy-style, zero-demo |
+
+### Quick example
+
+```python
+from openeyes.record import Recorder, Replayer, to_natural_language
+from openeyes.record.export import to_codex_skill
+
+# Path A: show
+r = Recorder()
+r.start(name="rotate-vpn", app_name="AnyVPN")
+r.record_click(hwnd, element, intent="open VPN client")
+r.record_click(hwnd, element, intent="click Connect")
+r.record_wait(2000, intent="wait for tunnel")
+traj = r.stop()
+
+# Inspect
+print(to_natural_language(traj))       # plain English steps
+print(to_codex_skill(traj))            # Codex SKILL.md
+
+# Replay (dry-run)
+report = Replayer(dry_run=True).replay(traj)
+```
+
+### Export formats
+
+| Format | Use case |
+|---|---|
+| `to_codex_skill()` | Generate a Codex / OpenAI skill from recording |
+| `to_action_receipt()` | ai-action-trace-receipt-standard v0.5 YAML audit trail |
+| `to_opencua_trajectory()` | OpenCUA AgentNet-compatible JSONL |
+| `merge_trajectories()` | Build a DAG from N recordings of the same workflow |
+| `to_natural_language()` | Plain-English step list for LLM consumption |
+
+### Demos
+
+```powershell
+python examples\record_demo_mock.py        # no UI needed — fake elements
+python examples\record_demo_prompt.py      # LLM generates trajectory from prompt
+python examples\record_demo_real.py        # real Edge window (needs openeyes installed)
+```
+
+`generate_trajectory_from_prompt(..., backend="jev")` uses the deterministic
+fake JEV scorer by default and switches to TypeSafe only when
+`TYPESAFE_API_KEY` is configured. Confidence routing reuses `0.85` / `0.60`.
+
+See [`docs/RECORD_DESIGN.md`](docs/RECORD_DESIGN.md) for the full design rationale.
+
+---
+
 <a id="roadmap"></a>
 
 ## Roadmap
 
 - [x] **v0.1.0** — MVP: UIA capture/detect/click + CLI + MCP + 飞书 first showcase
-- [ ] **v0.2.0** — Vision backend (OmniParser v2 / Florence-2)
+- [x] **v0.2.0** — Record & Replay: show-and-prompt trajectory capture, no vision required
+- [ ] **v0.3.0** — Vision backend (OmniParser v2 / Florence-2)
 - [ ] **v0.3.0** — macOS (AXUIElement) + Linux (AT-SPI)
 - [ ] **v0.4.0** — Vimium-style letter hint overlay
 - [ ] **v0.5.0** — LLM intent resolver
@@ -169,14 +231,27 @@ openeyes/
 │   │   └── win32.py       # Windows mouse/keyboard input
 │   ├── cli/               # `eyes` command
 │   │   └── main.py
+│   ├── record/             # Record & Replay (v0.2.0, no vision required)
+│   │   ├── event.py        # UIAEvent / InputEvent / Trajectory dataclasses
+│   │   ├── recorder.py     # Path A: show-and-capture
+│   │   ├── replayer.py     # Trajectory → OpenEyes actuate() calls
+│   │   ├── abstract.py     # merge_trajectories DAG + natural-language rendering
+│   │   ├── generator.py    # Path B: prompt → trajectory (LLM-driven)
+│   │   ├── prompt_template.py
+│   │   └── export/         # codex_skill / action_receipt / opencua exporters
 │   └── mcp/               # MCP server — 13 tools (7 native + 6 browser)
 │       └── server.py
 ├── docs/
 │   ├── architecture.md
+│   ├── RECORD_DESIGN.md        # Record & Replay design rationale
 │   ├── capability-contract.md   # 13-tool MCP contract (read / write / high-risk)
 │   └── dsh-web-acceptance.md    # manual acceptance guide for dsh web
 ├── examples/
 │   ├── feishu_first_test.py
+│   ├── record_demo_mock.py      # Record: fake elements, all exports
+│   ├── record_demo_prompt.py    # Record: LLM generates trajectory
+│   ├── record_demo_real.py      # Record: real Edge window
+│   ├── record-out/              # Sample export outputs
 │   ├── anyvpn_keepalive.py      # + launch-anyvpn-keepalive.ps1
 │   ├── mcp-stdio-probe.py       # MCP stdio mount smoke test
 │   ├── dsh-preflight.ps1        # dsh web preflight (read-only)
@@ -186,6 +261,7 @@ openeyes/
 │   ├── dsh-openeyes-mcp.yml     # web profile for dsh
 │   └── README.md
 ├── tests/
+│   ├── test_record.py           # Record & Replay unit tests (no UI needed)
 │   ├── test_smoke.py
 │   ├── test_cdp.py
 │   ├── test_hints.py

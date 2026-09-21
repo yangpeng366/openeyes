@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openeyes"
-version = "0.1.0"
+version = "0.2.0"
 description = "OpenEyes — AI-friendly computer-use primitives for Windows/macOS/Linux"
 readme = "README.md"
 license = { text = "MIT" }
@@ -21,6 +21,9 @@ keywords = [
     "mcp",
     "vision",
     "openeyes",
+    "record",
+    "trajectory",
+    "no-vision",
 ]
 requires-python = ">=3.10"
 classifiers = [

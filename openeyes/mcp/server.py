@@ -45,6 +45,7 @@ from openeyes.core.capture import capture_window, capture_screen
 from openeyes.core.selector import detect_elements, find_elements
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.hints import assign_hints
+from openeyes.core.safety import is_foreground_window, validate_text_entry
 from openeyes.backends import cdp as browser_backend
 
 server = Server("openeyes")
@@ -239,6 +240,10 @@ async def list_tools() -> list[Tool]:
                     "idx": {"type": "integer"},
                     "name_contains": {"type": "string"},
                     "control_type": {"type": "string"},
+                    "source_text": {
+                        "type": "string",
+                        "description": "user text that authorizes text",
+                    },
                     "url_contains": {"type": "string"},
                     "press_enter": {"type": "boolean", "default": False},
                     "dry_run": {"type": "boolean", "default": True},
@@ -338,6 +343,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 target = matches[0]
                 cx, cy = target.center.x, target.center.y
             if not dry_run:
+                guard_hwnd = arguments.get("hwnd")
+                if guard_hwnd and not is_foreground_window(guard_hwnd):
+                    return [TextContent(type="text", text=_to_json({
+                        "error": "focus guard: target window is not foreground",
+                        "hwnd": guard_hwnd,
+                        "tool": name,
+                    }))]
                 click_xy(cx, cy, button=arguments.get("button", "left"),
                          double=arguments.get("double", False))
             return [TextContent(type="text", text=_to_json({
@@ -516,6 +528,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 text = arguments["text"]
                 url_contains = arguments.get("url_contains")
                 press_enter = bool(arguments.get("press_enter", False))
+                source_text = arguments.get("source_text")
                 has_target = any(arguments.get(k) is not None for k in
                                  ("hint", "idx", "name_contains", "control_type"))
                 if dry_run and not has_target:
@@ -568,6 +581,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if not chosen and elems:
                         chosen = elems[0]
                 if not dry_run:
+                    if chosen is None:
+                        focused = next(
+                            (e for e in browser_backend.scan_dom(conn)
+                             if e.state.focused),
+                            None,
+                        )
+                        validate_text_entry(
+                            text, focused, source_text=source_text)
+                    else:
+                        validate_text_entry(
+                            text, chosen, source_text=source_text)
                     browser_backend.type_text(
                         conn, text, element=chosen, press_enter=press_enter,
                     )

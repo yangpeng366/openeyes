@@ -24,6 +24,10 @@ Why FakeJevScorer matters:
   `state[key] is True` to avoid KeyError on missing keys.
 """
 from __future__ import annotations
+import json
+import os
+import time
+import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -202,3 +206,101 @@ class FakeJevScorer(JevScorer):
         n = len(candidates)
         prob_floor = (1.0 / n) + 0.01 if n > 0 else 0.0
         return self._build(0, 0.55, prob_floor, candidates)
+
+
+class TypesafeJevScorer(JevScorer):
+    """Real Jev scorer backed by the TypeSafe ``choice`` protocol."""
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        base_url: str | None = None,
+        model: str = "jev-latest",
+        timeout: float = 25.0,
+    ) -> None:
+        if not api_key:
+            raise ValueError("TYPESAFE_API_KEY is required")
+        self.api_key = api_key
+        self.base_url = (
+            base_url
+            or os.environ.get("TYPESAFE_BASE_URL")
+            or "https://api.typesafe.ai"
+        ).rstrip("/")
+        self.model = model
+        self.timeout = timeout
+
+    def _url(self) -> str:
+        if self.base_url.endswith("/systemone"):
+            return self.base_url
+        if self.base_url.endswith("/v1"):
+            return f"{self.base_url}/systemone"
+        return f"{self.base_url}/v1/systemone"
+
+    def _request(self, goal: str, candidates: list[str], *, app_name: str) -> dict:
+        criteria = {
+            str(index): candidate or f"candidate {index}"
+            for index, candidate in enumerate(candidates)
+        }
+        payload = {
+            "model": self.model,
+            "state": {"app_name": app_name, "goal": goal},
+            "questions": {
+                "target": {
+                    "type": "choice",
+                    "instructions": (
+                        "Select the single UI element that best matches the goal. "
+                        "Return none only if no candidate can advance the goal."
+                    ),
+                    "criteria": criteria,
+                }
+            },
+        }
+        request = urllib.request.Request(
+            self._url(),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                body = response.read().decode("utf-8")
+        except Exception as exc:
+            raise JevAskError(f"TypeSafe Jev request failed: {exc}") from exc
+        latency_ms = max(0, round((time.perf_counter() - started) * 1000))
+        try:
+            return {"body": json.loads(body), "latency_ms": latency_ms}
+        except json.JSONDecodeError as exc:
+            raise JevAskError("TypeSafe Jev returned malformed JSON") from exc
+
+    def ask(self, goal: str, candidates: list[str], *, app_name: str = "") -> JevScore:
+        result = self._request(goal, candidates, app_name=app_name)
+        answer = result["body"].get("answers", {}).get("target")
+        if not isinstance(answer, dict):
+            raise JevAskError("TypeSafe Jev response is missing answers.target")
+        choice = answer.get("choice")
+        confidence = answer.get("confidence")
+        probabilities = answer.get("probabilities")
+        if not isinstance(choice, str) or not isinstance(probabilities, dict):
+            raise JevAskError("TypeSafe Jev choice answer is malformed")
+        try:
+            confidence_value = float(confidence)
+            validate_probabilities(
+                probabilities,
+                choice,
+                [str(index) for index in range(len(candidates))],
+            )
+            return JevScore(
+                target_index=int(choice),
+                confidence=confidence_value,
+                prob=float(probabilities[choice]),
+                latency_ms=result["latency_ms"],
+                raw=answer,
+                probabilities=probabilities,
+            )
+        except (TypeError, ValueError, KeyError) as exc:
+            raise JevAskError(f"TypeSafe Jev choice answer is invalid: {exc}") from exc

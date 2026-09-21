@@ -24,12 +24,14 @@ Why a thin layer (not a fork of JevClient):
 from __future__ import annotations
 from openeyes.decision.threshold import ThresholdConfig, classify_confidence, DecisionBand
 from openeyes.decision.action import Action, ActionKind
-from openeyes.decision.scorer import JevScorer, FakeJevScorer, JevAskError, JevScore
+from openeyes.decision.scorer import (
+    JevScorer, FakeJevScorer, TypesafeJevScorer, JevAskError, JevScore,
+)
 from openeyes.decision.router import decide, DecisionContext
 
 __all__ = [
     "ThresholdConfig", "classify_confidence", "DecisionBand",
     "Action", "ActionKind",
-    "JevScorer", "FakeJevScorer", "JevAskError", "JevScore",
+    "JevScorer", "FakeJevScorer", "TypesafeJevScorer", "JevAskError", "JevScore",
     "decide", "DecisionContext",
 ]
