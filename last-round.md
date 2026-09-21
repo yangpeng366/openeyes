@@ -1,9 +1,9 @@
-round=593
-ts=2026-09-22T07:11:03+08:00
-commit=ed91c45
+round=594
+ts=2026-09-22T07:33:26+08:00
+commit=43787dd
 tests=188 passed
-edge_bridge_steps=5
-uia_steps=5
-actions=click,click,type,click,click
-roundtrip=true
+edge_example=record_edge_demo.js
+vendored_bridge=true
+no_absolute_dpath=true
+python_roundtrip=19 steps OK
 blocker=low: TYPESAFE_API_KEY not set
