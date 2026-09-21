@@ -7517,3 +7517,18 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；未启动服务、未执行 section 4、未发送 browser_click；既有 record/ 相关改动原状，与本轮 gate-readiness 无关。
 - blocker(high)：gate 不可达，:3080 仍无监听者，需服务负责人恢复 dsh web host；HNS 或 EDR 根因仍未复核。
 - 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 71 轮（516-586），建议 planner 改为恢复事件触发或授权归档历史 Round note。
+
+## Round 587 evidence - 2026-09-22 (dsh gate-readiness not ready) [auto-patrol]
+- 记录时间：2026-09-22T01:20:57+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py。
+- 原始输出：ready=false；status_code=null；error=<urlopen error timed out>；next_recheck=2026-09-10T16:30:00+08:00；probe 观测退出码 1。
+- 按 otherwise 分支留证；本轮 probe 已跑一次，不再早期复探；未启动服务、未执行 section 4。
+- blocker(high)：gate 不可达，需服务负责人恢复 dsh web host。
+- 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 72 轮（516-587），建议 planner 改为恢复事件触发或授权归档历史 Round note。
+## Round 588 evidence - 2026-09-22 (dsh gate-readiness not ready) [auto-patrol]
+- 记录时间：2026-09-22T01:41:03+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
+- 命令：python examples\dsh-gate-readiness.py。
+- 原始输出：ready=false；status_code=null；error=<urlopen error timed out>；next_recheck=2026-09-10T16:30:00+08:00；probe 观测退出码 2。
+- 按 otherwise 分支留证；本轮 probe 已跑一次，不再早期复探；未启动服务、未执行 section 4、未发送 browser_click。
+- blocker(high)：gate 不可达，需服务负责人恢复 dsh web host。
+- 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 73 轮（516-588），建议 planner 改为恢复事件触发或授权归档历史 Round note。
