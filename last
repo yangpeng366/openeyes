@@ -1,19 +1,17 @@
-## Round 565 - 2026-09-21T18:01:56+08:00
-- Round 565, 2026-09-21T18:01:56+08:00；指定触发时间 2026-09-11T10:00:00+08:00 已过。
-- 命令：python examples\dsh-gate-readiness.py
-- 输出：ready=false, status_code=null, error=<urlopen error timed out>；exit 2。
-- 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen Count=0，Get-Process dsh Count=0；与 round-530/.../564 一致；沿用 round-446 结论（dsh 已装未启、HNS/EDR 阻断）。
-- 落地：docs/dsh-web-acceptance.md 追加 ## Round 565 evidence；刷新 last + .codex/last-message.md + .codex/last-patrol-message.md + .codex/patrol/openeyes-2026-09-21-round-565-gate-readiness.md；未启动服务、未执行 section 4、未早期复探。
-- 工作树：record/ 特征改(M6+??8)原状，本轮仅 doc-only，未染指 record/；与本轮 gate-readiness 无关，留待后续人工评审后再处理。
-- 计划提交本轮 doc-only（docs/dsh-web-acceptance.md + last + .codex/last-message.md + .codex/last-patrol-message.md + .codex/patrol/openeyes-2026-09-21-round-565-gate-readiness.md），[auto-patrol] 标签；HEAD 仍 ahead origin/main 累计，遵循既有 auto-patrol 本地 commit / 不 push 模式。
-- 脚本 next_recheck 默认 2026-09-10T16:30:00+08:00（已过期），本轮未覆盖；事件驱动复探更经济，不再据此立即复探。
+## Round 566 - 2026-09-21T18:22:53+08:00
+- Round 566，2026-09-21T18:22:53+08:00；指定触发时间已过。
+- 命令：python examples\dsh-gate-readiness.py。
+- 输出：ready=false / status_code=null / error=urlopen timed out；exit 2。
+- 旁证：:3080 listener Count=0；dsh process Count=0。
+- 落地：docs 追加 Round 566 evidence；刷新 last、last-message、last-patrol-message 与 round-566 证据档。
+- 未启动服务、未执行 section 4、未早期复探；record/ 既有改动原状，本轮未染指。
+- 提交本轮 doc-only patrol files，标 [auto-patrol]；维持本地 commit、不 push。
 
 ## 下一轮要看的具体点
-- 服务负责人确认恢复后运行 readiness probe；仅 HTTP 200 时执行 docs/dsh-web-acceptance.md section 4。
-- 沿用 round-564 建议：先 Get-NetTCPConnection -LocalPort 3080 -State Listen；有监听者 -> 重跑 probe；无监听者 -> 仅刷新 last + last-message.md + 追加 docs/dsh-web-acceptance.md。
-- 事件驱动复探更经济；脚本默认 next_recheck=2026-09-10T16:30:00+08:00 是过期默认值，不据此立即复探。
-- 若用户授权归档历史 Round note，可一次性裁剪 docs/dsh-web-acceptance.md 中的 Round 516-565 段（保留最末 1-2 段作为近况）。
+- 先作 :3080 监听旁证；有监听者才重跑 readiness probe。
+- 仅 HTTP 200 时执行 docs/dsh-web-acceptance.md section 4；否则只追加同轮 evidence。
+- 建议方向表改为恢复事件触发，或在授权后归档历史 Round note。
 
 ## blocker
-- high：gate 未就绪，需服务负责人恢复 :3080 HTTP 服务；本轮确认 :3080 无监听者，未查明 HNS 或 EDR 根因。
-- medium：runbook 同质 evidence 已连 50 轮(516-565)，建议改方向表为事件驱动复探，或授权归档历史 Round note。
+- high：gate 未就绪，:3080 无监听者，需服务负责人恢复 dsh web host。
+- medium：同质 evidence 已连 51 轮（516-566），继续逐轮追加浪费巡检额度。
