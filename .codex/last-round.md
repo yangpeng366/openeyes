@@ -1,5 +1,5 @@
-round=601
-ts=2026-09-22T12:05:00+08:00
+round=602
+ts=2026-09-22T11:55:00+08:00
 status=completed
-summary=record replay dry-run CLI landed; 198 tests passed; real edge smoke replayed 5 actions
-evidence_commit=2704c56
+summary=hybrid_generate transport contract tests landed; 4/4 mock-transport tests pass; full suite 201 + 1 pre-existing flaky
+evidence_commit=03351cc

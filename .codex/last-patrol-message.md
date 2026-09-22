@@ -1,9 +1,14 @@
-## Round 601 - 2026-09-22
-- 落地：`eyes record replay <jsonl> [--json]` 安全 dry-run CLI；输出动作计划、跳过数与错误数，不发送真实输入。
-- 文件：`openeyes/cli/main.py`、`tests/test_cli_record.py`、`README.md`；提交 `2704c56`。
-- 命令：`python -m pytest -q`（198 passed）；`eyes record replay examples/record-out/trajectory-edge-real.jsonl --json`（5 planned / 0 skipped / 0 errors）。
-- BOM 检查：新增/修改源文件前三字节非 `EF BB BF`。
-- 方向前三项（bridge、JEV backend、真实 Edge 5 步 schema 双向对齐）已由 Round 600 验证闭环。
+## Round 602 - 2026-09-22
+- 项目: OpenEyes Record; 推进方向表"下一步"（Round 600/601 已闭环的 bridge / jev / 真实 Edge 三项本轮确认无新动作）。
+- 本轮做小步: hybrid_generate transport contract 测试 4 条；提交 03351cc。
+- 验证：pytest TestHybridGenerateTransport 4/4 passed；full suite 201 passed + 1 pre-existing flaky（test_helper_help_exits_zero_and_prints_usage，与本改动无关，单独隔离可过）。
+- BOM：tests/test_record.py 前三字节 22 22 22，无 BOM。
+- 工作树 clean，ahead origin 46。
 
 ## 下一轮要看的具体点
-- 为 `hybrid_generate` 真实 LLM 适配边界补 mock-transport 集成测试，验证 key 存在、超时与 fallback 契约。
+- 复跑 full pytest 确认 flaky 不会扩张；若扩张则降级到 --deselect 而非修复 launch_debug_edge。
+- 推送窗口：feat/decision-jev-layer 已积累 46 commits；建议拆成 2-3 个 PR 而不是单 PR 推 46 commits。
+
+## blocker
+- low: 本机 TYPESAFE_API_KEY / LLM_API_KEY 未配，hybrid_generate 真实路径仅靠 monkeypatch 测；不影响本仓合并但限制手工 smoke。
+- low: test_launch_debug_edge.py 偶发 flaky（order-dependent），不属本轮范围。
