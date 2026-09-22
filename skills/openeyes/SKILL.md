@@ -113,6 +113,42 @@ typing text. `browser_type` may scan the DOM in dry-run mode when a selector
 is supplied, but it never focuses, types, or presses Enter until execution is
 explicitly enabled.
 
+## Lightpanda backend (CDP, low RAM, unattended)
+
+Lightpanda is an AI-native headless browser written in Zig with a minimal
+memory footprint (about 123 MB peak for 100 pages, vs about 2 GB for Chrome
+headless). It speaks Chrome DevTools Protocol on port 9222 and is binary-
+compatible with Puppeteer / Playwright clients.
+
+```bash
+# WSL2 + Docker 29.x already installed on this host. The CLI wraps the run.
+eyes browser launch --backend lightpanda --url https://example.com
+```
+
+MCP: `browser_launch(backend="lightpanda", url="https://example.com")`.
+
+### When Lightpanda is the right pick
+
+- Bulk structured extraction across many URLs / sessions.
+- Concurrent crawls where Chrome headless would exhaust RAM.
+- Unattended batch jobs that do not need human-in-the-loop.
+- Cookies / profile can be discarded at the end of each session.
+
+### When Lightpanda is NOT the right pick
+
+- Login wall / 2FA / persistent cookies across launches. Each Lightpanda
+  session has its own cookies and there is no profile seed.
+- Anything that needs a screenshot. Lightpanda has no graphical rendering
+  backend; `eyes browser shot` returns an empty PNG on this backend.
+- Canvas-only / WebGL UIs (Lightpanda does not render pixels).
+
+### Hard-won facts
+
+- Requires WSL2 + Docker on Windows. `wsl -e docker run -d --name lightpanda --rm -p 127.0.0.1:9222:9222 lightpanda/browser:nightly`
+- WSL forwards `localhost:9222` to the Windows host, so the OpenEyes CDP client keeps using `127.0.0.1:9222`.
+- Health probe: `http://127.0.0.1:9222/json/version` must respond before the launch returns.
+- First run pulls lightpanda/browser:nightly (~150 MB); subsequent runs reuse the local image.
+
 ## When to use which backend
 
 | Scenario | Backend | Why |
@@ -121,6 +157,7 @@ explicitly enabled.
 | Real Chromium browser page (login wall, multi-step form, JS-driven UI) | CDP | Structured, no image cost |
 | WebView2 inside a UWP / Edge legacy URL bar / canvas-only UI | CDP (browser) | UIA only sees the shell |
 | Custom canvas game / image-only button | Vision (Phase 3) | Last resort |
+| Bulk structured extraction, concurrent crawls, unattended batch jobs | CDP (`--backend lightpanda`) | ~123 MB RAM, 10x faster boot than Edge; no persistent profile, no screenshot |
 
 ## Tips
 

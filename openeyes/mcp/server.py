@@ -177,6 +177,9 @@ async def list_tools() -> list[Tool]:
                     "seed": {"type": "boolean", "default": True},
                     "headless": {"type": "boolean", "default": False},
                     "dry_run": {"type": "boolean", "default": True},
+                    "backend": {"type": "string", "enum": ["edge", "lightpanda"],
+                        "default": "edge",
+                        "description": "edge = persistent cookies (default); lightpanda = WSL2+Docker, ~123 MB RAM, no persistent profile."},
                 },
             },
         ),
@@ -405,6 +408,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             profile_dir = arguments.get("profile_dir")
             seed = arguments.get("seed", True)
             headless = arguments.get("headless", False)
+            backend = arguments.get("backend", "edge")
             if dry_run:
                 return [TextContent(type="text", text=_to_json({
                     "launched": False,
@@ -414,7 +418,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "profile_dir": profile_dir,
                     "seed": seed,
                     "headless": headless,
+                    "backend": backend,
                 }))]
+            if backend == "lightpanda":
+                from openeyes.backends import lightpanda as lp_backend
+                info = lp_backend.launch_lightpanda(port=port, url=url)
+                info = {**info, "launched": True, "dry_run": False}
+                return [TextContent(type="text", text=_to_json(info))]
             info = browser_backend.launch_edge(
                 port=port,
                 url=url,

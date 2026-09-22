@@ -284,9 +284,19 @@ def browser() -> None:
 @click.option("--seed/--no-seed", default=True,
               help="copy session slices from live Edge profile (Default)")
 @click.option("--headless", is_flag=True)
+@click.option("--backend", type=click.Choice(["edge", "lightpanda"]),
+              default="edge", show_default=True,
+              help="edge = real Edge (default, persistent cookies); "
+                   "lightpanda = WSL2 + Docker lightpanda/browser:nightly "
+                   "(~123 MB RAM, no persistent profile, no screenshot).")
 def browser_launch(url: str, port: int, profile_dir: str | None,
-                   seed: bool, headless: bool) -> None:
-    """Launch Edge with --remote-debugging-port=PORT."""
+                   seed: bool, headless: bool, backend: str) -> None:
+    """Launch a Chromium-family browser with --remote-debugging-port=PORT."""
+    if backend == "lightpanda":
+        from openeyes.backends import lightpanda as browser_backend
+        info = browser_backend.launch_lightpanda(port=port, url=url)
+        click.echo(json.dumps(info, ensure_ascii=False, indent=2))
+        return
     from openeyes.backends import cdp as browser_backend
     prof = browser_backend.Path(profile_dir) if profile_dir else None
     info = browser_backend.launch_edge(
