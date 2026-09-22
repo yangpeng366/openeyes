@@ -102,6 +102,7 @@ async function recordPage(page, opts) {
   let lastEventAt = startedAt;
   let stopped = false;
   let stopReason = null;
+  let suppressKeyEvents = false;
 
   async function pushUIA(event) {
     steps.push(event);
@@ -155,7 +156,7 @@ async function recordPage(page, opts) {
   };
 
   const onKeyEvent = async (event) => {
-    if (stopped) return;
+    if (stopped || suppressKeyEvents) return;
     try {
       const { type, modifiers, text, code, key } = event;
       if (type !== 'keyDown') return; // collapse keyDown/keyUp to one step
@@ -222,35 +223,58 @@ async function recordPage(page, opts) {
   };
   function modMask(modifiers) { return modifiers || 0; }
   kb.press = async function (key, opts) {
+    if (suppressKeyEvents) return orig.press(key, opts);
     await onKeyEvent({ type: 'keyDown', key, code: '', text: '', modifiers: modMask(opts && opts.modifiers) });
     return orig.press(key, opts);
   };
   kb.down = async function (key, opts) {
+    if (suppressKeyEvents) return orig.down(key, opts);
     await onKeyEvent({ type: 'keyDown', key, code: '', text: '', modifiers: modMask(opts && opts.modifiers) });
     return orig.down(key, opts);
   };
   kb.up = async function (key, opts) {
+    if (suppressKeyEvents) return orig.up(key, opts);
     await onKeyEvent({ type: 'keyUp', key, code: '', text: '', modifiers: modMask(opts && opts.modifiers) });
     return orig.up(key, opts);
   };
   if (orig.type) {
     kb.type = async function (text, opts) {
-      await onKeyEvent({ type: 'keyDown', key: '', code: '', text, modifiers: modMask(opts && opts.modifiers) });
-      return orig.type(text, opts);
+      suppressKeyEvents = true;
+      try {
+        await orig.type(text, opts);
+      } finally {
+        suppressKeyEvents = false;
+      }
+      return pushUIA({
+        ts: nowSeconds(),
+        action: 'type',
+        element: elementStub('', 0),
+        selector: 'combo=unknown',
+        app_name: options.appName,
+        window_title: await page.title().catch(() => ''),
+        hwnd: 0,
+        pid: 0,
+        intent: '',
+        input_text: text,
+        meta: {
+          source: 'cdp-browser',
+          input_length: text.length,
+          url: page.url(),
+        },
+      });
     };
   }
   if (orig.sendCharacter) {
     kb.sendCharacter = async function (ch) {
+      if (suppressKeyEvents) return orig.sendCharacter(ch);
       await onKeyEvent({ type: 'keyDown', key: '', code: '', text: ch, modifiers: 0 });
       return orig.sendCharacter(ch);
     };
   }
   ms.click = async function (x, y, opts) {
     const o = opts || {};
-    await onMouseEvent({ type: 'mousePressed', x, y, button: o.button || 'left', modifiers: modMask(o.modifiers), clickCount: o.count || 1, backendNodeId: 0, frameId: '' });
-    const r = await orig.click(x, y, opts);
-    await onMouseEvent({ type: 'mouseReleased', x, y, button: o.button || 'left', modifiers: modMask(o.modifiers), clickCount: o.count || 1, backendNodeId: 0, frameId: '' });
-    return r;
+    await orig.click(x, y, opts);
+    return onMouseEvent({ type: 'mouseReleased', x, y, button: o.button || 'left', modifiers: modMask(o.modifiers), clickCount: o.count || 1, backendNodeId: 0, frameId: '' });
   };
   ms.move = async function (x, y, opts) { return orig.move(x, y, opts); };
   // ms.down/up intentionally NOT wrapped: puppeteer's ms.click internally calls

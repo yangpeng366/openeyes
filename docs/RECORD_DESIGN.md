@@ -135,8 +135,8 @@ graph.to_dot()                                      # DAG DOT
 | `python examples/demo_mock.py` | show (FakeElement) | 跑通：7 步 / DAG 10 nodes / 5 种格式 |
 | `python examples/demo_prompt.py` | prompt (mock backend) | 跑通：2 个 trajectory / DAG 8 nodes / 3 种格式 |
 | `python examples/demo_real.py Edge` | show (真实 OpenEyes) | 跑通：真实 Edge 50 元素 / 5 步 trajectory |
-| `python examples/record_demo_real.py Edge` + chrome bridge probe | 双路径 schema | 2026-09-22：真实 Edge 428 元素 / 5 步；Python `Trajectory.load` 可读 bridge 13 步，JS `parseJSONL` 可读 native 5 步 |
-| examples/record_edge_demo.js | 双路径 schema | 2026-09-22 Round 594：可复现 headless Edge 录制 example；原始事件 19 步 → Python `Trajectory.load` 验证通过；无绝对路径依赖 |
+| `python examples/record_demo_real.py Edge` + chrome bridge probe | 双路径 schema | 2026-09-22：真实 Edge 428 元素 / 5 步；bridge 语义合并后 Python `Trajectory.load` 与 JS `parseJSONL` 双向读取 5 步 |
+| examples/record_edge_demo.js | 双路径 schema | 2026-09-22 Round 595：可复现 headless Edge 录制 example；5 个动作语义合并为 5 步，Python/JS 双向验证通过；无绝对路径依赖 |
 | `LLM_API_KEY=... python examples/demo_prompt.py --real` | prompt (real backend) | 待用户配置 key 后跑 |
 
 输出在 `examples/out/`：

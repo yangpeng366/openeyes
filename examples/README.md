@@ -190,8 +190,8 @@ python examples\feishu_first_test.py --target "通讯录" --go
 
 Reproducible headless Edge recording via the vendored `chrome-recorder-bridge`.
 Launches Edge, loads a data-URL page with buttons and an input, performs 5 user
-actions (click x3 + type), and writes a Trajectory JSONL that Python
-`Trajectory.load()` can parse.
+actions (click x3 + type), and writes one semantic Trajectory JSONL step per
+action that Python `Trajectory.load()` and JS `parseJSONL()` can parse.
 
 ```powershell
 # default output: examples/record-out/trajectory-edge-example.jsonl
