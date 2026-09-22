@@ -520,3 +520,100 @@ class TestHybridGenerate:
         result = hybrid_generate(recorded, "with few-shot", backend="mock",
                                  few_shot=[other])
         assert len(result.steps) == 2
+
+# ---- hybrid_generate transport contract (mock-transport integration) ----
+
+class TestHybridGenerateTransport:
+    """Verify the real-backend LLM path of hybrid_generate via a monkeypatched
+    transport. These tests cover the contract that was implicit in round 597:
+      - backend='real' returns LLM-refined steps when transport responds
+      - backend='real' with no key raises LLMUnavailable (no silent fallback)
+      - backend='real' falls back to mock when transport returns empty / malformed
+      - backend='auto' with no key falls back to mock (already covered above)
+    The point is to keep the contract tested without making a real network call.
+    """
+
+    def _make_recorded(self):
+        traj = Trajectory.new(name="hl-test", app_name="TestApp",
+                              description="orig")
+        traj.add(UIAEvent(
+            ts=1000.0, action="click",
+            element={"name": "OK", "control_type": "Button",
+                     "automation_id": "btnOk", "interactive": True},
+            selector="automation_id=btnOk", app_name="TestApp",
+            intent="Click OK",
+        ))
+        traj.close()
+        return traj
+
+    def test_real_with_canned_jsonl_returns_refined(self, monkeypatch):
+        from openeyes.record import hybrid as hybrid_mod
+        from openeyes.record.generator import LLMUnavailable
+
+        canned = json.dumps({
+            "action": "click",
+            "element": {
+                "name": "OK", "control_type": "Button",
+                "automation_id": "btnOk", "interactive": True,
+            },
+            "selector": "automation_id=btnOk",
+            "app_name": "TestApp",
+            "intent": "Refined intent: confirm the dialog",
+        })
+        monkeypatch.setattr(hybrid_mod, "_call_llm", lambda *a, **kw: canned)
+
+        recorded = self._make_recorded()
+        result = hybrid_mod.hybrid_generate(
+            recorded, "refined description", backend="real",
+            api_key="dummy-key-not-used",
+        )
+        assert len(result.steps) == 1
+        assert result.steps[0].action == "click"
+        assert result.steps[0].meta.get("source") == "hybrid_llm"
+        assert "Refined" in (result.steps[0].intent or "")
+        # suppress unused import lint
+        del LLMUnavailable
+
+    def test_real_with_empty_response_falls_back_to_mock(self, monkeypatch):
+        from openeyes.record import hybrid as hybrid_mod
+        from openeyes.record.generator import LLMUnavailable
+
+        monkeypatch.setattr(hybrid_mod, "_call_llm", lambda *a, **kw: "")
+        recorded = self._make_recorded()
+        result = hybrid_mod.hybrid_generate(
+            recorded, "fallback description", backend="real",
+            api_key="dummy-key-not-used",
+        )
+        # Empty transport → parser falls back to mock (recorded steps preserved).
+        assert len(result.steps) == 1
+        assert result.steps[0].meta.get("source") != "hybrid_llm"
+        del LLMUnavailable
+
+    def test_real_with_garbage_response_falls_back_to_mock(self, monkeypatch):
+        from openeyes.record import hybrid as hybrid_mod
+        from openeyes.record.generator import LLMUnavailable
+
+        monkeypatch.setattr(
+            hybrid_mod, "_call_llm", lambda *a, **kw: "not-jsonl\n{garbage",
+        )
+        recorded = self._make_recorded()
+        result = hybrid_mod.hybrid_generate(
+            recorded, "garbage description", backend="real",
+            api_key="dummy-key-not-used",
+        )
+        assert len(result.steps) == 1
+        assert result.steps[0].meta.get("source") != "hybrid_llm"
+        del LLMUnavailable
+
+    def test_real_without_key_raises_no_silent_fallback(self, monkeypatch):
+        from openeyes.record import hybrid as hybrid_mod
+        from openeyes.record.generator import LLMUnavailable
+
+        # Ensure no key leaks from the environment for this assertion.
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        recorded = self._make_recorded()
+        with pytest.raises(LLMUnavailable):
+            hybrid_mod.hybrid_generate(
+                recorded, "no key", backend="real",
+            )
