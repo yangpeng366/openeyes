@@ -1,9 +1,11 @@
-round=595
-ts=2026-09-22T08:50:08+08:00
+round=596
+ts=2026-09-22T09:05:42+08:00
 commit=010dbf8
 tests=188 passed
 edge_actions=click,click,type,click,click
+real_actions=click,click,click,click,click
 header_step_count=5
 python_roundtrip=5 steps OK
 js_parse=5 steps OK
+local_artifacts_ignored=true
 blocker=low: TYPESAFE_API_KEY not set
