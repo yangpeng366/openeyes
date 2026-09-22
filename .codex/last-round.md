@@ -1,5 +1,5 @@
-round=600
-ts=2026-09-22T10:40:00+08:00
+round=601
+ts=2026-09-22T12:05:00+08:00
 status=completed
-summary=schema verifier summary contract landed; 196 tests passed; real edge schema verified
-evidence_file=examples/record-out/record-schema-report.json
+summary=record replay dry-run CLI landed; 198 tests passed; real edge smoke replayed 5 actions
+evidence_commit=2704c56
