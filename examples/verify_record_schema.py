@@ -73,6 +73,13 @@ console.log(JSON.stringify({
     return json.loads(completed.stdout)
 
 
+def _node_parse_result(path: Path) -> tuple[bool, dict[str, Any]]:
+    try:
+        return True, _node_parse(path)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        return False, {"error": str(exc)}
+
+
 def _load(path: Path, source: str, *, require_uia_schema: bool = False) -> tuple[dict[str, Any], Trajectory]:
     trajectory = Trajectory.load(str(path))
     if require_uia_schema:
@@ -106,25 +113,47 @@ def verify(
         uia_trajectory.save(str(canonical_uia))
         edge_trajectory.save(str(canonical_edge))
 
+        uia_python_to_node = True
+        edge_python_to_node = True
+        uia_canonical_node = _node_parse_result(canonical_uia)
+        uia_original_node = _node_parse_result(uia_path)
+        edge_canonical_node = _node_parse_result(canonical_edge)
+        edge_original_node = _node_parse_result(edge_path)
+        node_parse_ok = all(
+            (result[0] for result in (
+                uia_canonical_node,
+                uia_original_node,
+                edge_canonical_node,
+                edge_original_node,
+            ))
+        )
+        if not uia_canonical_node[0] or uia_canonical_node[1].get(
+            "step_count"
+        ) != uia_header["step_count"]:
+            uia_python_to_node = False
+        if not edge_canonical_node[0] or edge_canonical_node[1].get(
+            "step_count"
+        ) != edge_header["step_count"]:
+            edge_python_to_node = False
+
         report: dict[str, Any] = {
             "uia": {
                 **uia_header,
-                "canonical_node": _node_parse(canonical_uia),
-                "original_node": _node_parse(uia_path),
+                "canonical_node": uia_canonical_node[1],
+                "original_node": uia_original_node[1],
             },
             "edge": {
                 **edge_header,
-                "canonical_node": _node_parse(canonical_edge),
-                "original_node": _node_parse(edge_path),
+                "canonical_node": edge_canonical_node[1],
+                "original_node": edge_original_node[1],
             },
         }
+        report["node_parse_ok"] = node_parse_ok
 
     report["alignment"] = {
         "step_count_equal": uia_header["step_count"] == edge_header["step_count"],
         "action_sequence_equal": uia_header["actions"] == edge_header["actions"],
-        "python_to_node": report["uia"]["canonical_node"]["step_count"]
-        == uia_header["step_count"]
-        and report["edge"]["canonical_node"]["step_count"] == edge_header["step_count"],
+        "python_to_node": uia_python_to_node and edge_python_to_node,
     }
     alignment = report["alignment"]
     action_matches = alignment["action_sequence_equal"]
