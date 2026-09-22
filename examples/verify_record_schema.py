@@ -155,6 +155,11 @@ def verify(
         "action_sequence_equal": uia_header["actions"] == edge_header["actions"],
         "python_to_node": uia_python_to_node and edge_python_to_node,
     }
+    report["summary"] = _build_summary(
+        report,
+        report_path,
+        require_actions=require_actions,
+    )
     alignment = report["alignment"]
     action_matches = alignment["action_sequence_equal"]
     aligned = (
@@ -173,6 +178,50 @@ def verify(
             f"trajectory alignment failed; report: {report_path}"
         )
     return report
+
+
+def _build_summary(
+    report: dict[str, Any],
+    report_path: Path,
+    *,
+    require_actions: bool = False,
+) -> dict[str, Any]:
+    alignment = report["alignment"]
+    reported_checks = ["step_count_equal", "python_to_node"]
+    if require_actions:
+        reported_checks.append("action_sequence_equal")
+    failed_checks = [
+        check
+        for check in reported_checks
+        if not alignment[check]
+    ]
+    node_errors = []
+    for source in ("uia", "edge"):
+        source_report = report.get(source, {})
+        for parse_stage in ("canonical_node", "original_node"):
+            error = source_report.get(parse_stage, {}).get("error")
+            if error:
+                node_errors.append(f"{source}.{parse_stage}: {error}")
+    passed = not failed_checks
+    return {
+        "status": "passed" if passed else "failed",
+        "require_actions": require_actions,
+        "failed_checks": failed_checks,
+        "node_errors": node_errors,
+        "report": str(report_path),
+    }
+
+
+def _format_summary(summary: dict[str, Any]) -> str:
+    status = summary["status"]
+    if status == "passed":
+        return f"record schema verification passed; report: {summary['report']}"
+    failed_checks = ", ".join(summary["failed_checks"])
+    node_error_count = len(summary["node_errors"])
+    return (
+        f"record schema verification failed: checks=[{failed_checks}], "
+        f"node_errors={node_error_count}, report: {summary['report']}"
+    )
 
 
 def main() -> None:
@@ -202,13 +251,19 @@ def main() -> None:
         help="JSON evidence output path",
     )
     args = parser.parse_args()
-    report = verify(
-        args.uia.resolve(),
-        args.edge.resolve(),
-        args.report.resolve(),
-        require_actions=args.require_actions,
-    )
+    try:
+        report = verify(
+            args.uia.resolve(),
+            args.edge.resolve(),
+            args.report.resolve(),
+            require_actions=args.require_actions,
+        )
+    except AssertionError:
+        report = json.loads(args.report.resolve().read_text(encoding="utf-8"))
+        print(_format_summary(report["summary"]), file=sys.stderr)
+        raise SystemExit(1)
     print(json.dumps(report["alignment"], ensure_ascii=False, indent=2))
+    print(_format_summary(report["summary"]))
     print(f"Report: {args.report.resolve()}")
 
 

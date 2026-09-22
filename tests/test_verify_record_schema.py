@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from examples.verify_record_schema import verify
+from examples.verify_record_schema import _build_summary, _format_summary, verify
 from openeyes.record import InputEvent, Trajectory
 
 
@@ -47,6 +48,10 @@ def test_verify_reports_step_count_mismatch(tmp_path, monkeypatch):
     assert report["alignment"]["step_count_equal"] is False
     assert report["alignment"]["action_sequence_equal"] is False
     assert report["alignment"]["python_to_node"] is True
+    assert report["summary"]["status"] == "failed"
+    assert report["summary"]["failed_checks"] == [
+        "step_count_equal",
+    ]
 
 
 def test_verify_reports_node_parse_failure(tmp_path, monkeypatch):
@@ -72,3 +77,41 @@ def test_verify_reports_node_parse_failure(tmp_path, monkeypatch):
     assert report["alignment"]["python_to_node"] is False
     assert report["uia"]["canonical_node"]["error"]
     assert report["edge"]["original_node"]["error"]
+    assert report["summary"]["node_errors"]
+
+
+def test_summary_formats_failed_checks_and_report_path():
+    report = {
+        "alignment": {
+            "step_count_equal": False,
+            "action_sequence_equal": True,
+            "python_to_node": False,
+        },
+    }
+    summary = _build_summary(report, Path("record-schema-report.json"))
+    formatted = _format_summary(summary)
+
+    assert summary["status"] == "failed"
+    assert summary["failed_checks"] == ["step_count_equal", "python_to_node"]
+    assert formatted == (
+        "record schema verification failed: "
+        "checks=[step_count_equal, python_to_node], node_errors=0, "
+        "report: record-schema-report.json"
+    )
+
+
+def test_summary_includes_action_mismatch_only_when_required():
+    report = {
+        "alignment": {
+            "step_count_equal": True,
+            "action_sequence_equal": False,
+            "python_to_node": True,
+        },
+    }
+    optional = _build_summary(report, Path("optional.json"))
+    required = _build_summary(report, Path("required.json"), require_actions=True)
+
+    assert optional["status"] == "passed"
+    assert optional["failed_checks"] == []
+    assert required["status"] == "failed"
+    assert required["failed_checks"] == ["action_sequence_equal"]

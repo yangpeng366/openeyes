@@ -216,6 +216,7 @@ python examples\verify_record_schema.py --uia examples\record-out\trajectory_rea
 ```
 
 It loads both files through `Trajectory.load`, canonicalizes them, reparses
-with the vendored Node bridge, writes JSON evidence, and exits non-zero on a
-schema or step-count mismatch. Action sequences are reported; add
-`--require-actions` for recordings expected to be operationally identical.
+with the vendored Node bridge, writes JSON evidence plus a machine-readable
+summary, prints a one-line CLI result, and exits non-zero on a schema or
+step-count mismatch. Action sequences are reported; add `--require-actions`
+for recordings expected to be operationally identical.
