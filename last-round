@@ -1,9 +1,9 @@
-round=599
-ts=2026-09-22T10:30:38+08:00
-commit=277cd6e
-tests=194 passed
-schema_failure_tests=2 passed
-failure_report=written on step mismatch and node parse failure
-positive_verifier=OK
-evidence=examples/record-out/record-schema-report.json
+round=600
+ts=2026-09-22T11:03:47+08:00
+commit=5445595
+tests=196 passed
+summary_contract=passed and failed CLI paths verified
+action_mismatch=report-only by default; fails with --require-actions
+failure_report=written before non-zero exit
+evidence=examples/verify_record_schema.py
 blocker=low: TYPESAFE_API_KEY not set
