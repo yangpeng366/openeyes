@@ -205,3 +205,17 @@ python -c "from openeyes.record import Trajectory; t=Trajectory.load(r'examples/
 ```
 
 Prerequisites: puppeteer-core, Microsoft Edge. No absolute D:/ paths required.
+
+## verify_record_schema.py
+
+Verifies UIA and Edge recordings share one Trajectory contract:
+
+```powershell
+python examples\verify_record_schema.py
+python examples\verify_record_schema.py --uia examples\record-out\trajectory_real.jsonl --edge examples\record-out\trajectory-edge-real.jsonl --report examples\record-out\record-schema-report.json
+```
+
+It loads both files through `Trajectory.load`, canonicalizes them, reparses
+with the vendored Node bridge, writes JSON evidence, and exits non-zero on a
+schema or step-count mismatch. Action sequences are reported; add
+`--require-actions` for recordings expected to be operationally identical.

@@ -138,6 +138,7 @@ graph.to_dot()                                      # DAG DOT
 | `python examples/record_demo_real.py Edge` + chrome bridge probe | 双路径 schema | 2026-09-22：真实 Edge 428 元素 / 5 步；bridge 语义合并后 Python `Trajectory.load` 与 JS `parseJSONL` 双向读取 5 步 |
 | examples/record_edge_demo.js | 双路径 schema | 2026-09-22 Round 595：可复现 headless Edge 录制 example；5 个动作语义合并为 5 步，Python/JS 双向验证通过；无绝对路径依赖 |
 | `LLM_API_KEY=... python examples/demo_prompt.py --real` | prompt (real backend) | 待用户配置 key 后跑 |
+| `examples/verify_record_schema.py` | dual-source contract | Round 598: Python round-trip, Node bridge reparse, and JSON evidence report |
 
 输出在 `examples/out/`：
 - `trajectory.jsonl` (3.2 KB) — show mock 主产物
