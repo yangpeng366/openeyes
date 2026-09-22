@@ -26,12 +26,13 @@ from .recorder import Recorder
 from .replayer import Replayer
 from .abstract import merge_trajectories, to_natural_language, graph_to_natural_language
 from .generator import generate_trajectory_from_prompt, LLMUnavailable
+from .hybrid import hybrid_generate
 from .prompt_template import render_system, render_user
 
 __all__ = [
     "UIAEvent", "InputEvent", "Trajectory",
     "Recorder", "Replayer",
     "merge_trajectories", "to_natural_language", "graph_to_natural_language",
-    "generate_trajectory_from_prompt", "LLMUnavailable",
+    "generate_trajectory_from_prompt", "LLMUnavailable", "hybrid_generate",
     "render_system", "render_user",
 ]

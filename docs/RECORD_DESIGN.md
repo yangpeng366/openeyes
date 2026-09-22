@@ -76,11 +76,11 @@ traj.save("trajectory.jsonl")
   置信度沿用 ACH FEAT-03：`>=0.85` ACT、`0.60~0.85` 标记
   `requires_review`、低于下限或落入 `0.30~0.70` 不确定带则返回空轨迹。
 
-## 路径 C：show + prompt 混合（下一步要做）
+## 路径 C：show + prompt 混合（已实现 hybrid_generate）
 
 - 用户操作一遍 → record 出 Trajectory
-- LLM 看 trajectory + 用户自然语言补充 → 生成更高质量 skill
-- 也可让 LLM 基于已有 trajectory 库作为 few-shot 合成新轨迹
+- `hybrid_generate(recorded, description)` 已实现：recorded trajectory 转自然语言 → LLM 合成增强轨迹；无 key fallback 到确定性 pass-through
+- 支持 `few_shot=[traj1, traj2, ...]` 作为 LLM 上下文
 
 这正是 PC-Agent-E 论文的核心配方：312 条人工轨迹 + Claude 3.7 合成 → 训出超 Claude 的 agent。
 

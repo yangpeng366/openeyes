@@ -462,3 +462,61 @@ class TestJevGenerator:
         meta = trajectory.steps[0].meta
         assert meta["thresholds"]["high_stakes"] == thresholds.high_stakes_threshold
         assert meta["decision_band"] == "act"
+
+
+# ---- hybrid_generate (path C) ----
+
+class TestHybridGenerate:
+    def _make_recorded(self):
+        traj = Trajectory.new(name="test-hybrid", app_name="TestApp",
+                              description="original description")
+        traj.add(UIAEvent(
+            ts=1000.0, action="click",
+            element={"name": "OK", "control_type": "Button",
+                     "automation_id": "btnOk", "interactive": True},
+            selector="automation_id=btnOk", app_name="TestApp",
+            intent="Click OK",
+        ))
+        traj.add(UIAEvent(
+            ts=1001.0, action="type",
+            element={"name": "Search", "control_type": "Edit",
+                     "automation_id": "txtSearch", "interactive": True},
+            selector="automation_id=txtSearch", app_name="TestApp",
+            input_text="hello", intent="Type search term",
+        ))
+        traj.close()
+        return traj
+
+    def test_mock_passes_through(self):
+        from openeyes.record.hybrid import hybrid_generate
+        recorded = self._make_recorded()
+        result = hybrid_generate(recorded, "enhanced description", backend="mock")
+        assert result.name == recorded.name
+        assert result.description == "enhanced description"
+        assert len(result.steps) == 2
+        assert result.steps[0].action == "click"
+        assert result.steps[1].action == "type"
+
+    def test_auto_without_llm_falls_back(self):
+        from openeyes.record.hybrid import hybrid_generate
+        recorded = self._make_recorded()
+        result = hybrid_generate(recorded, "auto description", backend="auto")
+        assert result.description == "auto description"
+        assert len(result.steps) == 2
+
+    def test_unknown_backend_raises(self):
+        from openeyes.record.hybrid import hybrid_generate
+        recorded = self._make_recorded()
+        try:
+            hybrid_generate(recorded, "x", backend="invalid")
+            assert False, "should raise"
+        except ValueError:
+            pass
+
+    def test_few_shot_accepted(self):
+        from openeyes.record.hybrid import hybrid_generate
+        recorded = self._make_recorded()
+        other = self._make_recorded()
+        result = hybrid_generate(recorded, "with few-shot", backend="mock",
+                                 few_shot=[other])
+        assert len(result.steps) == 2
