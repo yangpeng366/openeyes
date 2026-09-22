@@ -171,6 +171,12 @@ print(to_codex_skill(traj))            # Codex SKILL.md
 report = Replayer(dry_run=True).replay(traj)
 ```
 
+### CLI dry-run
+
+```powershell
+eyes record replay trajectory.jsonl --json
+```
+
 ### Export formats
 
 | Format | Use case |

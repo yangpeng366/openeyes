@@ -11,6 +11,7 @@ Usage:
     eyes grid   --window <hwnd> --row R --col C [--rows N --cols N] [--dry-run|--go]
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
+    eyes record replay <trajectory.jsonl> [--json]
     eyes version
 
 Default click behavior is **dry-run**. Pass --go to actually click.
@@ -260,6 +261,35 @@ def type(text: str, interval: float) -> None:
 
 
 # ----- browser (CDP) -------------------------------------------------------
+
+@cli.group()
+def record() -> None:
+    """Inspect recorded trajectories."""
+
+
+@record.command("replay")
+@click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--json", "as_json", is_flag=True, help="emit the replay plan as JSON")
+def record_replay(trajectory_path: str, as_json: bool) -> None:
+    """Preview replay actions without sending input."""
+    from openeyes.record import Trajectory
+    from openeyes.record.replayer import Replayer
+
+    trajectory = Trajectory.load(trajectory_path)
+    report = Replayer(dry_run=True).replay(trajectory)
+    if as_json:
+        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return
+
+    click.echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
+    for item in report.actions:
+        plan = item["plan"]
+        detail = plan.get("selector") or plan.get("combo") or plan.get("text") or ""
+        click.echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
+    click.echo(
+        f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
+        f"{len(report.errors)} errors"
+    )
 
 @cli.group()
 def browser() -> None:
