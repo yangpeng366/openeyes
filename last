@@ -1,14 +1,14 @@
-## Round 600 - 2026-09-22T11:03:47+08:00
-- 方向：OpenEyes Record；固化 schema 校验摘要契约。
-- 落地：verify_record_schema.py 输出机器可读 summary、Node 错误清单与一行 CLI 结果。
-- 实测：步数不一致退出码 1；默认 action 差异仅报告，--require-actions 才判失败。
-- 验证：pytest 196 passed；正向/失败 CLI 各实测一次。
-- 提交：5445595 [auto-patrol] round 600。
+## Round 603 - 2026-09-28
+- 方向：复核 Round 602 saved output 后再重试巡检。
+- 落地：复核 `.codex/last-message.md`，修复 `tests/test_record.py` 与 `03351cc` 两处截损；提交未落库的 docs/debug-experience.md。
+- 实测：pytest tests/test_record.py::TestHybridGenerateTransport -q => 4 passed。
+- 实测：pytest tests/ -q --deselect tests/test_launch_debug_edge.py::test_helper_help_exits_zero_and_prints_usage => 201 passed, 1 deselected。
+- 结论：Round 602 交付有效；full suite 与记录一致，未复探已转为事件触发的 dsh gate。
 
 ## 下一轮要看的具体点
-- 用真实 TYPESAFE_API_KEY 手工 smoke TypesafeJevScorer 路径。
-- 评估 feat/decision-jev-layer 本地 ahead 是否推送 origin。
-- 复核 summary.node_errors 是否需要长度截断或结构化分级。
+- 评估 feat/decision-jev-layer ahead 48 是否打包推送 origin。
+- 用真实 TYPESAFE_API_KEY 手工 smoke hybrid_generate 真实路径。
+- test_launch_debug_edge 历史偶发仍单独追踪，不并入功能 commit。
 
 ## blocker
-- low：本机仍未配置 TYPESAFE_API_KEY，真实 TypeSafe JEV 无法实测。
+- low：本机仍未配置 TYPESAFE_API_KEY，真实 LLM transport 无法实测。

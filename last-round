@@ -1,9 +1,9 @@
-round=600
-ts=2026-09-22T11:03:47+08:00
-commit=5445595
-tests=196 passed
-summary_contract=passed and failed CLI paths verified
-action_mismatch=report-only by default; fails with --require-actions
-failure_report=written before non-zero exit
-evidence=examples/verify_record_schema.py
+round=603
+ts=2026-09-28T12:02:12+08:00
+status=completed
+review=round-602 output reviewed; two corrupted references fixed
+targeted_tests=4 passed
+full_tests=201 passed, 1 deselected
+landed=docs/debug-experience.md
+evidence_commit=03351cc
 blocker=low: TYPESAFE_API_KEY not set
