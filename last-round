@@ -1,9 +1,8 @@
-round=603
-ts=2026-09-28T12:02:12+08:00
+round=604
+ts=2026-09-29T12:20:53+08:00
 status=completed
-review=round-602 output reviewed; two corrupted references fixed
+stability=201 passed, 1 deselected (17.42s)
 targeted_tests=4 passed
-full_tests=201 passed, 1 deselected
-landed=docs/debug-experience.md
-evidence_commit=03351cc
+landed=docs/debug-experience.md:round 604 stability re-run + push plan
+push_pending=user authorization required
 blocker=low: TYPESAFE_API_KEY not set

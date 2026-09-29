@@ -81,6 +81,21 @@ Get-Process -Name dsh
 
 ---
 
+
+---
+
+## Round 604 stability re-run (2026-09-29)
+
+- pytest tests/test_record.py::TestHybridGenerateTransport -q => 4 passed。
+- pytest tests/ -q --deselect tests/test_launch_debug_edge.py::test_helper_help_exits_zero_and_prints_usage => 201 passed, 1 deselected（17.42s）。
+- 结论：Round 603 状态持续；仍未配置 TYPESAFE_API_KEY，real LLM path 阻塞未解除。
+
+## feat/decision-jev-layer 推送前风险复盘
+
+- ahead origin 已达 48 commits（含 Round 600-604）；推送窗口一旦扩大将难以拆 PR，建议先 squash 成 4-5 个主题提交再推 origin。
+- 推荐主题：record schema verifier、hybrid_generate transport contract、decision/jev shadow、debug-experience doc、tracking files refresh。
+- 在 user 显式放权前不主动 git push。
 ## Provenance
+
 
 - 2026-09-22：DSH 阻塞连 75+ 轮后首次系统沉淀 debug 经验；201 passed, 1 deselected（历史 flaky 单独排除）。
