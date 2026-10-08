@@ -95,7 +95,20 @@ Get-Process -Name dsh
 - ahead origin 已达 48 commits（含 Round 600-604）；推送窗口一旦扩大将难以拆 PR，建议先 squash 成 4-5 个主题提交再推 origin。
 - 推荐主题：record schema verifier、hybrid_generate transport contract、decision/jev shadow、debug-experience doc、tracking files refresh。
 - 在 user 显式放权前不主动 git push。
+
+---
+
+## Round 605 event-driven dsh gate (2026-10-08)
+
+- 现象：lastExit=2, consecutiveFailures=2, resumeCount=4；DSH 仍超时，listener_count=0，dsh_count=0。
+- 决策：依据 ad-hoc 备注（516-590 连 75 轮同质 evidence），本轮正式切到 **event-driven dsh gate**。
+- 后续策略：
+  - 不再按固定间隔复探 python examples/dsh-gate-readiness.py。
+  - 仅当 (a) :3080 出现 Listen，(b) dsh 进程被重启，或 (c) 用户在飞书 / Bitable 显式确认服务恢复 时，才重跑 readiness probe。
+  - 触发后跑 python examples/dsh-gate-readiness.py，HTTP 200 才进入 docs/dsh-web-acceptance.md Section 4。
+- 巡检脚本（Start-CodexAutoPatrolLoop.ps1）可参考 state/projects/OpenEyes.json 的 dshGateMode=event-driven 字段跳过本项目 readiness 子步，避免连续 exit 2 触发 thread 重置。
 ## Provenance
+
 
 
 - 2026-09-22：DSH 阻塞连 75+ 轮后首次系统沉淀 debug 经验；201 passed, 1 deselected（历史 flaky 单独排除）。
