@@ -107,7 +107,18 @@ Get-Process -Name dsh
   - 仅当 (a) :3080 出现 Listen，(b) dsh 进程被重启，或 (c) 用户在飞书 / Bitable 显式确认服务恢复 时，才重跑 readiness probe。
   - 触发后跑 python examples/dsh-gate-readiness.py，HTTP 200 才进入 docs/dsh-web-acceptance.md Section 4。
 - 巡检脚本（Start-CodexAutoPatrolLoop.ps1）可参考 state/projects/OpenEyes.json 的 dshGateMode=event-driven 字段跳过本项目 readiness 子步，避免连续 exit 2 触发 thread 重置。
+
+---
+
+## Round 606 patrol loop dshGateMode wiring (2026-10-09)
+
+- 落地：.codex-auto-patrol/Start-CodexAutoPatrolLoop.ps1 读取 state/projects/<Project>.json 的 dshGateMode / dshGateResume。
+- 当 dshGateMode=event-driven 时，把硬规则注入子 agent prompt：禁止固定间隔复探 readiness；仅 listener / dsh 进程 / dshGateResume=true 才允许重跑。
+- OpenEyes state 已写：dshGateMode=event-driven，dshGateResume=false。
+- 旁证本轮：listener_count=0，dsh_count=0；未跑 readiness probe。
+- 另落 docs/push-squash-plan.md：5 主题 squash 推送计划（授权前不 push）。
 ## Provenance
+
 
 
 

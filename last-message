@@ -1,16 +1,15 @@
-## Round 605 - 2026-10-08
-- 方向：续推 Round 604 后续；把 dsh gate 由固定间隔复探切到事件触发。
-- 落地：docs/debug-experience.md 新增 Round 605 event-driven dsh gate 段；刷新根与 .codex 跟踪文件。
-- 状态：lastExit=2, consecutiveFailures=2, resumeCount=4；DSH 仍超时，listener_count=0，dsh_count=0。
-- 本轮不复探 readiness probe，避免再产生同质 evidence。
-- ahead origin 49，仍待用户授权按 5 主题 squash 推送。
+## Round 606 - 2026-10-09
+- 方向：落实 Round 605 评估项——把 OpenEyes 标为 dshGateMode=event-driven，并写入推送 squash 计划。
+- 落地：Start-CodexAutoPatrolLoop.ps1 注入 event-driven 硬规则；state/projects/OpenEyes.json 写 dshGateMode=event-driven / dshGateResume=false。
+- 落地：docs/push-squash-plan.md（5 主题 squash）；docs/debug-experience.md Round 606 段。
+- 旁证：listener_count=0，dsh_count=0；本轮未跑 readiness probe。
+- ahead origin 约 50，仍待用户授权后按 squash 计划推送。
 
 ## 下一轮要看的具体点
-- 用户授权推送 feat/decision-jev-layer 时按 5 主题 squash 推 origin。
-- 真实 TYPESAFE_API_KEY 配齐后手工 smoke hybrid_generate 真实路径。
-- 若 dsh 服务在监听恢复 / 用户显式确认后，重跑 readiness probe 并进入 Section 4。
-- 评估把 OpenEyes 项目在 Start-CodexAutoPatrolLoop.ps1 标记为 dshGateMode=event-driven，避免连续 exit 2。
+- 用户授权后按 docs/push-squash-plan.md 执行 rebase squash + push。
+- 真实 TYPESAFE_API_KEY 配齐后手工 smoke hybrid_generate。
+- 若 :3080 Listen / dsh 进程出现 / 人工把 dshGateResume 置 true，再跑 readiness 并进 Section 4。
 
 ## blocker
 - high：dsh web host 仍不可达；event-driven 等待事件。
-- low：TYPESAFE_API_KEY 未配置，真实 LLM transport 无法实测。
+- low：TYPESAFE_API_KEY 未配置。
