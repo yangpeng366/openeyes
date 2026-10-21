@@ -19,7 +19,10 @@ from openeyes.core.capture import capture_window, capture_screen
 from openeyes.core.selector import detect_elements, find_elements, click_by_selector
 from openeyes.core.actuator import click_xy, send_hotkey, type_text, drag, scroll
 
-__version__ = "0.1.0"
+# Lazy import for record submodule (optional dependency on openeyes itself)
+# Usage: from openeyes.record import Recorder, Replayer, Trajectory
+
+__version__ = "0.2.0"
 
 __all__ = [
     "BBox", "Center", "Element", "ElementState", "WindowInfo",

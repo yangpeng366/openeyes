@@ -11,6 +11,7 @@ Usage:
     eyes grid   --window <hwnd> --row R --col C [--rows N --cols N] [--dry-run|--go]
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
+    eyes record replay <trajectory.jsonl> [--json]
     eyes version
 
 Default click behavior is **dry-run**. Pass --go to actually click.
@@ -202,6 +203,9 @@ def tap(window: int, x: int | None, y: int | None,
         from openeyes.actuators.win32 import focus_window
         ok = focus_window(window)
         click.echo(f"focus_window: {ok}", err=True)
+        if not ok:
+            click.echo("focus guard: target window is not foreground; click aborted", err=True)
+            sys.exit(4)
 
     if return_to_origin:
         import win32api
@@ -257,6 +261,35 @@ def type(text: str, interval: float) -> None:
 
 
 # ----- browser (CDP) -------------------------------------------------------
+
+@cli.group()
+def record() -> None:
+    """Inspect recorded trajectories."""
+
+
+@record.command("replay")
+@click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--json", "as_json", is_flag=True, help="emit the replay plan as JSON")
+def record_replay(trajectory_path: str, as_json: bool) -> None:
+    """Preview replay actions without sending input."""
+    from openeyes.record import Trajectory
+    from openeyes.record.replayer import Replayer
+
+    trajectory = Trajectory.load(trajectory_path)
+    report = Replayer(dry_run=True).replay(trajectory)
+    if as_json:
+        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return
+
+    click.echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
+    for item in report.actions:
+        plan = item["plan"]
+        detail = plan.get("selector") or plan.get("combo") or plan.get("text") or ""
+        click.echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
+    click.echo(
+        f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
+        f"{len(report.errors)} errors"
+    )
 
 @cli.group()
 def browser() -> None:
@@ -431,18 +464,30 @@ def browser_click(port: int, hint: str | None, idx: int | None,
 @click.option("--control-type", default=None)
 @click.option("--enter/--no-enter", default=False,
               help="press Enter after typing")
+@click.option("--source-text", default=None,
+              help="user text that authorizes --text (agent safety guard)")
 @click.option("--url-contains", default=None)
 def browser_type(port: int, text: str, hint: str | None, idx: int | None,
                   name_contains: str | None, control_type: str | None,
-                  enter: bool, url_contains: str | None) -> None:
+                  enter: bool, source_text: str | None,
+                  url_contains: str | None) -> None:
     """Type text into a focused element (or specify target by hint/idx)."""
     from openeyes.backends import cdp as browser_backend
+    from openeyes.core.safety import validate_text_entry
     chosen = None
     if hint or idx is not None or name_contains or control_type:
         chosen, conn = _resolve_browser_target(
             None, port, hint, idx, name_contains, control_type, url_contains)
     else:
         conn = browser_backend.connect(port=port, url_contains=url_contains)
+    if chosen is not None:
+        validate_text_entry(text, chosen, source_text=source_text)
+    else:
+        focused = next(
+            (e for e in browser_backend.scan_dom(conn) if e.state.focused),
+            None,
+        )
+        validate_text_entry(text, focused, source_text=source_text)
     browser_backend.type_text(conn, text, element=chosen, press_enter=enter)
     desc = (f"typed {len(text)} chars"
             + (f" into {chosen.name!r}" if chosen else " (focused field)")

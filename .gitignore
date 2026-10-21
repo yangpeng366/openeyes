@@ -43,3 +43,6 @@ shots/
 audit/.pytest_cache/
 .mypy_cache/
 .ruff_cache/
+examples/.edge-record-demo-profile/
+examples/out/
+examples/record-out/

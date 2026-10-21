@@ -184,3 +184,39 @@ python examples\feishu_first_test.py --go
 # target a specific element
 python examples\feishu_first_test.py --target "通讯录" --go
 ```
+
+
+## record_edge_demo.js
+
+Reproducible headless Edge recording via the vendored `chrome-recorder-bridge`.
+Launches Edge, loads a data-URL page with buttons and an input, performs 5 user
+actions (click x3 + type), and writes one semantic Trajectory JSONL step per
+action that Python `Trajectory.load()` and JS `parseJSONL()` can parse.
+
+```powershell
+# default output: examples/record-out/trajectory-edge-example.jsonl
+node examples/record_edge_demo.js
+
+# custom output path
+node examples/record_edge_demo.js --out path/to/output.jsonl
+
+# verify Python round-trip
+python -c "from openeyes.record import Trajectory; t=Trajectory.load(r'examples/record-out/trajectory-edge-example.jsonl'); print(len(t.steps), 'steps loaded OK')"
+```
+
+Prerequisites: puppeteer-core, Microsoft Edge. No absolute D:/ paths required.
+
+## verify_record_schema.py
+
+Verifies UIA and Edge recordings share one Trajectory contract:
+
+```powershell
+python examples\verify_record_schema.py
+python examples\verify_record_schema.py --uia examples\record-out\trajectory_real.jsonl --edge examples\record-out\trajectory-edge-real.jsonl --report examples\record-out\record-schema-report.json
+```
+
+It loads both files through `Trajectory.load`, canonicalizes them, reparses
+with the vendored Node bridge, writes JSON evidence plus a machine-readable
+summary, prints a one-line CLI result, and exits non-zero on a schema or
+step-count mismatch. Action sequences are reported; add `--require-actions`
+for recordings expected to be operationally identical.

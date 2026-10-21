@@ -11,7 +11,7 @@ from openeyes.core.schema import BBox as BBox2  # alias check
 
 
 def test_version():
-    assert openeyes.__version__ == "0.1.0"
+    assert openeyes.__version__ == "0.2.0"
 
 
 def test_schema_dataclasses_roundtrip():
@@ -117,3 +117,18 @@ def test_status_command_exists():
     """eyes status subcommand should be a callable Click command."""
     from openeyes.cli.main import status
     assert callable(status)
+def test_click_focus_guard_aborts_when_focus_fails(monkeypatch):
+    """third-hand checkFocus parity: never click after foreground verification fails."""
+    import sys
+    import types
+    from click.testing import CliRunner
+    from openeyes.cli.main import cli
+
+    fake_module = types.SimpleNamespace(focus_window=lambda hwnd: False)
+    monkeypatch.setattr(sys.modules["openeyes.actuators"], "win32", fake_module)
+    result = CliRunner().invoke(cli, [
+        "click", "--window", "123", "--x", "1", "--y", "1",
+        "--focus-titlebar", "--go",
+    ])
+    assert result.exit_code == 4
+    assert "focus guard" in result.output

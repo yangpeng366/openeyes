@@ -1,0 +1,16 @@
+round=608
+ts=2026-10-10
+status=keep-watch
+dsh_gate_mode=event-driven
+dsh_gate_resume=false
+patrol_loop_wired=true
+listener_count=0
+dsh_count=0
+no_probe=true
+landed=last / last-message.md / last-message / .codex/last-message.md / .codex/last-patrol-message.md / last-round.md / last-round / .codex/last-round.md (Round 607 时序残留校正 + Round 608 同步)
+push_pending=user authorization required (per docs/push-squash-plan.md)
+ahead_origin=52
+head_commit=2cc7370
+prev_head=e8eb78b
+blocker_high=dsh web host not reachable; user has not yet authorized squash+push
+blocker_low=TYPESAFE_API_KEY not set

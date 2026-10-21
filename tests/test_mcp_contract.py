@@ -393,3 +393,111 @@ def test_browser_type_schema_advertises_url_contains():
     schema = by_name["browser_type"].inputSchema
     assert "url_contains" in schema["properties"]
     assert schema["properties"]["url_contains"] == {"type": "string"}
+
+def test_browser_type_rejects_non_editable_selected_target(monkeypatch):
+    conn = MagicMock()
+    conn.current_url.return_value = "https://example.com/target-a"
+
+    def connect(*, port, url_contains=None):
+        return conn
+
+    def scan(_conn):
+        return [Element(
+            backend="cdp", control_type="Button", name="Search",
+            bbox=BBox(10, 20, 80, 24), center=Center(50, 32),
+        )]
+
+    def fail(*args, **kwargs):
+        raise AssertionError("non-editable target reached type_text")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", scan)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+    result = _call("browser_type", {
+        "text": "hello", "name_contains": "Search", "dry_run": False,
+    })
+    assert "not editable" in result["error"]
+    assert result["tool"] == "browser_type"
+
+
+def test_browser_type_fails_closed_without_focused_editable_target(monkeypatch):
+    conn = MagicMock()
+
+    def connect(*, port, url_contains=None):
+        return conn
+
+    def scan(_conn):
+        return [Element(
+            backend="cdp", control_type="Button", name="Not focused",
+            bbox=BBox(10, 20, 80, 24), center=Center(50, 32),
+        )]
+
+    def fail(*args, **kwargs):
+        raise AssertionError("unverified focused field reached type_text")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", scan)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+    result = _call("browser_type", {"text": "hello", "dry_run": False})
+    assert "no editable" in result["error"]
+    assert result["tool"] == "browser_type"
+
+
+def test_browser_type_rejects_text_not_in_user_source(monkeypatch):
+    conn = MagicMock()
+
+    def connect(*, port, url_contains=None):
+        return conn
+
+    def scan(_conn):
+        return [Element(
+            backend="cdp", control_type="Edit", name="Search",
+            bbox=BBox(10, 20, 80, 24), center=Center(50, 32),
+        )]
+
+    def fail(*args, **kwargs):
+        raise AssertionError("unauthorized text reached type_text")
+
+    monkeypatch.setattr(mcp_server.browser_backend, "connect", connect)
+    monkeypatch.setattr(mcp_server.browser_backend, "scan_dom", scan)
+    monkeypatch.setattr(mcp_server.browser_backend, "type_text", fail)
+    result = _call("browser_type", {
+        "text": "hello; drop table",
+        "source_text": "say hello",
+        "name_contains": "Search",
+        "dry_run": False,
+    })
+    assert "not authorized" in result["error"]
+    assert result["tool"] == "browser_type"
+
+
+def test_browser_type_schema_advertises_source_text():
+    tools = asyncio.run(mcp_server.list_tools())
+    schema = {tool.name: tool for tool in tools}["browser_type"].inputSchema
+    assert schema["properties"]["source_text"] == {
+        "type": "string",
+        "description": "user text that authorizes text",
+    }
+
+def test_click_focus_guard_aborts_when_hwnd_is_not_foreground(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("click reached desktop after focus guard failed")
+
+    monkeypatch.setattr(mcp_server, "is_foreground_window", lambda hwnd: False)
+    monkeypatch.setattr(mcp_server, "click_xy", fail)
+    result = _call("click", {"hwnd": 123, "x": 10, "y": 20, "dry_run": False})
+    assert result["error"] == "focus guard: target window is not foreground"
+    assert result["hwnd"] == 123
+    assert result["tool"] == "click"
+
+
+def test_click_focus_guard_allows_foreground_hwnd(monkeypatch):
+    clicked = {}
+    monkeypatch.setattr(mcp_server, "is_foreground_window", lambda hwnd: hwnd == 123)
+    def click_xy(x, y, **kwargs):
+        clicked["xy"] = (x, y)
+        clicked.update(kwargs)
+    monkeypatch.setattr(mcp_server, "click_xy", click_xy)
+    result = _call("click", {"hwnd": 123, "x": 10, "y": 20, "dry_run": False})
+    assert result["clicked"] is True
+    assert clicked["xy"] == (10, 20)
