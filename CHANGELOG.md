@@ -9,7 +9,7 @@ versioning: [Semantic Versioning](https://semver.org/).
 ### Changed
 - `openeyes.backends.cdp.launch_edge` now captures Edge stderr to a temp file and surfaces both the early-exit return code and a bounded stderr tail in the `CDPError` message, so a failed CDP launch on a dedicated port (e.g. 9333) reports *why* Edge quit instead of only that it did. `_diagnose_launch` accepts optional `exit_code` and `stderr_tail` and the new `_read_stderr_tail` helper truncates very long output.
 - `docs/architecture.md` documents the backend priority order, the degradation chain, and the coordinate semantics of the vision tier (image pixels are converted to window-relative coordinates through `origin=(dx, dy)`).
-- `docs/capability-contract.md` records that the MCP surface is intentionally unchanged at 13 tools: the vision tier and the chain ship as CLI and Python surfaces for now, and both MCP hosts can call the CLI.
+- `docs/capability-contract.md` records the MCP surface at 15 tools: the vision tier and the chain ship as CLI, Python, and MCP surfaces, and both MCP hosts can call the CLI.
 
 ### Added
 - `openeyes.backends.vision` — a *parsing-style* vision backend. Screen-parsing detections (OmniParser v2 native shape, plus per-item dicts and `boxes`/`labels`/`scores` shapes) become the same `Element[]` shape the UIA and CDP backends emit, so the selector, hint and decision layers work unchanged. `OmniParserBackend` supports a model-free file mode (`detections_path=`) and an HTTP endpoint mode (`endpoint=`); both funnel through the same conversion, so results are identical. Vision elements carry `score < 1.0` so the decision layer can prefer structured backends, and only actionable labels are marked `interactive`.
@@ -17,6 +17,9 @@ versioning: [Semantic Versioning](https://semver.org/).
 - `eyes vision --detections <json>` — CLI: convert screen-parsing detections into elements. No model and no network required.
 - `eyes resolve --window <hwnd> [--port N] [--vision-detections <json>]` — CLI: walk the chain and report which tier answered plus the per-tier trail. Read-only; it never actuates.
 - `openeyes.resolve_elements` / `ResolveResult` / `Attempt` are exported from the package root.
+- `resolve_elements` (MCP) — walks the `uia -> cdp -> vision` chain and returns the first non-empty element set, the tier that answered, and the per-tier trail. Read-only; never actuates.
+- `vision_detect` (MCP) — parses screen-parsing detections (file path or inline JSON) into `Element[]`. Read-only; no model runs on the host.
+- The MCP tool set goes from 13 to 15. The change is additive: no tool was renamed or removed, no required argument changed, and no default execution mode changed. `docs/capability-contract.md` now pins 15 names, and `examples/mcp-stdio-probe.py` expects 15.
 - `examples/dsh-gate-readiness.py` is a read-only HTTP 200 probe for the dsh web host at `http://127.0.0.1:3080/`. It never starts dsh, launches a browser, or issues a `browser_click` request, so it is safe for scheduled patrol rounds. It emits JSON with `ready`, `status_code`, `next_recheck`, and the next Section 4 action; exit code `0` = ready, `2` = not ready. Documented under `docs/dsh-web-acceptance.md` Section 2 and `examples/README.md`.
 
 ### Tests

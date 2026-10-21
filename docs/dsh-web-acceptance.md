@@ -29,7 +29,7 @@ Before opening dsh, verify the repository-local MCP process independently:
 python examples\mcp-stdio-probe.py
 ```
 
-The command must print `ready:true`, report `tool_count:13`, and exit `0`. It also drives two `tools/call` requests (`browser_type` and `browser_shot`) in dry-run mode, verifying the full tool-dispatch path over stdio without touching a real browser.
+The command must print `ready:true`, report `tool_count:15`, and exit `0`. It also drives two `tools/call` requests (`browser_type` and `browser_shot`) in dry-run mode, verifying the full tool-dispatch path over stdio without touching a real browser.
 This isolates MCP startup and `tools/list` from the dsh model/tool-dispatch
 layer. If it fails, fix the local Python/MCP mount first; if it passes but the
 dsh session still shows assistant text instead of `mcp__openeyes__*` tool
@@ -68,7 +68,7 @@ In the dsh web UI, start a fresh session and require these calls in order:
 2. the initialized notification
 3. `tools/list`
 
-`tools/list` must expose exactly the 13 names in `docs/capability-contract.md`.
+`tools/list` must expose exactly the 15 names in `docs/capability-contract.md`.
 
 ## 4. Run the two-tab click check
 

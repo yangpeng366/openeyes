@@ -33,6 +33,8 @@ EXPECTED_TOOLS = [
     "browser_click",
     "browser_type",
     "browser_shot",
+    "resolve_elements",
+    "vision_detect",
 ]
 
 PROBE_TEXT = "acceptance"

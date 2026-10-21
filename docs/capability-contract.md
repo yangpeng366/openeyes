@@ -1,6 +1,6 @@
 # OpenEyes MCP capability contract
 
-This contract describes the 13 tools exposed by `openeyes.mcp.server` in v0.1.x. It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
+This contract describes the 15 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
 
 ## Safety classes
 
@@ -25,6 +25,8 @@ This contract describes the 13 tools exposed by `openeyes.mcp.server` in v0.1.x.
 | `browser_click` | Browser | high-risk | `go=false` default; `true` executes | Resolves one element and optionally clicks it. |
 | `browser_type` | Browser | write | `dry_run=true` default; `false` types | Resolves an optional target via `hint`/`idx`/`name_contains`/`control_type` and types into it. Accepts `url_contains` to scope tab resolution. |
 | `browser_shot` | Browser | write | `dry_run=true` default; `false` writes | Captures a viewport PNG to the requested path. |
+| `resolve_elements` | Any | read | none | Walks the `uia -> cdp -> vision` chain and returns the first non-empty element set, the tier that answered, and the per-tier trail (ok / count / reason). Never actuates. |
+| `vision_detect` | Vision | read | none | Parses screen-parsing detections (OmniParser v2 compatible) into `Element[]`. Reads a file path or inline JSON; no model runs on the host. |
 
 ## Dry-run contract
 
@@ -88,7 +90,7 @@ Add
 ## Acceptance sequence
 
 1. Send MCP `initialize`, then the initialized notification.
-2. Call `tools/list` and require exactly the 13 names in the matrix above.
+2. Call `tools/list` and require exactly the 15 names in the matrix above.
 3. Call `browser_click` with a selector and no `go` field; require `clicked: false`, `would_click: true`, and a resolved target. When the browser has multiple page targets, include `url_contains` for the disposable page so resolution is deterministic rather than relying on the first tab.
 4. Verify no application state changed during step 3.
 
@@ -97,23 +99,27 @@ Add
 For the dsh web-host procedure, use [docs/dsh-web-acceptance.md](dsh-web-acceptance.md).
 
 
-## v0.2.0 additions (CLI / Python only — MCP surface unchanged)
+## v0.2.0 additions (read-only, additive)
 
-The vision tier and the structured-first degradation chain shipped in v0.2.0 as
-**CLI and Python** surfaces. The MCP tool set stays at exactly the 13 names
-listed above; no tool was added, renamed, or removed.
+The vision tier and the structured-first degradation chain shipped in v0.2.0.
+Two MCP tools expose them to every host (Codex skill, dsh plugin), and the
+CLI / Python surfaces remain available.
 
 | Surface | Entry | Notes |
 | --- | --- | --- |
+| MCP | `resolve_elements` | Walks `uia -> cdp -> vision`; returns elements, `used_backend`, and the per-tier trail. |
+| MCP | `vision_detect` | Parses detections (file or inline JSON) into `Element[]`. |
 | CLI | `eyes vision --detections <json>` | Converts screen-parsing detections into `Element[]`. Read-only, no model required. |
-| CLI | `eyes resolve --window <hwnd> [--port N] [--vision-detections <json>]` | Walks `uia -> cdp -> vision` and reports which tier answered, plus per-tier attempt reasons. |
+| CLI | `eyes resolve --window <hwnd> [--port N] [--vision-detections <json>]` | Walks the chain and reports which tier answered, plus per-tier attempt reasons. |
 | Python | `openeyes.resolve_elements(...)` | Returns `ResolveResult` (elements + `used_backend` + attempts). |
 | Python | `openeyes.backends.vision.elements_from_detections(...)` | OmniParser v2 compatible payload -> `Element[]`. |
 
-Rationale for keeping MCP at 13: the acceptance sequence below pins the tool
-list, so adding a tool is a contract change that needs its own reviewed PR.
-The vision tier is usable today through the CLI and the Python API, and both
-MCP hosts (Codex skill, dsh plugin) can call the CLI.
+Why this is additive rather than a breaking change: no tool was renamed or
+removed, no required argument changed, and no default execution mode changed.
+The two new tools are classified **read** — they observe the accessibility
+tree, the DOM, or a local detection file, and never actuate. Existing clients
+that enumerate a fixed tool list keep working; a client that asserts an exact
+count must move from 13 to 15.
 
-`resolve` never actuates. It only reads, so it is classified as **read**; the
-`vision` command only transforms a local file and is likewise read-only.
+`resolve_elements` and `vision_detect` never actuate. `resolve_elements`
+defaults to `port=9222` for the cdp tier; pass `port=0` to skip it.

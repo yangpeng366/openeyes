@@ -31,6 +31,8 @@ def test_mcp_exposes_stable_tool_set():
         "browser_click",
         "browser_type",
         "browser_shot",
+        "resolve_elements",
+        "vision_detect",
     ]
 
 
@@ -501,3 +503,85 @@ def test_click_focus_guard_allows_foreground_hwnd(monkeypatch):
     result = _call("click", {"hwnd": 123, "x": 10, "y": 20, "dry_run": False})
     assert result["clicked"] is True
     assert clicked["xy"] == (10, 20)
+
+
+def test_vision_detect_parses_a_detections_file(tmp_path):
+    path = tmp_path / "det.json"
+    path.write_text(json.dumps([[[10, 20, 110, 60], "button"]]), encoding="utf-8")
+
+    result = _call("vision_detect", {"detections_path": str(path)})
+
+    assert result[0]["backend"] == "vision"
+    assert result[0]["control_type"] == "Button"
+    assert result[0]["center"] == {"x": 60, "y": 40}
+
+
+def test_vision_detect_accepts_inline_detections():
+    result = _call("vision_detect", {
+        "detections": json.dumps([[[0, 0, 10, 10], "link"]]),
+    })
+    assert result[0]["control_type"] == "Hyperlink"
+
+
+def test_vision_detect_applies_the_origin_offset():
+    result = _call("vision_detect", {
+        "detections": json.dumps([[[10, 20, 110, 60], "button"]]),
+        "origin_x": 100,
+        "origin_y": 50,
+    })
+    assert result[0]["bbox"] == {"x": 110, "y": 70, "w": 100, "h": 40}
+
+
+def test_vision_detect_reports_a_missing_source():
+    result = _call("vision_detect", {})
+    assert "detections_path" in result["error"]
+
+
+def test_vision_detect_reports_a_missing_file(tmp_path):
+    result = _call("vision_detect", {"detections_path": str(tmp_path / "nope.json")})
+    assert "cannot read" in result["error"]
+
+
+def test_vision_detect_reports_invalid_json(tmp_path):
+    path = tmp_path / "det.json"
+    path.write_text("{not json", encoding="utf-8")
+    result = _call("vision_detect", {"detections_path": str(path)})
+    assert "invalid" in result["error"]
+
+
+def test_resolve_elements_reports_the_tier_and_the_trail(tmp_path):
+    path = tmp_path / "det.json"
+    path.write_text(json.dumps([[[10, 20, 110, 60], "button"]]), encoding="utf-8")
+
+    result = _call("resolve_elements", {
+        "hwnd": 0, "port": 0, "detections_path": str(path),
+    })
+
+    assert result["used_backend"] == "vision"
+    assert [a["backend"] for a in result["attempts"]] == ["uia", "cdp", "vision"]
+    assert result["attempts"][0]["ok"] is False
+    assert result["elements"][0]["backend"] == "vision"
+
+
+def test_resolve_elements_uses_uia_when_the_window_answers(monkeypatch):
+    monkeypatch.setattr(
+        "openeyes.core.selector.detect_elements",
+        lambda hwnd, restore=False, max_depth=12: [Element(
+            backend="uia", control_type="Button", name="Continue",
+            bbox=BBox(10, 20, 80, 24), center=Center(50, 32),
+        )],
+    )
+    result = _call("resolve_elements", {"hwnd": 123, "port": 0})
+    assert result["used_backend"] == "uia"
+    assert result["elements"][0]["name"] == "Continue"
+
+
+def test_resolve_elements_never_actuates(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("resolve_elements actuated")
+
+    monkeypatch.setattr(mcp_server, "click_xy", fail)
+    monkeypatch.setattr(mcp_server, "type_text", fail)
+    monkeypatch.setattr(mcp_server, "send_hotkey", fail)
+    result = _call("resolve_elements", {"hwnd": 0, "port": 0})
+    assert result["used_backend"] is None

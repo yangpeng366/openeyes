@@ -1,7 +1,7 @@
 """
 OpenEyes MCP server — exposes core primitives as MCP tools.
 
-Tools (13 = 7 native + 6 browser):
+Tools (15 = 7 native + 6 browser + 2 structured-first):
     list_windows()             -> [{hwnd, title, ...}, ...]
     capture_window(hwnd, out?, dry_run?) -> {path, size, captured}
     detect_elements(hwnd, restore?, depth?, name_contains?, control_type?, regex?)
@@ -20,6 +20,10 @@ Tools (13 = 7 native + 6 browser):
     browser_type(--text, --hint|--idx|--name-contains?, dry_run?)
                                 -> {sent_chars: int, into: str, press_enter: bool}
     browser_shot(--out, dry_run?) -> {path: str, captured: bool}
+    resolve_elements(hwnd?, port?, url_contains?, detections_path?)
+                                -> {used_backend, attempts: [...], elements: [...]}
+    vision_detect(detections_path?|--detections, origin_x?, origin_y?, score?)
+                                -> [{backend, control_type, name, bbox, center, ...}, ...]
 
 Run:
     eyes-mcp
@@ -33,6 +37,7 @@ import asyncio
 import json
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -53,6 +58,27 @@ server = Server("openeyes")
 
 def _to_json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=2)
+
+def _load_detections(arguments: dict) -> tuple[Any, str | None]:
+    """Read screen-parsing detections from a file path or inline JSON.
+
+    Returns ``(payload, error)``; ``error`` is None on success.
+    """
+    path = arguments.get("detections_path")
+    if path:
+        try:
+            return json.loads(Path(path).read_text(encoding="utf-8-sig")), None
+        except OSError as exc:
+            return None, f"cannot read detections file {path!r}: {exc}"
+        except json.JSONDecodeError as exc:
+            return None, f"invalid detection JSON in {path!r}: {exc}"
+    inline = arguments.get("detections")
+    if inline:
+        try:
+            return json.loads(inline), None
+        except json.JSONDecodeError as exc:
+            return None, f"invalid inline detection JSON: {exc}"
+    return None, "need detections_path or detections"
 
 
 @server.list_tools()
@@ -267,6 +293,46 @@ async def list_tools() -> list[Tool]:
                     "dry_run": {"type": "boolean", "default": True},
                 },
                 "required": ["out"],
+            },
+        ),
+        Tool(
+            name="resolve_elements",
+            description="Walk the structured-first backend chain (uia -> cdp -> vision) "
+                        "and return the first non-empty element set, which tier answered, "
+                        "and why the earlier tiers fell through. Read-only.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer",
+                             "description": "native window handle; enables the uia tier"},
+                    "port": {"type": "integer", "default": 9222,
+                             "description": "CDP port; 0 skips the cdp tier"},
+                    "url_contains": {"type": "string"},
+                    "detections_path": {"type": "string",
+                                        "description": "screen-parsing detection JSON; enables the vision tier"},
+                    "origin_x": {"type": "integer", "default": 0},
+                    "origin_y": {"type": "integer", "default": 0},
+                    "max_results": {"type": "integer", "default": 200},
+                },
+            },
+        ),
+        Tool(
+            name="vision_detect",
+            description="Parse screen-parsing detections (OmniParser v2 compatible) into "
+                        "AI-friendly elements with bbox/center. Read-only; no model runs "
+                        "on this host.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "detections_path": {"type": "string",
+                                        "description": "path to a detection JSON file"},
+                    "detections": {"type": "string",
+                                   "description": "inline detection JSON (used when detections_path is absent)"},
+                    "origin_x": {"type": "integer", "default": 0},
+                    "origin_y": {"type": "integer", "default": 0},
+                    "score": {"type": "number", "default": 0.9},
+                    "max_results": {"type": "integer", "default": 200},
+                },
             },
         ),
 
@@ -652,6 +718,44 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
                     {"error": str(e), "tool": name}))]
+        if name == "vision_detect":
+            from openeyes.backends.vision import elements_from_detections
+            raw, err = _load_detections(arguments)
+            if err is not None:
+                return [TextContent(type="text", text=_to_json(
+                    {"error": err, "tool": name}))]
+            elems = elements_from_detections(
+                raw,
+                origin=(arguments.get("origin_x", 0), arguments.get("origin_y", 0)),
+                score=arguments.get("score", 0.9),
+            )
+            elems = elems[: arguments.get("max_results", 200)]
+            return [TextContent(type="text", text=_to_json(
+                [e.to_dict() for e in elems]))]
+
+        if name == "resolve_elements":
+            from openeyes.core.resolve import resolve_elements as resolve_chain
+            from openeyes.backends.vision import elements_from_detections
+            vision_elements = None
+            if arguments.get("detections_path"):
+                raw, err = _load_detections(arguments)
+                if err is not None:
+                    return [TextContent(type="text", text=_to_json(
+                        {"error": err, "tool": name}))]
+                vision_elements = elements_from_detections(
+                    raw,
+                    origin=(arguments.get("origin_x", 0), arguments.get("origin_y", 0)),
+                )
+            result = resolve_chain(
+                hwnd=arguments.get("hwnd") or None,
+                port=arguments.get("port", 9222) or None,
+                url_contains=arguments.get("url_contains"),
+                vision_elements=vision_elements,
+            )
+            payload = result.to_dict()
+            payload["elements"] = payload["elements"][: arguments.get("max_results", 200)]
+            return [TextContent(type="text", text=_to_json(payload))]
+
         return [TextContent(type="text", text=_to_json(
             {"error": f"unknown tool: {name}"}))]
     except Exception as e:

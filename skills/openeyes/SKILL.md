@@ -91,7 +91,7 @@ without describing coordinates — same UX as UIA mode.
 
 ## MCP server
 
-`eyes-mcp` exposes 13 primitives as MCP tools:
+`eyes-mcp` exposes 15 primitives as MCP tools:
 
 **Native (UIA):**
 - `list_windows`
@@ -109,6 +109,10 @@ without describing coordinates — same UX as UIA mode.
 - `browser_click`   --hint / --idx / --name-contains / --go
 - `browser_type`    --text / --hint / --idx / --enter / --dry-run=false
 - `browser_shot`    --out / --dry-run=false
+
+**Structured-first (read-only, v0.2.0):**
+- `resolve_elements`  --hwnd / --port / --url-contains / --detections_path
+- `vision_detect`     --detections_path / --detections / --origin-x / --origin-y
 
 Start: `eyes-mcp` (stdio transport).
 

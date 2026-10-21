@@ -55,6 +55,8 @@ def test_source_keeps_default_gate_and_safe_next_action():
     assert "browser_click" in text
     assert '"go": true' not in text
     assert "subprocess" not in text
+    assert "401" in text
+    assert "ALIVE_STATUS_CODES" in text
 
 
 def test_ready_gate_reports_http_200_and_section_4_next_action():
@@ -105,7 +107,7 @@ def test_non_200_gate_reports_not_ready_and_recheck_time():
     assert data["ready"] is False
     assert data["status_code"] == 503
     assert data["next_recheck"] == "2099-01-01T00:00:00+08:00"
-    assert "HTTP 200" in data["next_action"]
+    assert "HTTP 200 or 401" in data["next_action"]
 
 
 def test_unreachable_gate_reports_not_ready_with_null_status():
@@ -134,4 +136,26 @@ def test_unreachable_gate_reports_not_ready_with_null_status():
     assert data["status_code"] is None
     assert data["error"], "error message must be populated when the gate is unreachable"
     assert data["next_recheck"] == "2099-01-01T00:00:00+08:00"
-    assert "HTTP 200" in data["next_action"]
+    assert "HTTP 200 or 401" in data["next_action"]
+
+
+def test_http_401_counts_as_ready_with_token_guidance():
+    """dsh 0.1.2 returns 401 on the bare URL; the host is up, the token is missing."""
+    server, url = _run_server(401)
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--url", url, "--timeout", "2"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert proc.returncode == 0, proc.stderr
+    data = json.loads(proc.stdout)
+    assert data["ready"] is True
+    assert data["status_code"] == 401
+    assert "token" in data["next_action"].casefold()
+    assert "section 4" in data["next_action"]
