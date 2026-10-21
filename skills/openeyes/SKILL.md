@@ -12,7 +12,7 @@ hardcoded mouse coordinates with **structured detection**: enumerate
 interactive elements, find the one matching the user's intent, click its
 center. LLM never has to read pixels.
 
-## Three backends, one schema
+## Four backends, one schema
 
 1. **UIA** (`openeyes.backends.uia`) — Windows / macOS / Linux native apps.
    pywinauto + ctypes. Free, no model. Covers Any VPN, VS Code, Feishu,
@@ -25,8 +25,13 @@ center. LLM never has to read pixels.
    ``display:none``; viewport-relative centers work directly via
    ``Input.dispatchMouseEvent`` / ``Input.insertText``. Falls back to
    ``seed_user_data`` profile copy so cookies survive across launches.
-3. **Vision** — Phase 3 fallback for canvas / image-only UIs (OmniParser,
-   Florence-2). Not yet wired.
+3. **Vision** (`openeyes.backends.vision`) — parsing-style fallback for
+   canvas / image-only UIs. The screen is *parsed* into the same ``Element[]``
+   shape the other backends emit (OmniParser v2 compatible), so nothing
+   downstream clicks raw pixels. Two modes: model-free file mode
+   (``detections_path=``) and HTTP endpoint mode (``endpoint=``).
+4. **Lightpanda** (`openeyes.backends.lightpanda`) — headless Chromium over
+   CDP, ~123 MB RAM, for unattended bulk extraction. Same DOM path.
 
 All backends emit the same ``Element`` schema
 (``backend / control_type / name / bbox / center / automation_id / hint
@@ -149,14 +154,41 @@ MCP: `browser_launch(backend="lightpanda", url="https://example.com")`.
 - Health probe: `http://127.0.0.1:9222/json/version` must respond before the launch returns.
 - First run pulls lightpanda/browser:nightly (~150 MB); subsequent runs reuse the local image.
 
-## When to use which backend
+## Backend priority — structure first, pixels last
 
+The 2026 computer-use consensus, now executable in openeyes:
+
+```
+uia  ->  cdp  ->  vision
+```
+
+Never reach for the pixel tier while a structured tier still answers.
+
+```bash
+# which tier answers for this window, and why did the earlier ones fall through?
+eyes resolve --window <hwnd> --pretty
+
+# turn OmniParser v2 detections into structured elements (no model, no network)
+eyes vision --detections det.json --pretty
+```
+
+```python
+from openeyes import resolve_elements
+
+result = resolve_elements(hwnd=1234, port=9222)
+print(result.used_backend)               # "uia" | "cdp" | "vision" | None
+print([a.to_dict() for a in result.attempts])   # per-tier trail
+```
+
+Both commands are read-only. `eyes resolve` never actuates.
+
+## When to use which backend
 | Scenario | Backend | Why |
 | --- | --- | --- |
 | Any VPN / Edge native shell / VS Code / Feishu / Word / Excel | UIA | Fast, free |
 | Real Chromium browser page (login wall, multi-step form, JS-driven UI) | CDP | Structured, no image cost |
 | WebView2 inside a UWP / Edge legacy URL bar / canvas-only UI | CDP (browser) | UIA only sees the shell |
-| Custom canvas game / image-only button | Vision (Phase 3) | Last resort |
+| Custom canvas game / image-only button | Vision (parsing-style) | Last resort; the screen is parsed into elements, not clicked blind |
 | Bulk structured extraction, concurrent crawls, unattended batch jobs | CDP (`--backend lightpanda`) | ~123 MB RAM, 10x faster boot than Edge; no persistent profile, no screenshot |
 
 ## Tips

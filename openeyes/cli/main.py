@@ -506,6 +506,78 @@ def browser_shot(port: int, out: str) -> None:
     click.echo(p)
 
 
+# ----- vision ---------------------------------------------------------------
+
+@cli.command("vision")
+@click.option("--detections", required=True,
+              help="OmniParser-style detection JSON to convert into elements")
+@click.option("--origin-x", type=int, default=0, show_default=True,
+              help="image-to-window offset on X")
+@click.option("--origin-y", type=int, default=0, show_default=True,
+              help="image-to-window offset on Y")
+@click.option("--score", type=float, default=0.9, show_default=True,
+              help="confidence for detections that carry none")
+@click.option("--pretty", is_flag=True)
+def vision(detections: str, origin_x: int, origin_y: int, score: float,
+           pretty: bool) -> None:
+    """Convert screen-parsing detections into openeyes elements (no model)."""
+    from openeyes.backends.vision import elements_from_detections
+    raw = json.loads(open(detections, encoding="utf-8-sig").read())
+    elems = elements_from_detections(raw, origin=(origin_x, origin_y), score=score)
+    if pretty:
+        for e in elems:
+            click.echo(
+                f"[{e.control_type:>14}] ({e.center.x:>4},{e.center.y:>4}) "
+                f"{e.bbox.w}x{e.bbox.h}  '{e.name}'  score={e.score:.2f}"
+            )
+    else:
+        click.echo(json.dumps([e.to_dict() for e in elems], ensure_ascii=False, indent=2))
+
+
+# ----- resolve --------------------------------------------------------------
+
+@cli.command("resolve")
+@click.option("--window", type=int, default=0,
+              help="hwnd to resolve (0 = skip the uia tier)")
+@click.option("--port", type=int, default=9222, show_default=True,
+              help="CDP port (0 = skip the cdp tier)")
+@click.option("--url-contains", default=None)
+@click.option("--vision-detections", default=None,
+              help="detection JSON feeding the vision tier")
+@click.option("--max", type=int, default=200)
+@click.option("--pretty", is_flag=True)
+def resolve(window: int, port: int, url_contains: str | None,
+            vision_detections: str | None, max: int, pretty: bool) -> None:
+    """Walk the backend chain (uia -> cdp -> vision) and report who answered."""
+    from openeyes.core.resolve import resolve_elements
+    vision_elements = None
+    if vision_detections:
+        from openeyes.backends.vision import elements_from_detections
+        raw = json.loads(open(vision_detections, encoding="utf-8-sig").read())
+        vision_elements = elements_from_detections(raw)
+    result = resolve_elements(
+        hwnd=window or None,
+        port=port or None,
+        url_contains=url_contains,
+        vision_elements=vision_elements,
+    )
+    elements = result.elements[:max]
+    if pretty:
+        click.echo(f"used_backend: {result.used_backend or '(none)'}")
+        for a in result.attempts:
+            mark = "ok " if a.ok else "skip"
+            click.echo(f"  [{mark}] {a.backend:<7} count={a.count} {a.reason}")
+        for e in elements:
+            click.echo(
+                f"[{e.control_type:>14}] ({e.center.x:>4},{e.center.y:>4}) "
+                f"{e.bbox.w}x{e.bbox.h}  '{e.name}'  backend={e.backend}"
+            )
+    else:
+        payload = result.to_dict()
+        payload["elements"] = payload["elements"][:max]
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 def main() -> int:
     """Console entrypoint."""
     try:

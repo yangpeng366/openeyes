@@ -36,7 +36,8 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **易点击**：UIA 命中 → 自动点中心；不命中 → vision bbox → 点中心；都不命中 → 字母 hint overlay
 - **安全**：默认 dry-run，所有状态改变操作可审计
 - **MCP 优先**：所有原语通过 MCP server 暴露给任何 agent
-- **可插拔 vision backend**：OmniParser / Florence-2 / 自训练
+- **结构化优先**：`uia -> cdp -> vision` 降级链，能走无障碍树 / DOM 就不看像素，截图只作最后手段
+- **解析式 vision backend**：OmniParser v2 兼容，屏幕先被解析成结构化元素再决策，不让模型对着像素点坐标
 - **跨平台**：Windows（首发）/ macOS / Linux，统一抽象
 
 ### 设计文档
@@ -67,9 +68,11 @@ OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform
 
 - **AI-friendly element schema** — every interactive element exposes structured JSON
 - **Easy click** — UIA hit → bbox center; fallback vision bbox → center; final fallback letter hint
+- **Auditable degradation** — `resolve` reports which backend answered and why the chain fell through
 - **Safe by default** — dry-run; full audit trail for state-changing actions
 - **MCP-first** — every primitive exposed as an MCP tool to any agent
-- **Pluggable vision backend** — OmniParser / Florence-2 / custom
+- **Structured first** — a `uia -> cdp -> vision` degradation chain: prefer the accessibility tree or the DOM, treat pixels as the last resort
+- **Parsing-style vision backend** — OmniParser v2 compatible; the screen is parsed into structured elements before anything decides, never raw coordinate clicking
 - **Cross-platform** — Windows (first), macOS, Linux, with one unified abstraction
 
 ---
@@ -205,12 +208,45 @@ See [`docs/RECORD_DESIGN.md`](docs/RECORD_DESIGN.md) for the full design rationa
 
 <a id="roadmap"></a>
 
+## Backend priority & degradation chain (v0.2.0)
+
+The rule the 2026 computer-use field converged on: **reach for structure first,
+pixels last.** openEyes makes that executable instead of a doc line.
+
+```
+uia  ->  cdp  ->  vision
+accessibility tree   DOM   screen parsing
+```
+
+```bash
+# which tier answers for this window, and why did the earlier ones fall through?
+eyes resolve --window 1234 --pretty
+
+# turn OmniParser v2 detections into structured elements (no model needed)
+eyes vision --detections det.json --pretty
+```
+
+```python
+from openeyes import resolve_elements
+
+result = resolve_elements(hwnd=1234, port=9222)
+print(result.used_backend)              # "uia" | "cdp" | "vision" | None
+print([a.to_dict() for a in result.attempts])
+```
+
+The vision tier is *parsing-style*: the screen is parsed into the same
+`Element[]` shape the other backends emit, so the selector, hint and decision
+layers work unchanged. See [docs/architecture.md](docs/architecture.md).
+
+---
+
 ## Roadmap
 
 - [x] **v0.1.0** — MVP: UIA capture/detect/click + CLI + MCP + 飞书 first showcase
 - [x] **v0.2.0** — Record & Replay: show-and-prompt trajectory capture, no vision required
-- [ ] **v0.3.0** — Vision backend (OmniParser v2 / Florence-2)
+- [x] **v0.2.0** — Parsing-style vision backend (OmniParser v2) + structured-first degradation chain
 - [ ] **v0.3.0** — macOS (AXUIElement) + Linux (AT-SPI)
+- [ ] **v0.3.0** — Florence-2 vision backend
 - [ ] **v0.4.0** — Vimium-style letter hint overlay
 - [ ] **v0.5.0** — LLM intent resolver
 - [ ] **v0.6.0** — Audit log + replay

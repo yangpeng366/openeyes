@@ -96,3 +96,24 @@ Add
 
 For the dsh web-host procedure, use [docs/dsh-web-acceptance.md](dsh-web-acceptance.md).
 
+
+## v0.2.0 additions (CLI / Python only — MCP surface unchanged)
+
+The vision tier and the structured-first degradation chain shipped in v0.2.0 as
+**CLI and Python** surfaces. The MCP tool set stays at exactly the 13 names
+listed above; no tool was added, renamed, or removed.
+
+| Surface | Entry | Notes |
+| --- | --- | --- |
+| CLI | `eyes vision --detections <json>` | Converts screen-parsing detections into `Element[]`. Read-only, no model required. |
+| CLI | `eyes resolve --window <hwnd> [--port N] [--vision-detections <json>]` | Walks `uia -> cdp -> vision` and reports which tier answered, plus per-tier attempt reasons. |
+| Python | `openeyes.resolve_elements(...)` | Returns `ResolveResult` (elements + `used_backend` + attempts). |
+| Python | `openeyes.backends.vision.elements_from_detections(...)` | OmniParser v2 compatible payload -> `Element[]`. |
+
+Rationale for keeping MCP at 13: the acceptance sequence below pins the tool
+list, so adding a tool is a contract change that needs its own reviewed PR.
+The vision tier is usable today through the CLI and the Python API, and both
+MCP hosts (Codex skill, dsh plugin) can call the CLI.
+
+`resolve` never actuates. It only reads, so it is classified as **read**; the
+`vision` command only transforms a local file and is likewise read-only.

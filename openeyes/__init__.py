@@ -18,6 +18,7 @@ from openeyes.core.windows import list_windows, find_window
 from openeyes.core.capture import capture_window, capture_screen
 from openeyes.core.selector import detect_elements, find_elements, click_by_selector
 from openeyes.core.actuator import click_xy, send_hotkey, type_text, drag, scroll
+from openeyes.core.resolve import resolve_elements, ResolveResult, Attempt
 
 # Lazy import for record submodule (optional dependency on openeyes itself)
 # Usage: from openeyes.record import Recorder, Replayer, Trajectory
@@ -30,5 +31,6 @@ __all__ = [
     "capture_window", "capture_screen",
     "detect_elements", "find_elements", "click_by_selector",
     "click_xy", "send_hotkey", "type_text", "drag", "scroll",
+    "resolve_elements", "ResolveResult", "Attempt",
     "__version__",
 ]
