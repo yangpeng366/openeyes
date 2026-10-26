@@ -1,11 +1,12 @@
 # OpenEyes AnyVPN Keepalive launcher - 开关式 (toggle)
 # 双击快捷方式:
-#   * 如果 keepalive 循环已在运行 -> 停止它 (循环结束, AnyVPN 保持现状)
-#   * 否则 -> 启动完整循环 (自动重连 + 每 20s 点 reset 保活)
+#   * 如果 keepalive 循环已在运行 -> 停止它, 断开 AnyVPN, 退出
+#   * 否则 -> 启动完整循环 (自动重连 + 倒计时到期前点 reset 保活)
 # 高级参数仍可用: -Interval N / -MaxIter N / -DryRun / -Screenshot / -Help
 
 param(
     [int]$Interval = 20,
+    [int]$Trigger = 10,
     [int]$MaxIter = 0,
     [switch]$DryRun,
     [switch]$Screenshot,
@@ -15,13 +16,19 @@ param(
 $ErrorActionPreference = "Stop"
 $ProjectDir = "E:\gitAll\openeyes"
 $Script = Join-Path $ProjectDir "examples\anyvpn_keepalive.py"
+$DisconnectScript = Join-Path $ProjectDir "examples\anyvpn_disconnect.py"
 
 if ($Help) {
     Write-Host "OpenEyes AnyVPN Keepalive launcher (toggle)" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "双击本快捷方式 = 开关: 已在运行就停止, 没运行就启动。"
+    Write-Host "双击本快捷方式 = 开关:"
+    Write-Host "  第一次: 启动保活循环 (自动重连 + 到期前点 reset)"
+    Write-Host "  再一次 : 停止保活 + 断开 AnyVPN 连接并退出"
     Write-Host ""
-    Write-Host "可选参数: -Interval N  -MaxIter N  -DryRun  -Screenshot  -Help"
+    Write-Host "可选参数: -Interval N  -Trigger N  -MaxIter N  -DryRun  -Screenshot  -Help"
+    Write-Host ""
+    Write-Host "  -Interval : 会话掉线时的重试间隔 (秒, 默认 20)"
+    Write-Host "  -Trigger  : 倒计时剩多少秒时点 reset (默认 10, 越大越安全、点得越勤)"
     Write-Host ""
     Write-Host "脚本: $Script"
     exit 0
@@ -43,21 +50,26 @@ if (-not $DryRun) {
         $running | ForEach-Object {
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
         }
-        Write-Host "[openeyes] 已停止。AnyVPN 保持现状。" -ForegroundColor Green
+        Write-Host "[openeyes] 已停止保活循环，正在断开 AnyVPN..." -ForegroundColor Yellow
+        Start-Sleep -Milliseconds 500
+        # 真正点 Disconnect, 否则隧道会一直挂着
+        & python $DisconnectScript
+        Write-Host "[openeyes] 已断开并退出。" -ForegroundColor Green
         exit 0
     }
 }
 
 # ---- 启动 keepalive 循环 ----
-$args = @($Script)
+$pyArgs = @($Script)
 if (-not $DryRun) {
-    $args += "--go"
-    $args += "--bootstrap"   # 自动重连一次; 之后每轮只点 reset 保活
+    $pyArgs += "--go"
+    $pyArgs += "--bootstrap"   # 掉线时自动重连 (会改变网络路由, 所以是显式开关)
 }
-if ($DryRun)     { $args += "--dry-run" }
-if ($Screenshot) { $args += "--screenshot-dir"; $args += "shots\anyvpn" }
-$args += "--interval"; $args += "$Interval"
-if ($MaxIter -gt 0) { $args += "--max-iter"; $args += "$MaxIter" }
+if ($DryRun)     { $pyArgs += "--dry-run" }
+if ($Screenshot) { $pyArgs += "--screenshot-dir"; $pyArgs += "shots\anyvpn" }
+$pyArgs += "--interval"; $pyArgs += "$Interval"
+$pyArgs += "--trigger";  $pyArgs += "$Trigger"
+if ($MaxIter -gt 0) { $pyArgs += "--max-iter"; $pyArgs += "$MaxIter" }
 
-Write-Host "[openeyes] launching: python $($args -join ' ')" -ForegroundColor Cyan
-& python @args
+Write-Host "[openeyes] launching: python $($pyArgs -join ' ')" -ForegroundColor Cyan
+& python @pyArgs

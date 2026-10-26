@@ -3,206 +3,192 @@
 Default behavior is DRY-RUN. Pass --go to actually click.
 
 Usage:
-    # dry-run (no clicks): just print what would be clicked
-    python examples\anyvpn_keepalive.py --interval 18
+    # dry-run (no clicks): print what would be clicked
+    python examples\anyvpn_keepalive.py
 
-    # real click loop: only click Click-to-reset-style buttons
-    python examples\anyvpn_keepalive.py --interval 18 --go
+    # real keepalive loop
+    python examples\anyvpn_keepalive.py --go --bootstrap
 
-    # real click loop, including one-time Secure my connection bootstrap
-    python examples\anyvpn_keepalive.py --interval 18 --go --bootstrap
-
-    # bounded test: 5 iterations only
-    python examples\anyvpn_keepalive.py --interval 18 --max-iter 5
-
-    # capture before/after screenshots per click for evidence
-    python examples\anyvpn_keepalive.py --interval 18 --go --bootstrap --screenshot-dir shots/anyvpn
-
-Notes:
-    - --bootstrap is opt-in: by default we never click "Secure my connection"
-      (that button changes network routing — kept explicit per the original
-      NVK boundary).
-    - The window is focused before each click (UWP needs this; otherwise the
-      click may silently fail to the background window).
-    - Each click is followed by a re-detect: if the button label changes
-      (e.g. "Click to reset" -> disappears after a successful reset) we
-      count it as a confirmed hit. If the label is unchanged we count it as
-      an unverified hit and warn once per session.
+Why the previous version kept missing ("点了没反应 / 续不上")
+----------------------------------------------------------
+1. *The name of the keepalive button is a live countdown* —
+   "0:18 left - click to reset" changes every second on its own. The old
+   check "did the button name change?" therefore reported a hit even when
+   the click had done nothing at all. Success is now judged by the
+   countdown jumping back up, never by the label text.
+2. *The fixed 20s poll raced the expiry.* The free session lives 20s after
+   the last click, so a 20s interval always clicked at exactly 0:00 — the
+   instant the session dies. The loop is now countdown-driven: it renews
+   while the button still has --trigger seconds (default 10) left.
+3. *Pixel clicks are racy.* A single SetCursorPos + mouse_event can be
+   delivered at the *previous* cursor position, because the target window
+   has not processed WM_MOUSEMOVE yet. Clicks now prefer the UIA Invoke
+   pattern (no pixel maths, no focus, and the user's mouse is never
+   moved); the pixel path is only a fallback and now moves the cursor in
+   steps with a settle pause.
+4. *Recovery was missing.* When the free session lapses, Any VPN drops the
+   session and closes its window. With --bootstrap the script now relaunches
+   the app and reconnects instead of leaving the user offline.
 """
 from __future__ import annotations
+
 import argparse
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
 
-from openeyes import find_window, detect_elements, find_elements, click_xy
-from openeyes.actuators.win32 import focus_window
+from openeyes import (click_element, detect_elements, ensure_dpi_awareness,
+                      find_elements)
 
-try:
-    import win32api
-    import win32con
-    import win32gui
-except Exception:  # pragma: no cover - fall back to focus-only behaviour
-    win32api = win32con = win32gui = None
+# Coordinates must be physical screen pixels, otherwise the click lands
+# a few pixels off (or on a different element) on scaled monitors.
+ensure_dpi_awareness()
 
-# AnyVPN's own top-right "hide" (collapse-to-bubble) button uses the Segoe
-# MDL2 "Hide" glyph; the OS title-bar buttons sit just above it.
-HIDE_GLYPH = "\ue115"
+import win32con  # noqa: E402
+import win32gui  # noqa: E402
 
-# Targets that just keep an existing VPN session alive. SAFE to click.
-KEEPALIVE_TARGETS = [
-    "Click to reset",
-    "Reset",
-    "Reconnect",
-]
+# --- stable anchors (visible names change every second) ---------------
+RESET_AID = "KeepFreeAliveButton"   # "0:18 left - click to reset"
+CONNECT_AID = "ConnectButton"       # "Secure my connection"
+MINIMIZE_AID = "Minimize"           # title bar '-'
+RESET_NAME_RE = r"click\s*to\s*reset"
 
-# Targets that change network state. Only used with --bootstrap.
-BOOTSTRAP_TARGETS = [
-    "Secure my connection",
-]
+# The renewal target is a single stable control id. It must never resolve
+# to the connect button: clicking that changes network routing, which is
+# out of scope for a keepalive loop (reconnecting stays opt-in).
+RENEWAL_AUTOMATION_IDS = (RESET_AID,)
 
+# Microsoft Store app id — used to relaunch Any VPN after the free
+# session lapses and the app closes its window.
+APP_AUMID = r"shell:AppsFolder\AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App"
 
-def _resolve_target(hwnd: int, *, allow_bootstrap: bool):
-    """Re-detect and return (button_name, element). Returns (None, None) on miss."""
-    elems = detect_elements(hwnd, restore=True)
-    if allow_bootstrap:
-        for kw in BOOTSTRAP_TARGETS + KEEPALIVE_TARGETS:
-            matches = find_elements(elems, name_contains=kw, control_type="Button")
-            if matches:
-                return kw, matches[0]
-        return None, None
-    for kw in KEEPALIVE_TARGETS:
-        matches = find_elements(elems, name_contains=kw, control_type="Button")
-        if matches:
-            return kw, matches[0]
-    return None, None
+COUNTDOWN_RE = re.compile(r"(\d+):(\d+)\s*left", re.IGNORECASE)
+
+SW_SHOWNOACTIVATE = 4  # restore without stealing the user's focus
 
 
-def _window_pos(hwnd: int) -> tuple[int, int, int, int]:
-    """Return (x, y, w, h) of the window via fresh EnumWindows."""
-    wins = find_window(title_contains="Any VPN",
-                       class_name="ApplicationFrameWindow")
-    if not wins:
-        return (0, 0, 0, 0)
-    w = wins[0]
-    return (w.x, w.y, w.w, w.h)
+# ---------------------------------------------------------------- helpers
+def parse_countdown(label: str | None) -> int | None:
+    """Seconds left parsed from '0:18 left - click to reset' (None if absent)."""
+    m = COUNTDOWN_RE.search(label or "")
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2))
 
 
-def _snapshot_foreground() -> tuple[int, tuple[int, int] | None]:
-    """Return (foreground_hwnd, cursor_pos) before this round touches the UI."""
-    if win32gui is None:
-        return 0, None
+def should_renew(countdown: int | None, trigger: int) -> bool:
+    """True when the countdown has fallen into the renewal window."""
+    return countdown is not None and countdown <= trigger
+
+
+def judge_renewal(before: int | None, after: int | None) -> str:
+    """Verdict for one renewal attempt.
+
+    ``hit``    — the countdown jumped back up, the session was renewed.
+    ``miss``   — the countdown kept falling, the click did nothing.
+    ``gone``   — the keepalive button disappeared, the session lapsed.
+    ``unknown``— the button carries no countdown, success cannot be judged.
+    """
+    if after is None:
+        return "gone"
+    if before is None:
+        return "unknown"
+    return "hit" if after > before else "miss"
+
+
+def seconds_until_due(countdown: int | None, trigger: int) -> float:
+    """How long to wait before the countdown enters the renewal window."""
+    if countdown is None:
+        return 0.0
+    return max(0.0, float(countdown) - float(trigger))
+
+
+def should_connect(*, has_keepalive_button: bool, bootstrap: bool) -> bool:
+    """Whether the loop may click 'Secure my connection'.
+
+    Reconnecting changes network routing, so it is opt-in (``--bootstrap``)
+    and never happens while a keepalive button is present.
+    """
+    return (not has_keepalive_button) and bootstrap
+
+
+def find_anyvpn_window() -> int | None:
+    """hwnd of the Any VPN frame window, or None when the app is not up."""
+    hits: list[int] = []
+
+    def cb(h, _):
+        if (win32gui.GetWindowText(h) == "Any VPN"
+                and "ApplicationFrameWindow" in win32gui.GetClassName(h)):
+            hits.append(h)
+
+    win32gui.EnumWindows(cb, None)
+    return hits[0] if hits else None
+
+
+def show_without_focus(hwnd: int) -> None:
+    """Bring a minimised or hidden window back without activating it.
+
+    SW_SHOWNOACTIVATE repopulates the UIA tree (a minimised UWP window has
+    an empty one) while leaving the user's foreground window and keyboard
+    focus untouched.
+    """
     try:
-        return win32gui.GetForegroundWindow(), win32api.GetCursorPos()
-    except Exception:
-        return 0, None
-
-
-def _is_our_console(hwnd: int) -> bool:
-    if win32gui is None:
-        return False
-    try:
-        return hwnd == win32gui.GetConsoleWindow()
-    except Exception:
-        return False
-
-
-def _restore_foreground(fg_hwnd: int, cursor_pos, screen_hwnd: int) -> None:
-    """Give the cursor + window focus back to what the user had before."""
-    if cursor_pos is not None and win32api is not None:
-        try:
-            win32api.SetCursorPos(cursor_pos)
-        except Exception:
-            pass
-    if not fg_hwnd or _is_our_console(fg_hwnd) or fg_hwnd == screen_hwnd:
-        return
-    if win32gui is None:
-        return
-    try:
-        if win32gui.GetForegroundWindow() == fg_hwnd:
-            return
-        win32gui.ShowWindow(fg_hwnd, win32con.SW_RESTORE)
-        win32gui.SetForegroundWindow(fg_hwnd)
-    except Exception:
-        try:
-            from pywinauto import Desktop
-            Desktop(backend="uia").window(handle=fg_hwnd).set_focus()
-        except Exception:
-            pass
-
-
-def _ensure_visible(hwnd: int) -> None:
-    """Restore a minimized window so the next click can actually land."""
-    if win32gui is None:
-        return
-    try:
-        if win32gui.IsIconic(hwnd):
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-            time.sleep(0.25)
+        if win32gui.IsIconic(hwnd) or not win32gui.IsWindowVisible(hwnd):
+            win32gui.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+            time.sleep(0.35)
     except Exception:
         pass
 
-def _find_hide_button(hwnd: int, rect: tuple[int, int, int, int]):
-    """Return the control used to hide the window after a successful reset.
 
-    The user confirmed the hide affordance is the title-bar '-' (minimize)
-    button — visually a single horizontal dash in the top-right corner. The
-    in-app Segoe MDL2 'Hide' glyph (\ue115) did NOT actually hide the window
-    in testing, so we never prefer it; it is kept only as a last resort.
-
-    Clicking '-' minimizes AnyVPN; ``_ensure_visible`` at the top of the next
-    round restores it so screen-coordinate clicks can still land.
-
-    ``rect`` is (left, top, right, bottom) of the window.
-    """
-    # The caller's rect may be stale (e.g. the window was minimized and the
-    # rect was -32000). detect_elements(restore=True) below restores it, so
-    # re-read the real rect now for the bounds sanity-check.
-    if win32gui is not None:
-        try:
-            l, t, r, b = win32gui.GetWindowRect(hwnd)
-            if r - l > 100 and b - t > 100:
-                rect = (l, t, r, b)
-        except Exception:
-            pass
+def hide_window(hwnd: int) -> bool:
+    """Minimise the Any VPN window so it stays out of the user's way."""
     try:
-        elems = detect_elements(hwnd, restore=True)
+        if win32gui.IsIconic(hwnd):
+            return True
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+        time.sleep(0.2)
+        return bool(win32gui.IsIconic(hwnd))
     except Exception:
-        return None
-
-    def _in_rect(e):
-        x = getattr(e.center, "x", 0)
-        y = getattr(e.center, "y", 0)
-        return rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]
-
-    # 1) Title-bar minimize button ('-'). Localized names: 最小化 / Minimize.
-    for e in elems:
-        if getattr(e, "control_type", "") == "Button" and _in_rect(e):
-            name = (e.name or "")
-            if "最小化" in name or "minimize" in name.lower():
-                return e
-    # 2) Unnamed Button pinned to the title-bar strip (very top of window):
-    #    the '-' has no localized name on some locales; pick the top-most
-    #    unnamed Button in the right-hand cluster of the title bar.
-    title_bar_btns = []
-    for e in elems:
-        if getattr(e, "control_type", "") == "Button" and _in_rect(e):
-            cy = getattr(e.center, "y", 0) - rect[1]
-            if cy <= 60:  # title-bar strip (~top 60px)
-                title_bar_btns.append(e)
-    if title_bar_btns:
-        # rightmost of the top cluster is 'close'; minimize is left of it.
-        title_bar_btns.sort(key=lambda e: getattr(e.center, "x", 0))
-        if len(title_bar_btns) >= 2:
-            return title_bar_btns[0]  # leftmost = minimize ('-')
-    # 3) Last resort: the in-app Hide glyph (kept for backward compat).
-    for e in elems:
-        if getattr(e, "name", "") == HIDE_GLYPH and _in_rect(e):
-            return e
-    return None
+        return False
 
 
-def _shoot(out_dir: Path, hwnd: int, label: str) -> None:
+def relaunch_app() -> bool:
+    """Start Any VPN again (the free session closing takes the window with it)."""
+    try:
+        subprocess.Popen(["explorer.exe", APP_AUMID])
+        return True
+    except Exception:
+        return False
+
+
+def read_keepalive(hwnd: int):
+    """(label, countdown) of the keepalive button, or (None, None)."""
+    try:
+        elems = detect_elements(hwnd)
+    except Exception:
+        return None, None
+    hit = find_elements(elems, automation_id=RESET_AID)
+    if not hit:
+        hit = find_elements(elems, regex=RESET_NAME_RE, control_type="Button")
+    if not hit:
+        return None, None
+    label = hit[0].name or ""
+    return label, parse_countdown(label)
+
+
+def wait_for_keepalive(hwnd: int, timeout: float) -> tuple[str | None, int | None]:
+    """Wait until the keepalive button shows up (the session came up)."""
+    deadline = time.monotonic() + timeout
+    while True:
+        label, countdown = read_keepalive(hwnd)
+        if label is not None or time.monotonic() >= deadline:
+            return label, countdown
+        time.sleep(0.5)
+
+
+def _shoot(out_dir: Path | None, hwnd: int, label: str) -> None:
     """Save a screenshot of the window. Best-effort, never raises."""
     if out_dir is None:
         return
@@ -215,165 +201,216 @@ def _shoot(out_dir: Path, hwnd: int, label: str) -> None:
         pass
 
 
+def renew(hwnd: int, *, dry_run: bool, retries: int,
+          out_dir: Path | None, iteration: int) -> tuple[str, str]:
+    """Renew the free session. Returns (verdict, detail)."""
+    label, before = read_keepalive(hwnd)
+    method = "auto"
+    last = ""
+    for attempt in range(1, max(1, retries) + 1):
+        report = click_element(hwnd, automation_id=RESET_AID, control_type="Button",
+                               method=method, dry_run=dry_run)
+        if not report.get("ok"):
+            # automation id may be missing on other builds — retry by name
+            report = click_element(hwnd, name_regex=RESET_NAME_RE,
+                                   control_type="Button", method=method,
+                                   dry_run=dry_run)
+        last = (f"method={report.get('method')} name={report.get('name')!r} "
+                f"center={report.get('center')} err={report.get('error')}")
+        if dry_run:
+            return "dry-run", last
+        time.sleep(0.7)
+        _, after = read_keepalive(hwnd)
+        verdict = judge_renewal(before, after)
+        if verdict == "hit":
+            return verdict, f"{last} timer {before}s -> {after}s"
+        if verdict == "gone":
+            return verdict, f"{last} keepalive button vanished"
+        if verdict == "miss":
+            print(f"[openeyes] iter {iteration}: renewal MISS "
+                  f"(timer {before}s -> {after}s), retry {attempt}/{retries}",
+                  flush=True)
+            # the other method next time round
+            method = "pixel" if method != "pixel" else "invoke"
+            time.sleep(0.4)
+            continue
+        return verdict, last
+    return "miss", last
+
+
+def connect(hwnd: int, *, dry_run: bool) -> tuple[bool, str]:
+    """Click 'Secure my connection' so the free session starts again.
+
+    The very same button carries the label 'Disconnect' while a session is
+    up. Clicking it then would kill a live session, so the label is read
+    first and the click is refused unless it really says 'Secure my
+    connection'.
+    """
+    try:
+        elems = detect_elements(hwnd)
+        hit = find_elements(elems, automation_id=CONNECT_AID)
+    except Exception:
+        hit = []
+    if hit:
+        current = (hit[0].name or "").strip()
+        if "disconnect" in current.lower():
+            return False, (f"refused to click: the button says {current!r} "
+                           f"(a session is already up)")
+    report = click_element(hwnd, automation_id=CONNECT_AID, control_type="Button",
+                           method="auto", dry_run=dry_run)
+    if not report.get("ok"):
+        report = click_element(hwnd, name_contains="Secure my connection",
+                               control_type="Button", method="auto", dry_run=dry_run)
+    return bool(report.get("ok")), (f"method={report.get('method')} "
+                                    f"name={report.get('name')!r} "
+                                    f"err={report.get('error')}")
+
+
+# ------------------------------------------------------------------- main
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--go", action="store_true",
                     help="actually click. Default is dry-run.")
-    ap.add_argument("--interval", type=float, default=18.0,
-                    help="seconds between iterations (default 18)")
-    ap.add_argument("--max-iter", type=int, default=0, help="0 = run forever")
+    ap.add_argument("--interval", type=float, default=20.0,
+                    help="seconds to wait before retrying while the session "
+                         "is down (default 20)")
+    ap.add_argument("--trigger", type=int, default=10,
+                    help="renew while the countdown still has this many "
+                         "seconds left (default 10)")
+    ap.add_argument("--retries", type=int, default=3,
+                    help="attempts per renewal, alternating invoke/pixel")
     ap.add_argument("--title-contains", default="Any VPN")
     ap.add_argument("--bootstrap", action="store_true",
-                    help="allow one-time click on 'Secure my connection' to "
-                         "start the VPN. By default we only click keepalive "
-                         "buttons (safer — does not change network routing).")
+                    help="allow reconnecting: click 'Secure my connection' and "
+                         "relaunch the app when the free session lapses. "
+                         "Changes network routing, so it stays opt-in.")
+    ap.add_argument("--no-hide", dest="hide", action="store_false",
+                    help="keep the Any VPN window visible instead of "
+                         "minimising it after each renewal")
     ap.add_argument("--screenshot-dir", default=None,
                     help="if set, save before/after screenshots per click")
     ap.add_argument("--quiet", action="store_true",
-                    help="only print hits / errors, not misses")
+                    help="only print renewals / errors, not idle rounds")
+    ap.add_argument("--max-iter", type=int, default=0, help="0 = run forever")
     args = ap.parse_args()
 
     out_dir = Path(args.screenshot_dir) if args.screenshot_dir else None
-
-    wins = find_window(title_contains=args.title_contains,
-                       class_name="ApplicationFrameWindow")
-    if not wins:
-        print(f"[openeyes] window {args.title_contains!r} not found", file=sys.stderr)
-        return 2
-    hwnd = wins[0].hwnd
-    pos0 = (wins[0].x, wins[0].y, wins[0].w, wins[0].h)
-    print(f"[openeyes] using hwnd={hwnd} dry_run={not args.go} "
-          f"interval={args.interval}s bootstrap={args.bootstrap}")
-    print(f"[openeyes] window pos: x={pos0[0]} y={pos0[1]} "
-          f"size={pos0[2]}x{pos0[3]}")
-
-    stats = {"hits": 0, "misses": 0, "unverified": 0, "window_moves": 0,
-             "bootstrapped": False}
+    stats = {"renewed": 0, "missed": 0, "reconnects": 0, "relaunches": 0,
+             "rounds": 0, "unknown": 0}
     t_start = time.time()
-    last_pos = pos0
-    last_warn_unverified = False
-
     i = 0
-    snapshot = (0, None)
+    next_due = time.monotonic()
+
+    print(f"[openeyes] keepalive: go={args.go} trigger={args.trigger}s "
+          f"interval={args.interval}s bootstrap={args.bootstrap} "
+          f"hide={args.hide} dpi={ensure_dpi_awareness()}", flush=True)
+
     try:
         while True:
-            # 1) Re-find window (hwnd could change if app restarted)
-            wins = find_window(title_contains=args.title_contains,
-                               class_name="ApplicationFrameWindow")
-            if not wins:
-                print(f"[openeyes] iter {i}: window disappeared — aborting")
-                return 3
-            hwnd = wins[0].hwnd
-            pos = (wins[0].x, wins[0].y, wins[0].w, wins[0].h)
-            moved = abs(pos[0] - last_pos[0]) > 50 or abs(pos[1] - last_pos[1]) > 50
-            if moved:
-                stats["window_moves"] += 1
-                if not args.quiet:
-                    print(f"[openeyes] iter {i}: window moved "
-                          f"{last_pos[:2]} -> {pos[:2]}  (using new center)")
-                last_pos = pos
-
-            # Remember the user's active window + cursor before this round
-            # touches the UI, so we can give them both back afterwards.
-            if args.go:
-                snapshot = _snapshot_foreground()
-
-            # 2) Resolve target
-            kw, target = _resolve_target(hwnd, allow_bootstrap=args.bootstrap)
-            if target is None:
-                stats["misses"] += 1
-                if not args.quiet:
-                    print(f"[openeyes] iter {i}: no matching button")
-            else:
-                line = (f"[openeyes] iter {i}: kw={kw!r} button={target.name!r} "
-                        f"@ ({target.center.x},{target.center.y})  "
-                        f"size={target.bbox.w}x{target.bbox.h}")
-                if args.go:
-                    if kw == "Secure my connection" and not stats["bootstrapped"]:
-                        # one-time notice when bootstrap is consumed
-                        print(f"[openeyes] BOOTSTRAP: clicking Secure my connection "
-                              f"(one-time, changes network routing)")
-                        stats["bootstrapped"] = True
-                    _shoot(out_dir, hwnd, f"before_iter{i}")
-                    _ensure_visible(hwnd)
-                    focus_window(hwnd)
-                    time.sleep(0.15)
-                    click_xy(target.center.x, target.center.y)
-                    time.sleep(0.4)
-                    _shoot(out_dir, hwnd, f"after_iter{i}")
-                    print(line + "  CLICKED")
-
-                    # 3) Verify
-                    kw_after, target_after = _resolve_target(
-                        hwnd, allow_bootstrap=False)
-                    reset_ok = False
-                    if kw_after is None or target_after is None:
-                        # no keepalive button anymore -> reset likely succeeded
-                        stats["hits"] += 1
-                        reset_ok = True
-                    elif target_after.name != target.name:
-                        # button changed (e.g. Click to reset -> other state)
-                        stats["hits"] += 1
-                        reset_ok = True
-                        print(f"[openeyes] iter {i}: verified — button changed "
-                              f"to {target_after.name!r}")
-                    else:
-                        stats["unverified"] += 1
-                        if not last_warn_unverified:
-                            print(f"[openeyes] iter {i}: WARNING — button label "
-                                  f"unchanged after click ({target.name!r}). "
-                                  f"Will only warn once.")
-                            last_warn_unverified = True
-
-                    # 4) Hide the window after a confirmed reset
-                    if reset_ok:
-                        rect = (pos[0], pos[1], pos[0] + pos[2], pos[1] + pos[3])
-                        hide_btn = _find_hide_button(hwnd, rect)
-                        if hide_btn is not None:
-                            focus_window(hwnd)
-                            time.sleep(0.1)
-                            click_xy(hide_btn.center.x, hide_btn.center.y)
-                            time.sleep(0.4)
-                            hidden = bool(win32gui and win32gui.IsIconic(hwnd)) \
-                                if win32gui else None
-                            if not hidden and win32gui is not None:
-                                # First click on an inactive window's title-bar
-                                # button only activates it; fall back to a
-                                # direct SW_MINIMIZE for reliability.
-                                try:
-                                    win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
-                                    time.sleep(0.2)
-                                    hidden = bool(win32gui.IsIconic(hwnd))
-                                    via_api = True
-                                except Exception:
-                                    via_api = False
-                            else:
-                                via_api = False
-                            print(f"[openeyes] iter {i}: clicked hide @ "
-                                  f"({hide_btn.center.x},{hide_btn.center.y}) "
-                                  f"name={hide_btn.name!r} minimized={hidden} "
-                                  f"via_api={via_api}")
-                        elif not args.quiet:
-                            print(f"[openeyes] iter {i}: hide button not found")
+            stats["rounds"] += 1
+            hwnd = find_anyvpn_window()
+            if hwnd is None:
+                if not args.bootstrap:
+                    if not args.quiet:
+                        print(f"[openeyes] iter {i}: Any VPN not running "
+                              f"(--bootstrap not set, not launching it)",
+                              flush=True)
                 else:
-                    print(line + "  [dry-run]")
+                    print(f"[openeyes] iter {i}: Any VPN is not running -> "
+                          f"relaunching", flush=True)
+                    stats["relaunches"] += 1
+                    relaunch_app()
+                time.sleep(min(5.0, args.interval))
+                i += 1
+                if args.max_iter and i >= args.max_iter:
+                    break
+                continue
 
-            # Give the mouse + focus back to the pre-round window
-            if args.go:
-                _restore_foreground(snapshot[0], snapshot[1], hwnd)
+            show_without_focus(hwnd)
+            label, countdown = read_keepalive(hwnd)
+
+            if label is None:
+                # no keepalive button -> the free session is down
+                if should_connect(has_keepalive_button=False,
+                                  bootstrap=args.bootstrap):
+                    print(f"[openeyes] iter {i}: session down -> reconnecting",
+                          flush=True)
+                    _shoot(out_dir, hwnd, f"before_reconnect{i}")
+                    ok, detail = connect(hwnd, dry_run=not args.go)
+                    if ok:
+                        stats["reconnects"] += 1
+                        # wait for the session to come up instead of
+                        # hammering the connect button every round
+                        label, countdown = wait_for_keepalive(
+                            hwnd, timeout=min(30.0, args.interval))
+                    print(f"[openeyes] iter {i}: reconnect {detail}", flush=True)
+                elif not args.quiet:
+                    print(f"[openeyes] iter {i}: no keepalive button "
+                          f"(session down)", flush=True)
+                if args.hide:
+                    hide_window(hwnd)
+                if label is None:
+                    next_due = time.monotonic() + args.interval
+                else:
+                    next_due = time.monotonic() + seconds_until_due(
+                        countdown, args.trigger)
+            elif not should_renew(countdown, args.trigger):
+                if not args.quiet:
+                    print(f"[openeyes] iter {i}: timer {countdown}s left, "
+                          f"renewal in {seconds_until_due(countdown, args.trigger):.0f}s",
+                          flush=True)
+                if args.hide:
+                    hide_window(hwnd)
+                next_due = time.monotonic() + seconds_until_due(countdown, args.trigger)
+            else:
+                _shoot(out_dir, hwnd, f"before_renew{i}")
+                verdict, detail = renew(hwnd, dry_run=not args.go,
+                                        retries=args.retries, out_dir=out_dir,
+                                        iteration=i)
+                _shoot(out_dir, hwnd, f"after_renew{i}")
+                if verdict == "hit":
+                    stats["renewed"] += 1
+                    print(f"[openeyes] iter {i}: RENEWED  {detail}", flush=True)
+                elif verdict == "dry-run":
+                    print(f"[openeyes] iter {i}: [dry-run] would renew  {detail}",
+                          flush=True)
+                elif verdict == "gone":
+                    stats["missed"] += 1
+                    print(f"[openeyes] iter {i}: session lapsed during renewal "
+                          f"({detail})", flush=True)
+                elif verdict == "unknown":
+                    stats["unknown"] += 1
+                    print(f"[openeyes] iter {i}: renewed (no countdown to verify) "
+                          f"{detail}", flush=True)
+                else:
+                    stats["missed"] += 1
+                    print(f"[openeyes] iter {i}: RENEWAL FAILED  {detail}",
+                          flush=True)
+                if verdict in ("hit", "dry-run", "unknown") and args.hide:
+                    hide_window(hwnd)
+                next_due = time.monotonic() + (
+                    seconds_until_due(countdown, args.trigger) if verdict != "hit"
+                    else max(2.0, seconds_until_due(19, args.trigger)))
+
+            # wait until the next round is due (never touch the UI while waiting)
+            while True:
+                remaining = next_due - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(0.5, remaining))
 
             i += 1
             if args.max_iter and i >= args.max_iter:
                 break
-            time.sleep(args.interval)
     except KeyboardInterrupt:
         print("[openeyes] interrupted by user")
 
     elapsed = time.time() - t_start
-    print(f"[openeyes] summary: iters={i} hits={stats['hits']} "
-          f"misses={stats['misses']} unverified={stats['unverified']} "
-          f"window_moves={stats['window_moves']} bootstrapped={stats['bootstrapped']} "
+    print(f"[openeyes] summary: rounds={stats['rounds']} renewed={stats['renewed']} "
+          f"missed={stats['missed']} unknown={stats['unknown']} "
+          f"reconnects={stats['reconnects']} relaunches={stats['relaunches']} "
           f"elapsed={elapsed:.1f}s")
     return 0
 

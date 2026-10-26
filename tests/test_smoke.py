@@ -94,23 +94,34 @@ def test_focus_window_returns_bool():
 
 
 def test_keepalive_targets_are_keepalive_only():
-    """KEEPALIVE_TARGETS must not include Secure my connection by default.
+    """The renewal target must never be the connect button.
 
     Guards against the auto-reconnect surprise: clicking Secure my connection
     changes network routing, which is out of scope for a keepalive loop.
     Bootstrap must be opt-in.
     """
     import importlib.util
+    from pathlib import Path
+    script = (Path(__file__).resolve().parents[1]
+              / "examples" / "anyvpn_keepalive.py")
     spec = importlib.util.spec_from_file_location(
         "anyvpn_keepalive_test",
-        r"E:\gitAll\openeyes\examples\anyvpn_keepalive.py",
+        str(script),
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    joined = " ".join(mod.KEEPALIVE_TARGETS).lower()
-    assert "secure my connection" not in joined, (
-        "KEEPALIVE_TARGETS must not auto-connect; use BOOTSTRAP_TARGETS + --bootstrap"
+    joined = " ".join(mod.RENEWAL_AUTOMATION_IDS).lower()
+    assert "connectbutton" not in joined, (
+        "RENEWAL_AUTOMATION_IDS must not auto-connect; reconnecting is opt-in"
     )
+    assert "secure my connection" not in joined, (
+        "RENEWAL_AUTOMATION_IDS must not auto-connect; use --bootstrap"
+    )
+    # reconnecting only happens with --bootstrap, and never while a
+    # keepalive button is present
+    assert mod.should_connect(has_keepalive_button=False, bootstrap=False) is False
+    assert mod.should_connect(has_keepalive_button=True, bootstrap=True) is False
+    assert mod.should_connect(has_keepalive_button=False, bootstrap=True) is True
 
 
 def test_status_command_exists():
