@@ -6,6 +6,29 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Quality gate.** `examples/quality-gate.ps1` runs lint, tests, the encoding
+  sweep and the MCP stdio contract in one command, and `.github/workflows/ci.yml`
+  runs the same four steps on every push to `main`. A push is ready when that
+  script exits 0. `examples/bom-sweep.py` fails the build on a UTF-8 BOM, the
+  defect an editor hides and a toolchain does not.
+- `openeyes.core.dpi` — per-monitor-v2 DPI awareness, applied once and never
+  downgraded from what the host process already set. Windows virtualises
+  coordinates for DPI-unaware processes, so a reported bbox and the click that
+  follows it could disagree; now every coordinate in the process is a real
+  screen pixel.
+- `move_to` / `cursor_pos` and a `press_ms` knob on `click_xy` — a single
+  `SetCursorPos` followed by a click can be delivered at the *previous* cursor
+  position, because the window has not processed `WM_MOUSEMOVE` yet; XAML/UWP
+  controls can also ignore a zero-duration click.
+- `click_element` and `automation_id` filtering — the stable control id beats
+  a visible name that changes every second.
+- The decision layer can now run against a **local System One node** (a local
+  XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
+  the key of `criteria`, as the protocol does, maps the answer back to a
+  candidate index, and accepts the per-option support scores a history vote
+  returns instead of a probability distribution.
+
 ### Changed
 - `openeyes.backends.cdp.launch_edge` now captures Edge stderr to a temp file and surfaces both the early-exit return code and a bounded stderr tail in the `CDPError` message, so a failed CDP launch on a dedicated port (e.g. 9333) reports *why* Edge quit instead of only that it did. `_diagnose_launch` accepts optional `exit_code` and `stderr_tail` and the new `_read_stderr_tail` helper truncates very long output.
 - `docs/architecture.md` documents the backend priority order, the degradation chain, and the coordinate semantics of the vision tier (image pixels are converted to window-relative coordinates through `origin=(dx, dy)`).

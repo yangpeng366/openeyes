@@ -263,6 +263,22 @@ layers work unchanged. See [docs/architecture.md](docs/architecture.md).
 
 ---
 
+## Quality gate
+
+Lint, tests, encoding and the MCP contract are one command, and CI runs the
+same steps on every push:
+
+```powershell
+pwsh -NoProfile -File examples\quality-gate.ps1
+```
+
+| Step | What it proves |
+|---|---|
+| `ruff check .` | the tree is lint-clean under the repo's own rule set |
+| `python examples/bom-sweep.py` | every source file is UTF-8 **without** BOM |
+| `python examples/mcp-stdio-probe.py` | the MCP server starts and exposes the 15-tool contract |
+| `python -m pytest tests/ -q` | the behaviour holds |
+
 ## Repository layout
 
 ```

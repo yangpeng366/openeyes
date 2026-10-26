@@ -9,6 +9,21 @@ Thanks for considering a contribution!
 - Discussions happen in GitHub Discussions (TBD) or weekly chat (TBD).
 - Open an issue before substantial work, so we can align on direction.
 
+## Before you push
+
+Run the gate. It is the same thing CI runs:
+
+```powershell
+pwsh -NoProfile -File examples\quality-gate.ps1
+```
+
+- `ruff check .` must be clean (the repo's rule set is in `pyproject.toml`).
+- `examples/bom-sweep.py` must report no BOM: a BOM is invisible in an editor
+  and breaks toolchains.
+- The MCP contract probe must report `tool_count: 15`.
+- `pytest` must be green. A test that only skips is not a passing test - say
+  in the PR what was skipped and why.
+
 ## Development setup
 
 ```powershell
