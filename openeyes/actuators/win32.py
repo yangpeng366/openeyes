@@ -27,10 +27,50 @@ def _move(x: int, y: int) -> None:
     win32api.SetCursorPos((x, y))
 
 
-def click_xy(x: int, y: int, button: str = "left", double: bool = False) -> None:
-    """Click at absolute screen coords. Uses mouse_event for synthesized input."""
+def cursor_pos() -> tuple[int, int] | None:
+    """Current cursor position, or None if it cannot be read."""
+    try:
+        return tuple(win32api.GetCursorPos())  # type: ignore[return-value]
+    except Exception:
+        return None
+
+
+def move_to(x: int, y: int, settle_ms: int = 60, steps: int = 2) -> bool:
+    """Move the cursor to (x, y) and wait for the target to see the motion.
+
+    A single ``SetCursorPos`` immediately followed by a click can be
+    delivered at the *previous* cursor position: the target window has not
+    processed WM_MOUSEMOVE yet, so the synthesised button press lands where
+    the cursor used to be. Moving in a couple of steps with a settle pause
+    removes that race.
+
+    Returns True when the cursor ended up exactly on (x, y).
+    """
+    steps = max(1, int(steps))
+    sx, sy = cursor_pos() or (x, y)
+    for i in range(1, steps + 1):
+        ix = int(sx + (x - sx) * i / steps)
+        iy = int(sy + (y - sy) * i / steps)
+        _move(ix, iy)
+        if settle_ms > 0:
+            time.sleep(settle_ms / 1000.0 / steps)
     _move(x, y)
-    time.sleep(0.02)
+    if settle_ms > 0:
+        time.sleep(settle_ms / 1000.0)
+    pos = cursor_pos()
+    return pos is not None and abs(pos[0] - x) <= 1 and abs(pos[1] - y) <= 1
+
+
+def click_xy(x: int, y: int, button: str = "left", double: bool = False,
+             press_ms: int = 30, settle_ms: int = 60) -> None:
+    """Click at absolute screen coords. Uses mouse_event for synthesized input.
+
+    ``press_ms`` holds the button down for a moment before releasing it —
+    XAML/UWP controls can ignore a zero-duration click. ``settle_ms`` is the
+    pause after the cursor has been moved onto the target, so the window has
+    processed the motion before the press arrives.
+    """
+    move_to(x, y, settle_ms=settle_ms)
     bmap = {
         "left": win32con.MOUSEEVENTF_LEFTDOWN,
         "right": win32con.MOUSEEVENTF_RIGHTDOWN,
@@ -44,6 +84,8 @@ def click_xy(x: int, y: int, button: str = "left", double: bool = False) -> None
     n = 2 if double else 1
     for _ in range(n):
         win32api.mouse_event(bmap[button], 0, 0, 0, 0)
+        if press_ms > 0:
+            time.sleep(press_ms / 1000.0)
         win32api.mouse_event(umap[button], 0, 0, 0, 0)
         time.sleep(0.02)
 

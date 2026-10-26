@@ -18,9 +18,26 @@ def _backend():
     return backend
 
 
-def click_xy(x: int, y: int, button: str = "left", double: bool = False) -> None:
+def click_xy(x: int, y: int, button: str = "left", double: bool = False,
+             press_ms: int = 30, settle_ms: int = 60) -> None:
     """Click at absolute screen coords."""
-    _backend().click_xy(x, y, button=button, double=double)
+    backend = _backend()
+    try:
+        backend.click_xy(x, y, button=button, double=double,
+                         press_ms=press_ms, settle_ms=settle_ms)
+    except TypeError:
+        # backends that do not support the fine-grained knobs yet
+        backend.click_xy(x, y, button=button, double=double)
+
+
+def move_to(x: int, y: int, settle_ms: int = 60, steps: int = 2) -> bool:
+    """Move the cursor to (x, y) and let the target window see the motion."""
+    return _backend().move_to(x, y, settle_ms=settle_ms, steps=steps)
+
+
+def cursor_pos() -> tuple[int, int] | None:
+    """Current cursor position, or None if it cannot be read."""
+    return _backend().cursor_pos()
 
 
 def send_hotkey(*keys: str) -> None:
