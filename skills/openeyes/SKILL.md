@@ -301,7 +301,7 @@ without a hosted key:
 
 ```powershell
 $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
-$env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+$env:XERJ_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
 python examples\systemone-local-acceptance.py   # prints one JSON line, exit 0
 ```
 

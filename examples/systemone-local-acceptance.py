@@ -1,7 +1,7 @@
 r"""Acceptance probe for the JEV decision layer over a local XERJ node.
 
     $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
-    $env:TYPESAFE_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+    $env:TYPESAFE_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
     python examples\systemone-local-acceptance.py
 
 Prints one JSON line and exits 0 when the decision layer answered through the

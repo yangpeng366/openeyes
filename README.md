@@ -211,7 +211,7 @@ and gets its own measured profile, per language family (Chinese default) - see
 
 ```powershell
 $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"     # local XERJ node
-$env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+$env:XERJ_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
 python examples\systemone-local-acceptance.py          # one JSON line, exit 0
 python examples\seed-systemone-history.py --index judgements --recreate            # Chinese default
 python examples\systemone-calibration.py               # measure the judge

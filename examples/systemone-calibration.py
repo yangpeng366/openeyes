@@ -1,7 +1,7 @@
 r"""Measure the local XERJ judge's votes over the repo's labelled history.
 
     $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
-    $env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+    $env:XERJ_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
     python examples\systemone-calibration.py
 
 Every labelled example is asked the way the decision layer would ask - the

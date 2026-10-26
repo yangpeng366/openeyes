@@ -3,7 +3,7 @@ r"""Live probe: the JEV decision layer against a local XERJ node.
 Skipped unless a local System One endpoint answers:
 
     $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
-    $env:TYPESAFE_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+    $env:TYPESAFE_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
     pytest tests/test_systemone_local.py -v
 
 A local XERJ node answers `/v1/systemone` with a rank-weighted vote over its

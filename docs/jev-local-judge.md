@@ -62,7 +62,7 @@ python examples\seed-systemone-history.py --index judgements --recreate --lang a
 
 # measure
 $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
-$env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+$env:XERJ_API_KEY = (Get-Content D:\AI-Portable\xerj-data\admin.key -Raw).Trim()
 python examples\systemone-calibration.py
 ```
 

@@ -106,7 +106,7 @@ def main() -> int:
         "--file",
         help="an alternative seed file (the wide set, for instance, which measures worse)",
     )
-    parser.add_argument("--data-dir", default=r"E:\AI-Portable\xerj-data")
+    parser.add_argument("--data-dir", default=r"D:\AI-Portable\xerj-data")
     parser.add_argument("--dry-run", action="store_true", help="print the command, ingest nothing")
     parser.add_argument(
         "--lang",
