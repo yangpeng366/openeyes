@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "note": "Held-out goals: the same options as the labelled history, but phrased differently, so a vote has to generalise instead of recognising the document it was built from. This is the set the local judge's thresholds are measured on - the seed itself can only show that the mechanism works.",
+  "examples": [
+    {
+      "id": "p-msg",
+      "label": "消息",
+      "goal": "open the chat inbox",
+      "distractors": [
+        "通知",
+        "搜索"
+      ]
+    },
+    {
+      "id": "p-notify",
+      "label": "通知",
+      "goal": "check the alert centre",
+      "distractors": [
+        "消息"
+      ]
+    },
+    {
+      "id": "p-settings",
+      "label": "设置",
+      "goal": "change the preferences",
+      "distractors": [
+        "登录",
+        "刷新"
+      ]
+    },
+    {
+      "id": "p-submit",
+      "label": "提交",
+      "goal": "send the form",
+      "distractors": [
+        "保存",
+        "全选"
+      ]
+    },
+    {
+      "id": "p-save",
+      "label": "保存",
+      "goal": "keep my changes",
+      "distractors": [
+        "提交",
+        "导出"
+      ]
+    },
+    {
+      "id": "p-download",
+      "label": "下载",
+      "goal": "fetch the attachment to disk",
+      "distractors": [
+        "上传",
+        "打印"
+      ]
+    },
+    {
+      "id": "p-search",
+      "label": "搜索",
+      "goal": "look up the quarterly report",
+      "distractors": [
+        "刷新",
+        "排序"
+      ]
+    },
+    {
+      "id": "p-close",
+      "label": "关闭",
+      "goal": "dismiss the window",
+      "distractors": [
+        "刷新",
+        "删除"
+      ]
+    },
+    {
+      "id": "p-create",
+      "label": "新建",
+      "goal": "start a blank file",
+      "distractors": [
+        "重命名",
+        "导出"
+      ]
+    },
+    {
+      "id": "p-rename",
+      "label": "重命名",
+      "goal": "give the file another name",
+      "distractors": [
+        "新建",
+        "复制"
+      ]
+    },
+    {
+      "id": "p-copy",
+      "label": "复制",
+      "goal": "duplicate the selection",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ]
+    },
+    {
+      "id": "p-paste",
+      "label": "粘贴",
+      "goal": "put the clipboard content here",
+      "distractors": [
+        "复制",
+        "保存"
+      ]
+    },
+    {
+      "id": "p-print",
+      "label": "打印",
+      "goal": "produce a paper copy",
+      "distractors": [
+        "下载",
+        "导出"
+      ]
+    },
+    {
+      "id": "p-refresh",
+      "label": "刷新",
+      "goal": "reload the current view",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ]
+    },
+    {
+      "id": "p-signin",
+      "label": "登录",
+      "goal": "sign in",
+      "distractors": [
+        "设置",
+        "提交"
+      ]
+    },
+    {
+      "id": "p-upload",
+      "label": "上传",
+      "goal": "push the file to the server",
+      "distractors": [
+        "下载",
+        "导出"
+      ]
+    },
+    {
+      "id": "p-sort",
+      "label": "排序",
+      "goal": "order the list newest first",
+      "distractors": [
+        "搜索",
+        "全选"
+      ]
+    },
+    {
+      "id": "p-selectall",
+      "label": "全选",
+      "goal": "mark every row",
+      "distractors": [
+        "排序",
+        "删除"
+      ]
+    },
+    {
+      "id": "p-export",
+      "label": "导出",
+      "goal": "save the report as a spreadsheet",
+      "distractors": [
+        "打印",
+        "上传"
+      ]
+    },
+    {
+      "id": "p-delete",
+      "label": "删除",
+      "goal": "remove the chosen item",
+      "distractors": [
+        "全选",
+        "关闭"
+      ]
+    }
+  ]
+}

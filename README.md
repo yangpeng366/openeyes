@@ -201,14 +201,20 @@ python examples\record_demo_real.py        # real Edge window (needs openeyes in
 `generate_trajectory_from_prompt(..., backend="jev")` uses the deterministic
 fake JEV scorer by default and switches to the real System One wire when
 `TYPESAFE_API_KEY` is configured, or when `TYPESAFE_BASE_URL` points at a
-loopback node (a local XERJ node may answer keyless). Confidence routing
-reuses `0.85` / `0.60`; a local history vote answers with support scores
-rather than a distribution, so its confidence scale is its own.
+loopback node (a local XERJ node may answer keyless).
+
+The thresholds follow the **scale** of the answer, not the scorer: the hosted
+judge answers with a probability and keeps `0.85` / `0.60`; a local history
+vote answers with a support share (the winner's share of the vote weight)
+and gets its own measured profile - see
+[`docs/jev-local-judge.md`](docs/jev-local-judge.md).
 
 ```powershell
 $env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"     # local XERJ node
 $env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
-python examples\systemone-local-acceptance.py
+python examples\systemone-local-acceptance.py          # one JSON line, exit 0
+python examples\seed-systemone-history.py --index judgements --recreate
+python examples\systemone-calibration.py               # measure the judge
 ```
 
 See [`docs/RECORD_DESIGN.md`](docs/RECORD_DESIGN.md) for the full design rationale.

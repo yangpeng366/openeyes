@@ -28,6 +28,9 @@ import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from urllib.parse import urlsplit
+
+from openeyes.decision.scale import SCALE_PROBABILITY, SCALE_SUPPORT_SHARE
 
 
 def validate_probabilities(probabilities, choice, candidate_ids, *, require_distribution=True):
@@ -68,6 +71,12 @@ def validate_probabilities(probabilities, choice, candidate_ids, *, require_dist
     top = max(nums)
     if float(probabilities[choice]) < top - 1e-6:
         raise ValueError(f"choice {choice!r} ({probabilities[choice]}) is not top-1 (max={top})")
+
+def is_loopback_url(url: str) -> bool:
+    """True for a URL served by this machine."""
+    host = urlsplit(url).hostname or ""
+    return host in {"127.0.0.1", "localhost", "::1"}
+
 
 def _error_reason(exc: urllib.error.HTTPError) -> str:
     """Best-effort human reason out of an error response body.
@@ -111,6 +120,10 @@ class JevScore:
     latency_ms: int
     raw: dict | None = None
     probabilities: frozenset | None = None  # immutable view of dict; real Jev uses dict, fake omits
+    # Which scale `confidence`/`prob` are on: "probability" (hosted judge) or
+    # "support_share" (a local history vote). The thresholds belong to the
+    # scale, not to the scorer - see openeyes.decision.scale.
+    scale: str = SCALE_PROBABILITY
 
     def __post_init__(self):
         for name in ("confidence", "prob"):
@@ -129,6 +142,12 @@ class JevScore:
 
 class JevScorer(ABC):
     """Protocol surface for any Jev-compatible scorer."""
+
+    # How the caller should name its candidates. "descriptive" lets it
+    # decorate a name ("Button: 消息 (automation_id=…)"); "name" means the
+    # plain option name only. A local history vote retrieves neighbours by
+    # the question text, so it only answers names it has labels for.
+    candidate_key_style: str = "descriptive"
 
     @abstractmethod
     def ask(self, goal: str, candidates: list[str], *, app_name: str = "") -> JevScore:
@@ -262,6 +281,13 @@ class TypesafeJevScorer(JevScorer):
     and simply omits the Authorization header.
     """
 
+    @property
+    def candidate_key_style(self) -> str:
+        """A local node answers with the option names its history knows, so
+        the candidates have to be named plainly; the hosted judge takes any
+        key, so a descriptive one is richer there."""
+        return "name" if is_loopback_url(self.base_url) else "descriptive"
+
     def __init__(
         self,
         api_key: str = "",
@@ -376,6 +402,7 @@ class TypesafeJevScorer(JevScorer):
                 latency_ms=result["latency_ms"],
                 raw=answer,
                 probabilities=by_index,
+                scale=SCALE_SUPPORT_SHARE if support_scores else SCALE_PROBABILITY,
             )
         except (TypeError, ValueError, KeyError) as exc:
             raise JevAskError(f"TypeSafe Jev choice answer is invalid: {exc}") from exc

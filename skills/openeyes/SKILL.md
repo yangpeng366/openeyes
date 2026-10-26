@@ -308,7 +308,25 @@ python examples\systemone-local-acceptance.py   # prints one JSON line, exit 0
 A local history vote answers with per-option **support scores** (the
 winner's share of the labelled neighbours, losers at 0.0), not a probability
 distribution - its confidence scale is its own, so thresholds tuned for the
-hosted judge do not transfer unchanged. See the `xerj` skill.
+hosted judge do not transfer unchanged. Three consequences are built into the
+layer:
+
+- the thresholds follow the scale (`JevScore.scale`): the hosted judge keeps
+  `0.85` / `0.60`, the local judge uses a measured profile (act at 0.90,
+  review at 0.25) - see [`docs/jev-local-judge.md`](docs/jev-local-judge.md);
+- a local vote retrieves by the question text, so it is asked for the plain
+  option names its history knows (`JevScorer.candidate_key_style`);
+- a judge that cannot answer (no labelled neighbour, 422) yields no step
+  rather than a guess.
+
+The judge's history and the measurement that set the thresholds:
+
+```powershell
+python examples\seed-systemone-history.py --index judgements --recreate
+python examples\systemone-calibration.py
+```
+
+See the `xerj` skill for the node itself.
 
 ## Quality gate
 

@@ -67,6 +67,26 @@ def test_local_node_reports_zero_support_as_an_error():
     assert "422" in str(excinfo.value)
 
 
+@pytest.mark.skipif(not _node_reachable(), reason=f"no local XERJ node on {BASE_URL}")
+@pytest.mark.skipif(not KEY, reason="no TYPESAFE_API_KEY / XERJ_API_KEY for the local node")
+def test_the_node_answers_the_seed_and_never_invents_an_option():
+    """Every answer must be one of the options that were offered."""
+    from openeyes.decision.history import load_seed
+
+    scorer = _scorer()
+    for example in load_seed():
+        try:
+            score = scorer.ask(
+                goal=example.goal,
+                candidates=list(example.candidates),
+                app_name="openeyes",
+            )
+        except JevAskError:
+            continue  # a name the history has never seen is allowed to fail
+        assert score.raw.get("choice") in example.candidates
+        assert score.scale == "support_share"
+
+
 if __name__ == "__main__":
     print(json.dumps({
         "base_url": BASE_URL,

@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "note": "Labelled history for the local XERJ judge. One document per example; the node retrieves neighbours by the question text and votes on their labels, so each document carries the goal phrasing it should match plus the option names it must be told apart from.",
+  "fields": {
+    "label": "the option name the vote should return",
+    "text": "<goal> | <option> | <distractor>..."
+  },
+  "examples": [
+    {
+      "id": "msg",
+      "label": "消息",
+      "goal": "click the message button",
+      "distractors": [
+        "通知",
+        "搜索"
+      ]
+    },
+    {
+      "id": "notify",
+      "label": "通知",
+      "goal": "open the notifications panel",
+      "distractors": [
+        "消息"
+      ]
+    },
+    {
+      "id": "settings",
+      "label": "设置",
+      "goal": "open the settings page",
+      "distractors": [
+        "登录",
+        "刷新"
+      ]
+    },
+    {
+      "id": "submit",
+      "label": "提交",
+      "goal": "submit the form",
+      "distractors": [
+        "保存",
+        "全选"
+      ]
+    },
+    {
+      "id": "save",
+      "label": "保存",
+      "goal": "save the current file",
+      "distractors": [
+        "提交",
+        "导出"
+      ]
+    },
+    {
+      "id": "download",
+      "label": "下载",
+      "goal": "download the attachment",
+      "distractors": [
+        "上传",
+        "打印"
+      ]
+    },
+    {
+      "id": "search",
+      "label": "搜索",
+      "goal": "search for the report",
+      "distractors": [
+        "刷新",
+        "排序"
+      ]
+    },
+    {
+      "id": "close",
+      "label": "关闭",
+      "goal": "close the window",
+      "distractors": [
+        "刷新",
+        "删除"
+      ]
+    },
+    {
+      "id": "create",
+      "label": "新建",
+      "goal": "create a new document",
+      "distractors": [
+        "重命名",
+        "导出"
+      ]
+    },
+    {
+      "id": "rename",
+      "label": "重命名",
+      "goal": "rename the current file",
+      "distractors": [
+        "新建",
+        "复制"
+      ]
+    },
+    {
+      "id": "copy",
+      "label": "复制",
+      "goal": "copy the selected text",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ]
+    },
+    {
+      "id": "paste",
+      "label": "粘贴",
+      "goal": "paste from the clipboard",
+      "distractors": [
+        "复制",
+        "保存"
+      ]
+    },
+    {
+      "id": "print",
+      "label": "打印",
+      "goal": "print the document",
+      "distractors": [
+        "下载",
+        "导出"
+      ]
+    },
+    {
+      "id": "refresh",
+      "label": "刷新",
+      "goal": "refresh the page",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ]
+    },
+    {
+      "id": "signin",
+      "label": "登录",
+      "goal": "sign in to the account",
+      "distractors": [
+        "设置",
+        "提交"
+      ]
+    },
+    {
+      "id": "upload",
+      "label": "上传",
+      "goal": "upload a file",
+      "distractors": [
+        "下载",
+        "导出"
+      ]
+    },
+    {
+      "id": "sort",
+      "label": "排序",
+      "goal": "sort the list by date",
+      "distractors": [
+        "搜索",
+        "全选"
+      ]
+    },
+    {
+      "id": "selectall",
+      "label": "全选",
+      "goal": "select all rows",
+      "distractors": [
+        "排序",
+        "删除"
+      ]
+    },
+    {
+      "id": "export",
+      "label": "导出",
+      "goal": "export the report as csv",
+      "distractors": [
+        "打印",
+        "上传"
+      ]
+    },
+    {
+      "id": "delete",
+      "label": "删除",
+      "goal": "delete the selected item",
+      "distractors": [
+        "全选",
+        "关闭"
+      ]
+    }
+  ]
+}

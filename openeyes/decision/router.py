@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openeyes.decision.action import Action, ActionKind
+from openeyes.decision.scale import thresholds_for_scale
 from openeyes.decision.scorer import FakeJevScorer, JevAskError, JevScorer
 from openeyes.decision.threshold import DecisionBand, ThresholdConfig, classify_confidence
 
@@ -34,8 +35,9 @@ class DecisionContext:
     app_name: str = ""
 
     def __post_init__(self):
-        if self.enabled and self.cfg is None:
-            self.cfg = ThresholdConfig()
+        # `cfg` stays None on purpose: the thresholds belong to the scale the
+        # answer is on, and only the answer knows that. An explicitly given
+        # config still wins.
         if self.enabled and self.scorer is None:
             # Default to FakeJevScorer for safety: enabled=True must never
             # auto-call the network. Caller must explicitly pass a real
@@ -56,7 +58,6 @@ def decide(elements, goal: str, ctx: DecisionContext) -> Action | None:
     if not elements:
         return Action(kind=ActionKind.BLOCKED, reason="no_elements")
 
-    cfg = ctx.cfg or ThresholdConfig()
     scorer = ctx.scorer or FakeJevScorer()
 
     candidates = [(e.name or "") for e in elements]
@@ -65,6 +66,7 @@ def decide(elements, goal: str, ctx: DecisionContext) -> Action | None:
     except JevAskError as e:
         return Action(kind=ActionKind.BLOCKED, reason=f"jev_ask_error: {e}")
 
+    cfg = ctx.cfg or thresholds_for_scale(score.scale)
     band = classify_confidence(score.confidence, score.prob, cfg)
 
     if score.target_index == -1:

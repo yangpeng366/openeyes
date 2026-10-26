@@ -19,7 +19,6 @@ import json
 import os
 import time
 from typing import Any
-from urllib.parse import urlsplit
 
 from openeyes.decision import (
     DecisionBand,
@@ -29,6 +28,8 @@ from openeyes.decision import (
     TypesafeJevScorer,
     classify_confidence,
 )
+from openeyes.decision.scale import thresholds_for_scale
+from openeyes.decision.scorer import JevAskError, is_loopback_url
 
 from .event import InputEvent, Trajectory, UIAEvent
 from .prompt_template import render_system, render_user
@@ -119,21 +120,13 @@ def generate_trajectory_from_prompt(
             app_name,
             inv,
             scorer,
-            jev_thresholds or ThresholdConfig(),
+            jev_thresholds,
         )
     # auto
     try:
         return _generate_real(description, app_name, inv, few_shot_examples)
     except LLMUnavailable:
         return _generate_mock(description, app_name, inv, few_shot_examples)
-
-
-def _is_local_base_url(base_url: str) -> bool:
-    """True for a loopback System One endpoint (a local XERJ node)."""
-    if not base_url:
-        return False
-    host = urlsplit(base_url).hostname or ""
-    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 def _create_jev_scorer() -> JevScorer:
@@ -145,7 +138,7 @@ def _create_jev_scorer() -> JevScorer:
     """
     api_key = (os.environ.get("TYPESAFE_API_KEY") or "").strip()
     base_url = (os.environ.get("TYPESAFE_BASE_URL") or "").strip()
-    if api_key or _is_local_base_url(base_url):
+    if api_key or is_loopback_url(base_url):
         return TypesafeJevScorer(api_key, base_url=base_url or None)
     return FakeJevScorer()
 
@@ -165,16 +158,25 @@ def _generate_jev(
     app_name: str,
     inv: list[dict[str, Any]],
     scorer: JevScorer,
-    thresholds: ThresholdConfig,
+    thresholds: ThresholdConfig | None,
 ) -> Trajectory:
     """Generate a one-step trajectory after JEV validates the target."""
     candidates = [element for element in inv if element.get("interactive", True)]
     if not candidates:
         return _empty_trajectory(description, app_name, "jev")
 
-    labels = [_jev_candidate_label(index, element)
+    # A local history vote only answers names it has labels for, so it gets
+    # the plain element names; the hosted judge takes a richer key.
+    style = getattr(scorer, "candidate_key_style", "descriptive")
+    labels = [_jev_candidate_label(index, element, style)
               for index, element in enumerate(candidates)]
-    score = scorer.ask(description, labels, app_name=app_name)
+    try:
+        score = scorer.ask(description, labels, app_name=app_name)
+    except JevAskError:
+        # The judge could not answer (no labelled neighbour, no key, a 422).
+        # Fail soft: no step is better than a step nobody asked for.
+        return _empty_trajectory(description, app_name, "jev")
+    thresholds = thresholds or thresholds_for_scale(score.scale)
     band = classify_confidence(score.confidence, score.prob, thresholds)
     if score.target_index < 0 or band not in {DecisionBand.ACT, DecisionBand.FLAG_FOR_REVIEW}:
         return _empty_trajectory(description, app_name, "jev")
@@ -211,9 +213,11 @@ def _generate_jev(
     return trajectory
 
 
-def _jev_candidate_label(index: int, element: dict[str, Any]) -> str:
-    control_type = element.get("control_type") or "Element"
+def _jev_candidate_label(index: int, element: dict[str, Any], style: str = "descriptive") -> str:
     name = element.get("name") or f"candidate {index}"
+    if style == "name":
+        return name
+    control_type = element.get("control_type") or "Element"
     automation_id = element.get("automation_id")
     suffix = f" (automation_id={automation_id})" if automation_id else ""
     return f"{control_type}: {name}{suffix}"
