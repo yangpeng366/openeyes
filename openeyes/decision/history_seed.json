@@ -1,189 +1,846 @@
 {
-  "version": 1,
-  "note": "Labelled history for the local XERJ judge. One document per example; the node retrieves neighbours by the question text and votes on their labels, so each document carries the goal phrasing it should match plus the option names it must be told apart from.",
+  "version": 2,
+  "note": "Labelled history for the local XERJ judge. One document per example. The node retrieves neighbours by the question text and votes on their labels, so a document has to carry the goal phrasing it should match AND the option names it must be told apart from - hence the text convention '<goal> | <option> | <distractors>'. Each action appears twice per language, and goal and option share a language: the first version mixed an English goal with a Chinese option, which matched neither a Chinese nor an English question except through the option token.",
   "fields": {
     "label": "the option name the vote should return",
     "text": "<goal> | <option> | <distractor>..."
   },
   "examples": [
     {
-      "id": "msg",
+      "id": "zh-消息",
       "label": "消息",
-      "goal": "click the message button",
+      "goal": "点击消息按钮",
       "distractors": [
         "通知",
         "搜索"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "notify",
+      "id": "zh-消息-alt",
+      "label": "消息",
+      "goal": "打开消息列表",
+      "distractors": [
+        "通知",
+        "搜索"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Message",
+      "label": "Message",
+      "goal": "click the message button",
+      "distractors": [
+        "Notifications",
+        "Search"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Message-alt",
+      "label": "Message",
+      "goal": "open the message list",
+      "distractors": [
+        "Notifications",
+        "Search"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-通知",
       "label": "通知",
-      "goal": "open the notifications panel",
+      "goal": "查看通知",
       "distractors": [
         "消息"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "settings",
+      "id": "zh-通知-alt",
+      "label": "通知",
+      "goal": "打开通知中心",
+      "distractors": [
+        "消息"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Notifications",
+      "label": "Notifications",
+      "goal": "open the notifications panel",
+      "distractors": [
+        "Message"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Notifications-alt",
+      "label": "Notifications",
+      "goal": "view the alerts",
+      "distractors": [
+        "Message"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-设置",
       "label": "设置",
-      "goal": "open the settings page",
+      "goal": "打开设置",
       "distractors": [
         "登录",
         "刷新"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "submit",
+      "id": "zh-设置-alt",
+      "label": "设置",
+      "goal": "进入设置页",
+      "distractors": [
+        "登录",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Settings",
+      "label": "Settings",
+      "goal": "open the settings page",
+      "distractors": [
+        "Sign in",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Settings-alt",
+      "label": "Settings",
+      "goal": "change the preferences",
+      "distractors": [
+        "Sign in",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-提交",
       "label": "提交",
-      "goal": "submit the form",
+      "goal": "提交表单",
       "distractors": [
         "保存",
         "全选"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "save",
+      "id": "zh-提交-alt",
+      "label": "提交",
+      "goal": "确认提交",
+      "distractors": [
+        "保存",
+        "全选"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Submit",
+      "label": "Submit",
+      "goal": "submit the form",
+      "distractors": [
+        "Save",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Submit-alt",
+      "label": "Submit",
+      "goal": "send the form",
+      "distractors": [
+        "Save",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-保存",
       "label": "保存",
-      "goal": "save the current file",
+      "goal": "保存文件",
       "distractors": [
         "提交",
         "导出"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "download",
+      "id": "zh-保存-alt",
+      "label": "保存",
+      "goal": "保存当前内容",
+      "distractors": [
+        "提交",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Save",
+      "label": "Save",
+      "goal": "save the current file",
+      "distractors": [
+        "Submit",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Save-alt",
+      "label": "Save",
+      "goal": "keep my changes",
+      "distractors": [
+        "Submit",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-下载",
       "label": "下载",
-      "goal": "download the attachment",
+      "goal": "下载附件",
       "distractors": [
         "上传",
         "打印"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "search",
+      "id": "zh-下载-alt",
+      "label": "下载",
+      "goal": "另存到本地",
+      "distractors": [
+        "上传",
+        "打印"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Download",
+      "label": "Download",
+      "goal": "download the attachment",
+      "distractors": [
+        "Upload",
+        "Print"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Download-alt",
+      "label": "Download",
+      "goal": "fetch the file",
+      "distractors": [
+        "Upload",
+        "Print"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-搜索",
       "label": "搜索",
-      "goal": "search for the report",
+      "goal": "搜索内容",
       "distractors": [
         "刷新",
         "排序"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "close",
+      "id": "zh-搜索-alt",
+      "label": "搜索",
+      "goal": "查找记录",
+      "distractors": [
+        "刷新",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Search",
+      "label": "Search",
+      "goal": "search for the report",
+      "distractors": [
+        "Refresh",
+        "Sort"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Search-alt",
+      "label": "Search",
+      "goal": "look something up",
+      "distractors": [
+        "Refresh",
+        "Sort"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-关闭",
       "label": "关闭",
-      "goal": "close the window",
+      "goal": "关闭窗口",
       "distractors": [
         "刷新",
         "删除"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "create",
+      "id": "zh-关闭-alt",
+      "label": "关闭",
+      "goal": "关闭当前页面",
+      "distractors": [
+        "刷新",
+        "删除"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Close",
+      "label": "Close",
+      "goal": "close the window",
+      "distractors": [
+        "Refresh",
+        "Delete"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Close-alt",
+      "label": "Close",
+      "goal": "dismiss the dialog",
+      "distractors": [
+        "Refresh",
+        "Delete"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-新建",
       "label": "新建",
-      "goal": "create a new document",
+      "goal": "新建文档",
       "distractors": [
         "重命名",
         "导出"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "rename",
+      "id": "zh-新建-alt",
+      "label": "新建",
+      "goal": "创建新文件",
+      "distractors": [
+        "重命名",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-New",
+      "label": "New",
+      "goal": "create a new document",
+      "distractors": [
+        "Rename",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-New-alt",
+      "label": "New",
+      "goal": "start a blank file",
+      "distractors": [
+        "Rename",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-重命名",
       "label": "重命名",
-      "goal": "rename the current file",
+      "goal": "重命名文件",
       "distractors": [
         "新建",
         "复制"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "copy",
+      "id": "zh-重命名-alt",
+      "label": "重命名",
+      "goal": "修改名称",
+      "distractors": [
+        "新建",
+        "复制"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Rename",
+      "label": "Rename",
+      "goal": "rename the current file",
+      "distractors": [
+        "New",
+        "Copy"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Rename-alt",
+      "label": "Rename",
+      "goal": "change the name",
+      "distractors": [
+        "New",
+        "Copy"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-复制",
       "label": "复制",
-      "goal": "copy the selected text",
+      "goal": "复制内容",
       "distractors": [
         "粘贴",
         "重命名"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "paste",
+      "id": "zh-复制-alt",
+      "label": "复制",
+      "goal": "拷贝所选",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Copy",
+      "label": "Copy",
+      "goal": "copy the selected text",
+      "distractors": [
+        "Paste",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Copy-alt",
+      "label": "Copy",
+      "goal": "duplicate the item",
+      "distractors": [
+        "Paste",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-粘贴",
       "label": "粘贴",
-      "goal": "paste from the clipboard",
+      "goal": "粘贴内容",
       "distractors": [
         "复制",
         "保存"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "print",
+      "id": "zh-粘贴-alt",
+      "label": "粘贴",
+      "goal": "贴上剪贴板",
+      "distractors": [
+        "复制",
+        "保存"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Paste",
+      "label": "Paste",
+      "goal": "paste from the clipboard",
+      "distractors": [
+        "Copy",
+        "Save"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Paste-alt",
+      "label": "Paste",
+      "goal": "insert the clipboard content",
+      "distractors": [
+        "Copy",
+        "Save"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-打印",
       "label": "打印",
-      "goal": "print the document",
+      "goal": "打印文档",
       "distractors": [
         "下载",
         "导出"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "refresh",
+      "id": "zh-打印-alt",
+      "label": "打印",
+      "goal": "打印出来",
+      "distractors": [
+        "下载",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Print",
+      "label": "Print",
+      "goal": "print the document",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Print-alt",
+      "label": "Print",
+      "goal": "produce a paper copy",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-刷新",
       "label": "刷新",
-      "goal": "refresh the page",
+      "goal": "刷新页面",
       "distractors": [
         "搜索",
         "关闭"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "signin",
+      "id": "zh-刷新-alt",
+      "label": "刷新",
+      "goal": "重新加载",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Refresh",
+      "label": "Refresh",
+      "goal": "refresh the page",
+      "distractors": [
+        "Search",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Refresh-alt",
+      "label": "Refresh",
+      "goal": "reload the view",
+      "distractors": [
+        "Search",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-登录",
       "label": "登录",
-      "goal": "sign in to the account",
+      "goal": "登录账号",
       "distractors": [
         "设置",
         "提交"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "upload",
+      "id": "zh-登录-alt",
+      "label": "登录",
+      "goal": "进入账户",
+      "distractors": [
+        "设置",
+        "提交"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Sign in",
+      "label": "Sign in",
+      "goal": "sign in to the account",
+      "distractors": [
+        "Settings",
+        "Submit"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sign in-alt",
+      "label": "Sign in",
+      "goal": "log into the account",
+      "distractors": [
+        "Settings",
+        "Submit"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-上传",
       "label": "上传",
-      "goal": "upload a file",
+      "goal": "上传文件",
       "distractors": [
         "下载",
         "导出"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "sort",
+      "id": "zh-上传-alt",
+      "label": "上传",
+      "goal": "把文件传到服务器",
+      "distractors": [
+        "下载",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Upload",
+      "label": "Upload",
+      "goal": "upload a file",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Upload-alt",
+      "label": "Upload",
+      "goal": "push the file to the server",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-排序",
       "label": "排序",
-      "goal": "sort the list by date",
+      "goal": "排序列表",
       "distractors": [
         "搜索",
         "全选"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "selectall",
+      "id": "zh-排序-alt",
+      "label": "排序",
+      "goal": "按日期排列",
+      "distractors": [
+        "搜索",
+        "全选"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Sort",
+      "label": "Sort",
+      "goal": "sort the list by date",
+      "distractors": [
+        "Search",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sort-alt",
+      "label": "Sort",
+      "goal": "order the rows",
+      "distractors": [
+        "Search",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-全选",
       "label": "全选",
-      "goal": "select all rows",
+      "goal": "全选所有",
       "distractors": [
         "排序",
         "删除"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "export",
+      "id": "zh-全选-alt",
+      "label": "全选",
+      "goal": "勾选全部行",
+      "distractors": [
+        "排序",
+        "删除"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Select all",
+      "label": "Select all",
+      "goal": "select all rows",
+      "distractors": [
+        "Sort",
+        "Delete"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Select all-alt",
+      "label": "Select all",
+      "goal": "tick every line",
+      "distractors": [
+        "Sort",
+        "Delete"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-导出",
       "label": "导出",
-      "goal": "export the report as csv",
+      "goal": "导出报表",
       "distractors": [
         "打印",
         "上传"
-      ]
+      ],
+      "lang": "zh"
     },
     {
-      "id": "delete",
+      "id": "zh-导出-alt",
+      "label": "导出",
+      "goal": "导出为文件",
+      "distractors": [
+        "打印",
+        "上传"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Export",
+      "label": "Export",
+      "goal": "export the report as csv",
+      "distractors": [
+        "Print",
+        "Upload"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Export-alt",
+      "label": "Export",
+      "goal": "save the report to a file",
+      "distractors": [
+        "Print",
+        "Upload"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-删除",
       "label": "删除",
-      "goal": "delete the selected item",
+      "goal": "删除所选",
       "distractors": [
         "全选",
         "关闭"
-      ]
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-删除-alt",
+      "label": "删除",
+      "goal": "移除这一项",
+      "distractors": [
+        "全选",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Delete",
+      "label": "Delete",
+      "goal": "delete the selected item",
+      "distractors": [
+        "Select all",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Delete-alt",
+      "label": "Delete",
+      "goal": "remove this entry",
+      "distractors": [
+        "Select all",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "zh-取消",
+      "label": "取消",
+      "goal": "取消操作",
+      "distractors": [
+        "关闭",
+        "提交"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-取消-alt",
+      "label": "取消",
+      "goal": "关闭对话框不保存",
+      "distractors": [
+        "关闭",
+        "提交"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Cancel",
+      "label": "Cancel",
+      "goal": "cancel the operation",
+      "distractors": [
+        "Close",
+        "Submit"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Cancel-alt",
+      "label": "Cancel",
+      "goal": "dismiss without saving",
+      "distractors": [
+        "Close",
+        "Submit"
+      ],
+      "lang": "en"
     }
   ]
 }

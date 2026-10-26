@@ -30,6 +30,7 @@ class HistoryExample:
     label: str
     goal: str
     distractors: tuple[str, ...]
+    lang: str = ""
 
     @property
     def text(self) -> str:
@@ -63,6 +64,7 @@ def _load(path: Path) -> list[HistoryExample]:
             label=item["label"],
             goal=item["goal"],
             distractors=tuple(item["distractors"]),
+            lang=item.get("lang", ""),
         )
         for item in raw["examples"]
     ]

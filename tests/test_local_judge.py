@@ -86,15 +86,30 @@ def test_a_judge_that_cannot_answer_yields_no_step():
 def test_the_history_and_the_probe_cover_the_same_options():
     seed = load_seed()
     probe = load_probe()
-    assert len(seed) == len(probe) == 20
+    assert len(seed) == 84          # 21 actions x 2 phrasings x 2 languages
+    assert len(probe) == 42         # 21 actions x 1 held-out phrasing x 2 languages
     assert {example.label for example in seed} == {example.label for example in probe}
     assert len({example.id for example in seed}) == len(seed)
+    assert len({example.id for example in probe}) == len(probe)
 
 
-def test_every_distractor_is_an_option_the_history_knows():
-    labels = {example.label for example in load_seed()}
+def test_every_distractor_is_an_option_of_the_same_family():
+    """The node holds one index, so a family must not point at the other's
+    options - a Chinese goal retrieves the Chinese documents only."""
+    labels = {}
+    for example in load_seed():
+        labels.setdefault(example.lang, set()).add(example.label)
     for example in load_seed() + load_probe():
-        assert set(example.distractors) <= labels
+        assert set(example.distractors) <= labels[example.lang]
+
+
+def test_goal_and_option_share_a_language():
+    """A Chinese goal with a Chinese option, an English goal with an English
+    option: the first history mixed the two, and matched neither."""
+    for example in load_seed() + load_probe():
+        han = any("\u4e00" <= character <= "\u9fff" for character in example.label)
+        assert han == (example.lang == "zh")
+        assert han == any("\u4e00" <= character <= "\u9fff" for character in example.goal)
 
 
 def test_the_document_text_carries_goal_and_options():

@@ -105,6 +105,12 @@ def main() -> int:
     parser.add_argument("--data-dir", default=r"E:\AI-Portable\xerj-data")
     parser.add_argument("--dry-run", action="store_true", help="print the command, ingest nothing")
     parser.add_argument(
+        "--lang",
+        choices=("zh", "en"),
+        help="seed one language only (the node holds one decisions index; a mixed "
+             "index lets one language's neighbours compete with the other's)",
+    )
+    parser.add_argument(
         "--keep-node-running",
         action="store_true",
         help="leave a running node alone (the ingest then fails: it holds the data dir)",
@@ -117,6 +123,8 @@ def main() -> int:
     args = parser.parse_args()
 
     examples = load_seed()
+    if args.lang:
+        examples = [example for example in examples if example.lang == args.lang]
     records = to_records(examples)
     ndjson = "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)
 
@@ -182,6 +190,7 @@ def main() -> int:
         "index": args.index,
         "records": len(records),
         "labels": sorted({example.label for example in examples}),
+        "lang": args.lang or "mixed",
         "node_restarted": restarted,
         "index_recreated": recreated,
     }, ensure_ascii=False))

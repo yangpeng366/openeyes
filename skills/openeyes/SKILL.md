@@ -312,8 +312,13 @@ hosted judge do not transfer unchanged. Three consequences are built into the
 layer:
 
 - the thresholds follow the scale (`JevScore.scale`): the hosted judge keeps
-  `0.85` / `0.60`, the local judge uses a measured profile (act at 0.90,
-  review at 0.25) - see [`docs/jev-local-judge.md`](docs/jev-local-judge.md);
+  `0.85` / `0.60`, the local judge uses a measured profile, per language
+  family of the history (Chinese act at 0.4552 / review at 0.2276, English
+  act at 0.4268 with no review band) - see
+  [`docs/jev-local-judge.md`](docs/jev-local-judge.md);
+- the history is bilingual and **a goal and its option must share a
+  language** - a goal retrieves the documents of its own language only, so
+  an index seeded with the other family answers nothing;
 - a local vote retrieves by the question text, so it is asked for the plain
   option names its history knows (`JevScorer.candidate_key_style`);
 - a judge that cannot answer (no labelled neighbour, 422) yields no step

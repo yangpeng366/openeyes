@@ -66,7 +66,7 @@ def decide(elements, goal: str, ctx: DecisionContext) -> Action | None:
     except JevAskError as e:
         return Action(kind=ActionKind.BLOCKED, reason=f"jev_ask_error: {e}")
 
-    cfg = ctx.cfg or thresholds_for_scale(score.scale)
+    cfg = ctx.cfg or thresholds_for_scale(score.scale, candidates=candidates)
     band = classify_confidence(score.confidence, score.prob, cfg)
 
     if score.target_index == -1:

@@ -206,7 +206,7 @@ loopback node (a local XERJ node may answer keyless).
 The thresholds follow the **scale** of the answer, not the scorer: the hosted
 judge answers with a probability and keeps `0.85` / `0.60`; a local history
 vote answers with a support share (the winner's share of the vote weight)
-and gets its own measured profile - see
+and gets its own measured profile, per language family - see
 [`docs/jev-local-judge.md`](docs/jev-local-judge.md).
 
 ```powershell
@@ -215,6 +215,7 @@ $env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
 python examples\systemone-local-acceptance.py          # one JSON line, exit 0
 python examples\seed-systemone-history.py --index judgements --recreate
 python examples\systemone-calibration.py               # measure the judge
+python examples\seed-systemone-history.py --index judgements --recreate --lang zh
 ```
 
 See [`docs/RECORD_DESIGN.md`](docs/RECORD_DESIGN.md) for the full design rationale.

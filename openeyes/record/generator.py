@@ -176,7 +176,7 @@ def _generate_jev(
         # The judge could not answer (no labelled neighbour, no key, a 422).
         # Fail soft: no step is better than a step nobody asked for.
         return _empty_trajectory(description, app_name, "jev")
-    thresholds = thresholds or thresholds_for_scale(score.scale)
+    thresholds = thresholds or thresholds_for_scale(score.scale, candidates=labels)
     band = classify_confidence(score.confidence, score.prob, thresholds)
     if score.target_index < 0 or band not in {DecisionBand.ACT, DecisionBand.FLAG_FOR_REVIEW}:
         return _empty_trajectory(description, app_name, "jev")
