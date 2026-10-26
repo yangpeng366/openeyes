@@ -1,6 +1,6 @@
 ---
 name: openeyes
-description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Includes UIA-backed native apps (Win32/UWP), CDP-backed Chromium browser pages (Edge/Chrome via DevTools Protocol — no screenshot, no vision model, structured DOM), Vimium-style letter hints, Vimium-style 3x3 grid, focus/click/type/hotkey/drag/screenshot. Use when Codex needs to (a) drive a native app without an API or DOM, (b) drive a real browser session with login cookies / 2FA, or (c) read or write page elements (text input, button click) without spending image-budget. Browser path uses raw websocket-client on Chrome DevTools Protocol; a parsing-style Vision backend (OmniParser v2 compatible) covers canvas / image-only UIs, and a structured-first chain (uia -> cdp -> vision) picks the cheapest tier that answers.
+description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Includes UIA-backed native apps (Win32/UWP), CDP-backed Chromium browser pages (Edge/Chrome via DevTools Protocol — no screenshot, no vision model, structured DOM), Vimium-style letter hints, Vimium-style 3x3 grid, focus/click/type/hotkey/drag/screenshot. Use when Codex needs to (a) drive a native app without an API or DOM, (b) drive a real browser session with login cookies / 2FA, or (c) read or write page elements (text input, button click) without spending image-budget. Browser path uses raw websocket-client on Chrome DevTools Protocol; a parsing-style Vision backend (OmniParser v2 compatible) covers canvas / image-only UIs, and a structured-first chain (uia -> cdp -> vision) picks the cheapest tier that answers. Coordinates are DPI-correct (per-monitor-v2 awareness) and clicks settle before they fire, so a click lands on the element that was found; the decision layer can run against a local System One node instead of a hosted key.
 ---
 
 # OpenEyes Skill
@@ -122,6 +122,31 @@ typing text. `browser_type` may scan the DOM in dry-run mode when a selector
 is supplied, but it never focuses, types, or presses Enter until execution is
 explicitly enabled.
 
+## Native tier: coordinates and clicks that land
+
+Windows virtualises coordinates for DPI-unaware processes: UI Automation
+reports *physical* pixels while `GetWindowRect` and `SetCursorPos` stop
+agreeing, and a click ends up a few pixels off - or on the wrong element.
+`openeyes.core.dpi.ensure_dpi_awareness()` puts the process into
+per-monitor-v2 mode once and never downgrades a level the host already set.
+
+```python
+from openeyes import ensure_dpi_awareness, click_element, find_elements
+
+ensure_dpi_awareness()                       # once, at process start
+hits = find_elements(elements, automation_id="KeepFreeAliveButton")
+```
+
+- **Prefer `automation_id`** over the visible name: a countdown label
+  ("0:18 left - click to reset") changes every second, the control id does not.
+- `click_element(hwnd, automation_id=..., dry_run=True)` resolves a live
+  pywinauto wrapper so the **Invoke** pattern can be used (UIA-only).
+- `move_to` moves in steps and settles before the press; a single
+  `SetCursorPos` followed by a click can be delivered at the *previous*
+  cursor position because the window has not processed `WM_MOUSEMOVE` yet.
+- `click_xy` holds the button for `press_ms` - XAML/UWP controls can ignore a
+  zero-duration click.
+
 ## Lightpanda backend (CDP, low RAM, unattended)
 
 Lightpanda is an AI-native headless browser written in Zig with a minimal
@@ -150,6 +175,19 @@ MCP: `browser_launch(backend="lightpanda", url="https://example.com")`.
 - Anything that needs a screenshot. Lightpanda has no graphical rendering
   backend; `eyes browser shot` returns an empty PNG on this backend.
 - Canvas-only / WebGL UIs (Lightpanda does not render pixels).
+
+### Prerequisites (check before trusting a green run)
+
+Lightpanda needs WSL2 with a **running Docker daemon inside the distro**:
+
+```powershell
+wsl -e bash -lc "docker version"        # the check
+wsl -e bash -lc "sudo systemctl start docker"   # the fix
+```
+
+The daemon does not always come back after a WSL restart (`dockerd` exits 1,
+"Start request repeated too quickly"). When it is down, `launch_lightpanda`
+raises `LightpandaError` naming that cause - it does not hang.
 
 ### Hard-won facts
 
@@ -253,6 +291,36 @@ assign_hints(elems)
 go = next(e for e in elems if e.name == "GO")
 cdp.click_center(conn, go)
 ```
+
+## Decision layer: local System One instead of a hosted key
+
+`openeyes.decision` can score UI candidates with a real judge over the
+System One wire. The hosted endpoint needs `TYPESAFE_API_KEY`; a **local
+XERJ node speaks the same wire** on its native REST port, so the layer runs
+without a hosted key:
+
+```powershell
+$env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"
+$env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+python examples\systemone-local-acceptance.py   # prints one JSON line, exit 0
+```
+
+A local history vote answers with per-option **support scores** (the
+winner's share of the labelled neighbours, losers at 0.0), not a probability
+distribution - its confidence scale is its own, so thresholds tuned for the
+hosted judge do not transfer unchanged. See the `xerj` skill.
+
+## Quality gate
+
+Before a push:
+
+```powershell
+pwsh -NoProfile -File examples\quality-gate.ps1
+```
+
+Lint (ruff), the encoding sweep (no UTF-8 BOM), the MCP stdio contract
+(15 tools) and the test suite - the same four steps CI runs on every push to
+`main`. A skipped test is not a passing test.
 
 ## Repository stewardship (codex is authorized)
 
