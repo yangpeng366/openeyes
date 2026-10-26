@@ -1,7 +1,10 @@
 """Win32 mouse / keyboard input via pywin32."""
 from __future__ import annotations
-import time
+
+import contextlib
 import ctypes
+import time
+
 import win32api
 import win32con
 import win32gui
@@ -157,13 +160,10 @@ def focus_window(hwnd: int) -> bool:
     to the foreground (verified via GetForegroundWindow), we click the title
     bar as a fallback — that usually forces Windows to give us focus.
     """
-    import win32gui
     d = Desktop(backend="uia")
     w = d.window(handle=hwnd)
-    try:
+    with contextlib.suppress(Exception):
         w.set_focus()
-    except Exception:
-        pass
     try:
         fg = win32gui.GetForegroundWindow()
         if fg == hwnd:
@@ -172,9 +172,9 @@ def focus_window(hwnd: int) -> bool:
         return False
     # Fallback: click the title bar (top-center, 20px down from window top).
     try:
-        l, t, r, _ = win32gui.GetWindowRect(hwnd)
-        title_x = (l + r) // 2
-        title_y = t + 20
+        left, top, right, _ = win32gui.GetWindowRect(hwnd)
+        title_x = (left + right) // 2
+        title_y = top + 20
         click_xy(title_x, title_y)
         time.sleep(0.2)
         fg = win32gui.GetForegroundWindow()

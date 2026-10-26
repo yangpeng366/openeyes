@@ -11,8 +11,8 @@ Lightpanda CDP），本模块把它们串成一条 *可降级* 的解析链：
 """
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence
 
 from openeyes.core.schema import Element
 

@@ -13,6 +13,7 @@ creating a PNG. The unmatched ``url_contains`` call must fail closed with
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import http.server
 import json
@@ -24,7 +25,6 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
@@ -111,10 +111,8 @@ def _close_tab(cdp_port: int, target_id: str) -> None:
         f"http://127.0.0.1:{cdp_port}/json/close/{target_id}",
         headers={"Host": "127.0.0.1"},
     )
-    try:
+    with contextlib.suppress(Exception):
         urllib.request.urlopen(req, timeout=5).read()
-    except Exception:
-        pass
 
 
 def main() -> int:

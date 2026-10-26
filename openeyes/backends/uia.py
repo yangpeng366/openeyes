@@ -1,15 +1,17 @@
 """Windows UIA backend — wraps pywinauto + ctypes for screen / detect."""
 from __future__ import annotations
+
 import ctypes
 import re
 import time
 from typing import Any
+
 from PIL import Image, ImageGrab
 from pywinauto import Desktop
 
 from openeyes.core.actuator import click_xy
 from openeyes.core.dpi import ensure_dpi_awareness
-from openeyes.core.schema import BBox, Center, Element, ElementState, WindowInfo
+from openeyes.core.schema import BBox, Center, Element, WindowInfo
 
 INTERACTIVE_TYPES = {
     "Button", "Hyperlink", "Edit", "Document", "CheckBox", "RadioButton",
@@ -38,10 +40,10 @@ def list_windows() -> list[WindowInfo]:
             pid = win32gui.GetWindowThreadProcessId(hwnd)
         except Exception:
             pid = 0
-        l, top, r, b = win32gui.GetWindowRect(hwnd)
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
         out.append(WindowInfo(
             hwnd=hwnd, pid=pid, title=title, class_name=cls,
-            x=l, y=top, w=r - l, h=b - top,
+            x=left, y=top, w=right - left, h=bottom - top,
         ))
 
     win32gui.EnumWindows(cb, None)
@@ -54,8 +56,8 @@ def capture_screen() -> Image.Image:
 
 def capture_window(hwnd: int) -> Image.Image:
     import win32gui
-    l, t, r, b = win32gui.GetWindowRect(hwnd)
-    return ImageGrab.grab(bbox=(l, t, r, b), all_screens=True)
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    return ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
 
 
 def _call(x):
@@ -71,18 +73,18 @@ def _walk(node, depth: int, max_depth: int, out: list[Element],
     ct = node.control_type or ""
     if (ct in INTERACTIVE_TYPES) or name:
         try:
-            l, t, w, h = (_call(node.rectangle.left),
-                         _call(node.rectangle.top),
-                         _call(node.rectangle.width),
-                         _call(node.rectangle.height))
+            left, top, width, height = (_call(node.rectangle.left),
+                                        _call(node.rectangle.top),
+                                        _call(node.rectangle.width),
+                                        _call(node.rectangle.height))
         except Exception:
             return
         out.append(Element(
             backend="uia",
             control_type=ct,
             name=name,
-            bbox=BBox(x=l - ox, y=t - oy, w=w, h=h),
-            center=Center(x=l - ox + w // 2, y=t - oy + h // 2),
+            bbox=BBox(x=left - ox, y=top - oy, w=width, h=height),
+            center=Center(x=left - ox + width // 2, y=top - oy + height // 2),
             automation_id=node.automation_id or "",
             class_name=node.class_name or "",
             score=1.0,

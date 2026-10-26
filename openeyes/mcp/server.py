@@ -33,25 +33,24 @@ Run:
 All side-effecting tools default to dry_run=true. Set dry_run=false to execute.
 """
 from __future__ import annotations
+
 import asyncio
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import TextContent, Tool
 
-from openeyes import __version__
-from openeyes.core.windows import list_windows, find_window
-from openeyes.core.capture import capture_window, capture_screen
-from openeyes.core.selector import detect_elements, find_elements
+from openeyes.backends import cdp as browser_backend
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
+from openeyes.core.capture import capture_screen, capture_window
 from openeyes.core.hints import assign_hints
 from openeyes.core.safety import is_foreground_window, validate_text_entry
-from openeyes.backends import cdp as browser_backend
+from openeyes.core.selector import detect_elements, find_elements
+from openeyes.core.windows import find_window
 
 server = Server("openeyes")
 
@@ -362,10 +361,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "path": out,
                     "window": hwnd,
                 }))]
-            if hwnd:
-                img = capture_window(hwnd)
-            else:
-                img = capture_screen()
+            img = capture_window(hwnd) if hwnd else capture_screen()
             img.save(out, "PNG")
             return [TextContent(type="text", text=_to_json(
                 {"captured": True, "dry_run": False, "path": out,
@@ -435,11 +431,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             rows = arguments.get("rows", 3)
             cols = arguments.get("cols", 3)
             dry_run = arguments.get("dry_run", True)
-            l, t, r, b = win32gui.GetWindowRect(hwnd)
-            cell_w = (r - l) / cols
-            cell_h = (b - t) / rows
-            cx = int(l + (col - 0.5) * cell_w)
-            cy = int(t + (row - 0.5) * cell_h)
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            cell_w = (right - left) / cols
+            cell_h = (bottom - top) / rows
+            cx = int(left + (col - 0.5) * cell_w)
+            cy = int(top + (row - 0.5) * cell_h)
             if not dry_run:
                 click_xy(cx, cy)
             return [TextContent(type="text", text=_to_json({
@@ -734,8 +730,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 [e.to_dict() for e in elems]))]
 
         if name == "resolve_elements":
-            from openeyes.core.resolve import resolve_elements as resolve_chain
             from openeyes.backends.vision import elements_from_detections
+            from openeyes.core.resolve import resolve_elements as resolve_chain
             vision_elements = None
             if arguments.get("detections_path"):
                 raw, err = _load_detections(arguments)

@@ -14,16 +14,13 @@ Both backends produce the same Trajectory object, which can then be
 fed into the existing replay + export pipeline.
 """
 from __future__ import annotations
+
 import json
 import os
 import time
-import uuid
-from typing import List, Dict, Any, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
-from .event import UIAEvent, InputEvent, Trajectory
-from .prompt_template import render_system, render_user
-from .recorder import _build_selector
 from openeyes.decision import (
     DecisionBand,
     FakeJevScorer,
@@ -33,13 +30,17 @@ from openeyes.decision import (
     classify_confidence,
 )
 
+from .event import InputEvent, Trajectory, UIAEvent
+from .prompt_template import render_system, render_user
+from .recorder import _build_selector
+
 
 class LLMUnavailable(RuntimeError):
     """Raised when the user wants the real backend but no credentials are set."""
 
 
-def _call_llm(messages: List[Dict[str, str]], *, model: Optional[str] = None,
-              base_url: Optional[str] = None, api_key: Optional[str] = None,
+def _call_llm(messages: list[dict[str, str]], *, model: str | None = None,
+              base_url: str | None = None, api_key: str | None = None,
               temperature: float = 0.2, timeout: float = 60.0) -> str:
     """Call an OpenAI-compatible chat completions endpoint.
 
@@ -89,11 +90,11 @@ def generate_trajectory_from_prompt(
     description: str,
     *,
     app_name: str = "",
-    element_inventory: Optional[List[Dict[str, Any]]] = None,
-    few_shot_examples: Optional[List[str]] = None,
+    element_inventory: list[dict[str, Any]] | None = None,
+    few_shot_examples: list[str] | None = None,
     backend: str = "auto",
-    jev_scorer: Optional[JevScorer] = None,
-    jev_thresholds: Optional[ThresholdConfig] = None,
+    jev_scorer: JevScorer | None = None,
+    jev_thresholds: ThresholdConfig | None = None,
 ) -> Trajectory:
     """Generate a Trajectory from a natural-language description.
 
@@ -162,7 +163,7 @@ def _empty_trajectory(description: str, app_name: str, suffix: str) -> Trajector
 def _generate_jev(
     description: str,
     app_name: str,
-    inv: List[Dict[str, Any]],
+    inv: list[dict[str, Any]],
     scorer: JevScorer,
     thresholds: ThresholdConfig,
 ) -> Trajectory:
@@ -210,7 +211,7 @@ def _generate_jev(
     return trajectory
 
 
-def _jev_candidate_label(index: int, element: Dict[str, Any]) -> str:
+def _jev_candidate_label(index: int, element: dict[str, Any]) -> str:
     control_type = element.get("control_type") or "Element"
     name = element.get("name") or f"candidate {index}"
     automation_id = element.get("automation_id")
@@ -224,8 +225,8 @@ def _jev_candidate_label(index: int, element: Dict[str, Any]) -> str:
 def _generate_real(
     description: str,
     app_name: str,
-    inv: List[Dict[str, Any]],
-    few_shot: Optional[List[str]],
+    inv: list[dict[str, Any]],
+    few_shot: list[str] | None,
 ) -> Trajectory:
     msgs = [
         {"role": "system", "content": render_system()},
@@ -347,8 +348,8 @@ _DEFAULT_TEMPLATE = {
 def _generate_mock(
     description: str,
     app_name: str,
-    inv: List[Dict[str, Any]],
-    few_shot: Optional[List[str]],
+    inv: list[dict[str, Any]],
+    few_shot: list[str] | None,
 ) -> Trajectory:
     """Deterministic fallback that maps keywords to plausible step sequences.
 

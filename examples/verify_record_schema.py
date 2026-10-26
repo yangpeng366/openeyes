@@ -24,8 +24,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 
-from openeyes.record import Trajectory
-
+from openeyes.record import Trajectory  # noqa: E402 - sys.path is bootstrapped above
 
 REQUIRED_UIA_KEYS = {
     "automation_id",
@@ -120,12 +119,12 @@ def verify(
         edge_canonical_node = _node_parse_result(canonical_edge)
         edge_original_node = _node_parse_result(edge_path)
         node_parse_ok = all(
-            (result[0] for result in (
+            result[0] for result in (
                 uia_canonical_node,
                 uia_original_node,
                 edge_canonical_node,
                 edge_original_node,
-            ))
+            )
         )
         if not uia_canonical_node[0] or uia_canonical_node[1].get(
             "step_count"
@@ -261,7 +260,7 @@ def main() -> None:
     except AssertionError:
         report = json.loads(args.report.resolve().read_text(encoding="utf-8"))
         print(_format_summary(report["summary"]), file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
     print(json.dumps(report["alignment"], ensure_ascii=False, indent=2))
     print(_format_summary(report["summary"]))
     print(f"Report: {args.report.resolve()}")

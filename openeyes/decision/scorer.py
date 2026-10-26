@@ -20,6 +20,7 @@ Why FakeJevScorer matters:
   `state[key] is True` to avoid KeyError on missing keys.
 """
 from __future__ import annotations
+
 import json
 import os
 import time

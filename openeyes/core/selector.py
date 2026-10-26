@@ -1,6 +1,8 @@
 """Detect elements via backend, then filter by selector."""
 from __future__ import annotations
+
 import re
+
 from openeyes.core.schema import Element
 
 

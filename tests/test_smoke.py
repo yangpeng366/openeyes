@@ -1,13 +1,19 @@
 """Smoke tests - verify imports + cross-platform safe ops without clicking."""
 from __future__ import annotations
+
 import pytest
 
 import openeyes
 from openeyes import (
-    BBox, Center, Element, ElementState, WindowInfo,
-    list_windows, find_window, find_elements,
+    BBox,
+    Center,
+    Element,
+    ElementState,
+    WindowInfo,
+    find_elements,
+    find_window,
+    list_windows,
 )
-from openeyes.core.schema import BBox as BBox2  # alias check
 
 
 def test_version():
@@ -132,7 +138,9 @@ def test_click_focus_guard_aborts_when_focus_fails(monkeypatch):
     """third-hand checkFocus parity: never click after foreground verification fails."""
     import sys
     import types
+
     from click.testing import CliRunner
+
     from openeyes.cli.main import cli
 
     fake_module = types.SimpleNamespace(focus_window=lambda hwnd: False)

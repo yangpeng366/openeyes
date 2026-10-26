@@ -42,6 +42,7 @@ attach itself failed.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -50,12 +51,10 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TextIO
 
 import websocket
 
 from openeyes.backends.cdp import CDPError, list_tabs
-
 
 FETCH_PATH = "/"
 FETCH_EXPRESSION_TEMPLATE = """
@@ -300,10 +299,8 @@ def main():
         return 0
     finally:
         if ws is not None:
-            try:
+            with contextlib.suppress(OSError):
                 ws.close()
-            except OSError:
-                pass
         if output is not None:
             output.close()
 

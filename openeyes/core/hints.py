@@ -17,7 +17,8 @@ This mirrors the experience of Vimium but is also useful for LLM-driven flows:
 the model can answer "click element ``s``" without describing coordinates.
 """
 from __future__ import annotations
-from typing import Iterable
+
+from collections.abc import Iterable
 
 from openeyes.core.schema import Element
 
@@ -74,7 +75,7 @@ def assign_hints(elements: Iterable[Element]) -> list[Element]:
         return []
     items.sort(key=_sort_key)
     pool = _hints_for_n(len(items))
-    for element, hint in zip(items, pool):
+    for element, hint in zip(items, pool, strict=False):
         element.hint = hint
     # Elements filtered out earlier: clear any stale hint so output is honest.
     for e in elements:

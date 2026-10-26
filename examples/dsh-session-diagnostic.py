@@ -14,7 +14,6 @@ import websocket
 
 from openeyes.backends.cdp import CDPError, list_tabs
 
-
 SESSION_MARKERS = (
     "session.create",
     "session_create",

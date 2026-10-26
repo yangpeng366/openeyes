@@ -8,9 +8,9 @@ backend-agnostic. The DOM probe is used so LLM never has to read pixels.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -22,7 +22,6 @@ from typing import Any
 import websocket
 
 from openeyes.core.schema import BBox, Center, Element, ElementState
-
 
 # Connection constants
 CDP_DEFAULT_PORT = 9222
@@ -323,7 +322,9 @@ def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, see
             args.append(url)
         # Capture Edge's own stderr to a temp file so an early-exit failure
         # (process=exited) can surface *why* Edge quit, not just that it did.
-        err_fh = tempfile.NamedTemporaryFile(delete=False, suffix="-openeyes-edge.err", prefix="oe-")
+        # noqa comment: the handle stays open - Popen writes into it
+        err_fh = tempfile.NamedTemporaryFile(  # noqa: SIM115
+            delete=False, suffix="-openeyes-edge.err", prefix="oe-")
         err_path = err_fh.name
         proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=err_fh, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
         deadline = time.time() + max(5.0, wait_ms / 1000.0)
@@ -338,15 +339,11 @@ def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, see
                     last_err = e
                     time.sleep(0.4)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 err_fh.close()
-            except Exception:
-                pass
             tail = _read_stderr_tail(err_path)
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(err_path)
-            except OSError:
-                pass
         rc = proc.poll()
         proc_exited = rc is not None
         diag = _diagnose_launch(proc, port, profile_dir, last_err, proc_exited=proc_exited, exit_code=rc, stderr_tail=tail)

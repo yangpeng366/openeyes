@@ -8,12 +8,11 @@ Usage:
     python examples\feishu_first_test.py --go
 """
 from __future__ import annotations
+
 import argparse
 import sys
 
-from openeyes import find_window, capture_window, detect_elements, find_elements
-from openeyes import click_by_selector
-
+from openeyes import capture_window, click_by_selector, detect_elements, find_elements, find_window
 
 DEFAULT_TARGETS = [
     "消息",
@@ -51,7 +50,7 @@ def main() -> int:
         return 2
 
     print(f"[openeyes] using hwnd={hwnd} dry_run={not args.go}")
-    print(f"[openeyes] capturing screenshot...")
+    print("[openeyes] capturing screenshot...")
     img = capture_window(hwnd)
     import os
     os.makedirs(args.out_dir, exist_ok=True)
@@ -76,7 +75,9 @@ def main() -> int:
     if args.go:
         clicked = click_by_selector(hwnd, name_contains=target_name, dry_run=False)
         print(f"[openeyes] clicked {clicked.name!r}")
-        import time; time.sleep(0.5)
+        import time
+
+        time.sleep(0.5)
         img2 = capture_window(hwnd)
         after = f"{args.out_dir}/feishu_after.png"
         img2.save(after, "PNG")

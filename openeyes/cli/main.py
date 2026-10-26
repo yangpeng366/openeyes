@@ -17,16 +17,18 @@ Usage:
 Default click behavior is **dry-run**. Pass --go to actually click.
 """
 from __future__ import annotations
+
 import json
 import sys
 import time
+
 import click
 
 from openeyes import __version__
-from openeyes.core.windows import list_windows, find_window
-from openeyes.core.capture import capture_window, capture_screen
-from openeyes.core.selector import detect_elements, find_elements
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
+from openeyes.core.capture import capture_screen, capture_window
+from openeyes.core.selector import detect_elements, find_elements
+from openeyes.core.windows import find_window
 
 
 @click.group()
@@ -61,10 +63,7 @@ def windows_list(title_contains: str | None, class_name: str | None, regex: str 
 @click.option("--json", "as_json", is_flag=True, help="write metadata JSON next to image")
 def capture(window: int, out: str, as_json: bool) -> None:
     """Capture a window or the full screen to PNG."""
-    if window:
-        img = capture_window(window)
-    else:
-        img = capture_screen()
+    img = capture_window(window) if window else capture_screen()
     img.save(out, "PNG")
     click.echo(out)
     if as_json:
@@ -228,11 +227,11 @@ def tap(window: int, x: int | None, y: int | None,
 def grid(window: int, row: int, col: int, rows: int, cols: int, dry_run: bool) -> None:
     """Click the center of a grid cell overlaid on the window (Vimium-style)."""
     import win32gui
-    l, t, r, b = win32gui.GetWindowRect(window)
-    cell_w = (r - l) / cols
-    cell_h = (b - t) / rows
-    cx = int(l + (col - 0.5) * cell_w)
-    cy = int(t + (row - 0.5) * cell_h)
+    left, top, right, bottom = win32gui.GetWindowRect(window)
+    cell_w = (right - left) / cols
+    cell_h = (bottom - top) / rows
+    cx = int(left + (col - 0.5) * cell_w)
+    cy = int(top + (row - 0.5) * cell_h)
     if dry_run:
         click.echo(f"[dry-run] grid ({row},{col}) of {rows}x{cols} @ ({cx},{cy})")
         return
@@ -522,7 +521,8 @@ def vision(detections: str, origin_x: int, origin_y: int, score: float,
            pretty: bool) -> None:
     """Convert screen-parsing detections into openeyes elements (no model)."""
     from openeyes.backends.vision import elements_from_detections
-    raw = json.loads(open(detections, encoding="utf-8-sig").read())
+    with open(detections, encoding="utf-8-sig") as detections_file:
+        raw = json.loads(detections_file.read())
     elems = elements_from_detections(raw, origin=(origin_x, origin_y), score=score)
     if pretty:
         for e in elems:
@@ -553,7 +553,8 @@ def resolve(window: int, port: int, url_contains: str | None,
     vision_elements = None
     if vision_detections:
         from openeyes.backends.vision import elements_from_detections
-        raw = json.loads(open(vision_detections, encoding="utf-8-sig").read())
+        with open(vision_detections, encoding="utf-8-sig") as detections_file:
+            raw = json.loads(detections_file.read())
         vision_elements = elements_from_detections(raw)
     result = resolve_elements(
         hwnd=window or None,

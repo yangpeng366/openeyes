@@ -6,7 +6,6 @@ import json
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "examples" / "browser-click-acceptance.py"
 RUNBOOK = ROOT / "docs" / "dsh-web-acceptance.md"

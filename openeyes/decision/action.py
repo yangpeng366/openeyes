@@ -1,8 +1,8 @@
 """Output schema for the decision layer."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class ActionKind(str, Enum):
@@ -24,11 +24,11 @@ class Action:
     backend-specific call (e.g. `click_xy(el.center.x, el.center.y)`).
     """
     kind: ActionKind
-    target_index: Optional[int] = None
-    text: Optional[str] = None
-    key: Optional[str] = None
-    dx: Optional[int] = None
-    dy: Optional[int] = None
+    target_index: int | None = None
+    text: str | None = None
+    key: str | None = None
+    dx: int | None = None
+    dy: int | None = None
     reason: str = ""
 
     def to_dict(self) -> dict:

@@ -3,6 +3,7 @@
 Default impl is Windows (Win32). macOS / Linux implementations planned.
 """
 from __future__ import annotations
+
 import sys
 
 

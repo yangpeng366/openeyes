@@ -15,8 +15,7 @@ from __future__ import annotations
 import sys
 import time
 
-from openeyes import click_element, detect_elements, ensure_dpi_awareness
-from openeyes import find_elements
+from openeyes import click_element, detect_elements, ensure_dpi_awareness, find_elements
 
 ensure_dpi_awareness()
 

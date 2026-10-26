@@ -10,7 +10,8 @@ The model is told it can fall back to existing trajectory examples in the
 workspace (few-shot), or invent reasonable steps if no examples match.
 """
 from __future__ import annotations
-from typing import List, Dict, Any, Optional
+
+from typing import Any
 
 SYSTEM_PROMPT = """You are OpenEyes Record's trajectory generator.
 
@@ -65,8 +66,8 @@ def render_system() -> str:
 def render_user(
     description: str,
     app_name: str,
-    element_inventory: List[Dict[str, Any]],
-    few_shot_examples: Optional[List[str]] = None,
+    element_inventory: list[dict[str, Any]],
+    few_shot_examples: list[str] | None = None,
 ) -> str:
     inv_lines = []
     for el in element_inventory:

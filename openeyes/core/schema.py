@@ -1,7 +1,7 @@
 """Typed dataclasses for AI-friendly element / window schema."""
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ class Element:
     automation_id: str = ""
     class_name: str = ""
     score: float = 1.0
-    hint: Optional[str] = None
+    hint: str | None = None
     interactive: bool = True
     state: ElementState = field(default_factory=ElementState)
     parent_chain: list[str] = field(default_factory=list)

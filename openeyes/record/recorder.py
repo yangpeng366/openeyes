@@ -17,10 +17,10 @@ The recorder does NOT capture pixels. Every step is a structured
 readable and re-playable without any vision model.
 """
 from __future__ import annotations
-import time
-from typing import Optional, List, Any
 
-from .event import UIAEvent, InputEvent, Trajectory
+import time
+
+from .event import InputEvent, Trajectory, UIAEvent
 
 
 def _build_selector(element_dict: dict) -> str:
@@ -49,7 +49,7 @@ class Recorder:
     """Records OpenEyes actions into a Trajectory."""
 
     def __init__(self, name: str = "untitled", app_name: str = "", description: str = ""):
-        self._trajectory: Optional[Trajectory] = None
+        self._trajectory: Trajectory | None = None
 
     def start(self, name: str = "untitled", app_name: str = "", description: str = "") -> Trajectory:
         if self._trajectory is not None:
@@ -58,7 +58,7 @@ class Recorder:
         return self._trajectory
 
     @property
-    def trajectory(self) -> Optional[Trajectory]:
+    def trajectory(self) -> Trajectory | None:
         return self._trajectory
 
     def stop(self) -> Trajectory:
@@ -80,7 +80,7 @@ class Recorder:
         app_name: str = "",
         window_title: str = "",
         pid: int = 0,
-        meta: Optional[dict] = None,
+        meta: dict | None = None,
     ) -> UIAEvent:
         """Record a click on a specific OpenEyes Element.
 

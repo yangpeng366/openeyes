@@ -12,12 +12,12 @@ the replayer does its job with OpenEyes structured primitives only - no
 pixels, no screenshots, no vision model.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
-import json
-import time
 
-from .event import Trajectory, UIAEvent, InputEvent
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from .event import InputEvent, Trajectory, UIAEvent
 
 
 @dataclass
@@ -25,11 +25,11 @@ class ReplayReport:
     trajectory_id: str
     trajectory_name: str
     dry_run: bool
-    actions: List[Dict[str, Any]] = field(default_factory=list)
-    skipped: List[Dict[str, Any]] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    skipped: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "trajectory_id": self.trajectory_id,
             "trajectory_name": self.trajectory_name,
@@ -40,7 +40,7 @@ class ReplayReport:
         }
 
 
-def _describe_actuate(step) -> Optional[Dict[str, Any]]:
+def _describe_actuate(step) -> dict[str, Any] | None:
     """Translate one step into an actuate() plan dict."""
     if isinstance(step, InputEvent):
         if step.action == "hotkey":
@@ -123,7 +123,7 @@ class Replayer:
 
         return report
 
-    def _dispatch(self, plan: Dict[str, Any]) -> None:
+    def _dispatch(self, plan: dict[str, Any]) -> None:
         """Send one actuate() call to OpenEyes (real input)."""
         import openeyes
         kind = plan["kind"]

@@ -3,9 +3,9 @@ import json
 from unittest.mock import MagicMock
 
 import openeyes.mcp.server as mcp_server
+from openeyes.backends.cdp import CDPError
 from openeyes.core.schema import BBox, Center, Element
 
-from openeyes.backends.cdp import CDPError
 
 def _payload(result):
     return json.loads(result[0].text)

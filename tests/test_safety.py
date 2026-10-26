@@ -1,7 +1,7 @@
 import pytest
 
-from openeyes.core.schema import BBox, Center, Element, ElementState
 from openeyes.core.safety import is_editable_element, validate_text_entry
+from openeyes.core.schema import BBox, Center, Element, ElementState
 
 
 def _element(control_type="Edit", *, focused=False, enabled=True):

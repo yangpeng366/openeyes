@@ -18,8 +18,6 @@ So we emit that header followed by:
 A pure text LLM can read this and decide when/how to call the skill.
 """
 from __future__ import annotations
-from typing import List
-import textwrap
 
 from ..event import Trajectory
 
@@ -37,7 +35,7 @@ def to_codex_skill(traj: Trajectory, *, description: str = "", model_hint: str =
         model_hint = "text-only LLM friendly (no vision required)"
 
     name = "openeyes-record-" + (traj.name or "workflow").lower().replace(" ", "-")
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("---")
     lines.append(f"name: \"{name}\"")
     lines.append(f"description: \"{description}\"")

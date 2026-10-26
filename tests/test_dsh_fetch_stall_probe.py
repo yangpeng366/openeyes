@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = ROOT / "examples" / "dsh-fetch-stall-probe.py"
 

@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 from openeyes.core.hints import (
-    CHARSET, assign_hints, find_by_hint, _hints_for_n, _sort_key,
+    CHARSET,
+    _hints_for_n,
+    _sort_key,
+    assign_hints,
+    find_by_hint,
 )
 from openeyes.core.schema import BBox, Center, Element
 

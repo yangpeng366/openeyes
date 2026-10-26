@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol, Sequence
+from typing import Any, Protocol
 
 from openeyes.core.schema import BBox, Center, Element, ElementState
 

@@ -1,15 +1,22 @@
 """Unit tests for openeyes.decision — contract parity with ACH FEAT-03 §1.1a."""
 from __future__ import annotations
+
 import pytest
 
 from openeyes.core.schema import BBox, Center, Element
 from openeyes.decision import (
-    ThresholdConfig, classify_confidence, DecisionBand,
-    Action, ActionKind,
-    FakeJevScorer, JevScorer, JevScore, JevAskError,
-    decide, DecisionContext,
+    Action,
+    ActionKind,
+    DecisionBand,
+    DecisionContext,
+    FakeJevScorer,
+    JevAskError,
+    JevScore,
+    JevScorer,
+    ThresholdConfig,
+    classify_confidence,
+    decide,
 )
-
 
 # ---------- threshold ----------
 
@@ -179,7 +186,6 @@ def test_decide_enabled_flag_for_review_path():
     (prob in uncertain band + conf < 0.85). Use a prob outside the
     uncertain band to land in FLAG_FOR_REVIEW.
     """
-    s = FakeJevScorer(rules={"force_prob": 0.85})
     # Without a custom-rule path, FakeJevScorer returns prob=0.70 on prefix hits
     # which lands in UNCERTAIN. To exercise FLAG_FOR_REVIEW we need a different
     # scorer that returns conf in [0.60, 0.85) and prob outside [0.30, 0.70].
@@ -380,6 +386,7 @@ def test_criteria_falls_back_to_index_keys():
 def test_typesafe_scorer_maps_name_keyed_answer_back_to_index(monkeypatch):
     """A name-keyed answer maps back to the candidate index."""
     import json
+
     from openeyes.decision import scorer as scorer_mod
 
     payload = {

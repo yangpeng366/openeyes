@@ -9,16 +9,16 @@ app_name + hwnd hash) instead of screenshot_hash. This keeps every receipt
 fully textual, which is the whole point of "no vision required".
 """
 from __future__ import annotations
+
 import hashlib
 import time
 import uuid
-from typing import List, Dict, Any
 
-from ..event import Trajectory, UIAEvent, InputEvent
+from ..event import InputEvent, Trajectory, UIAEvent
 
 
 def _state_fingerprint(app_name: str, window_title: str, hwnd: int) -> str:
-    raw = f"{app_name}|{window_title}|{hwnd}".encode("utf-8")
+    raw = f"{app_name}|{window_title}|{hwnd}".encode()
     return "sha256:" + hashlib.sha256(raw).hexdigest()[:16]
 
 
@@ -39,12 +39,12 @@ def to_action_receipt(traj: Trajectory, *, human_prompt: str = "", surface: str 
     """Render an ai-action-trace-receipt YAML bundle for the trajectory."""
     receipt_id = f"atr-{uuid.uuid4().hex[:8]}"
     intent_hash = "sha256:" + hashlib.sha256((human_prompt or traj.name).encode("utf-8")).hexdigest()[:16]
-    lines: List[str] = []
+    lines: list[str] = []
     # ---- Receipt ----
     lines.append("action_trace_receipt:")
     lines.append(f"  receipt_id: \"{receipt_id}\"")
     lines.append("  version: \"0.5.0\"")
-    lines.append(f"  origin_intent:")
+    lines.append("  origin_intent:")
     lines.append(f"    human_prompt: \"{(human_prompt or traj.description or traj.name).replace(chr(34), chr(92)+chr(34))}\"")
     lines.append(f"    intent_hash: \"{intent_hash}\"")
     lines.append("  knowledge_context: {}")
@@ -119,7 +119,7 @@ def to_action_receipt(traj: Trajectory, *, human_prompt: str = "", surface: str 
             else:
                 lines.append(f"    selector: \"{sel}\"")
             center = ed.get("center") or {}
-            lines.append(f"    coordinates:")
+            lines.append("    coordinates:")
             lines.append(f"      x: {int(center.get('x', 0))}")
             lines.append(f"      y: {int(center.get('y', 0))}")
         else:

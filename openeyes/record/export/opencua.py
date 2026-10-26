@@ -6,16 +6,15 @@ Each step is one JSON object on its own line, with:
   - action: pyautogui-style string OR structured selector action
 """
 from __future__ import annotations
-import json
-import time
-from typing import List, Dict, Any
 
-from ..event import Trajectory, UIAEvent, InputEvent
+import json
+
+from ..event import Trajectory, UIAEvent
 
 
 def to_opencua_trajectory(traj: Trajectory) -> str:
     """Render a trajectory as AgentNet-style JSONL (one step per line)."""
-    out: List[str] = []
+    out: list[str] = []
     header = {
         "trajectory_id": traj.id,
         "workflow_name": traj.name,

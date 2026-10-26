@@ -18,12 +18,12 @@ Caller is expected to:
       # resolve action.target_index -> openeyes.Element -> click/type/...
 """
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Optional
 
-from openeyes.decision.threshold import ThresholdConfig, classify_confidence, DecisionBand
+from dataclasses import dataclass
+
 from openeyes.decision.action import Action, ActionKind
-from openeyes.decision.scorer import JevScorer, FakeJevScorer, JevAskError
+from openeyes.decision.scorer import FakeJevScorer, JevAskError, JevScorer
+from openeyes.decision.threshold import DecisionBand, ThresholdConfig, classify_confidence
 
 
 @dataclass
@@ -43,7 +43,7 @@ class DecisionContext:
             self.scorer = FakeJevScorer()
 
 
-def decide(elements, goal: str, ctx: DecisionContext) -> Optional[Action]:
+def decide(elements, goal: str, ctx: DecisionContext) -> Action | None:
     """Backend-agnostic decision.
 
     `elements` may be a list of `openeyes.Element` (preferred) or anything
@@ -78,7 +78,6 @@ def decide(elements, goal: str, ctx: DecisionContext) -> Optional[Action]:
         return Action(kind=ActionKind.BLOCKED,
                       reason=f"uncertain(conf={score.confidence:.2f}, prob={score.prob:.2f})")
 
-    target = elements[score.target_index]
     if band == DecisionBand.FLAG_FOR_REVIEW:
         return Action(kind=ActionKind.CLICK, target_index=score.target_index,
                       reason=f"flag_for_review(conf={score.confidence:.2f})")

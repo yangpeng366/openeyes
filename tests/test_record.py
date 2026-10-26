@@ -12,25 +12,24 @@ Covers:
 No real UI needed; uses fake element dicts throughout.
 """
 from __future__ import annotations
+
 import json
-import os
-import tempfile
+
 import pytest
 
-from openeyes.record.event import UIAEvent, InputEvent, Trajectory
-from openeyes.record.recorder import Recorder, _build_selector
-from openeyes.record.replayer import Replayer
+from openeyes.decision import JevScore, JevScorer, ThresholdConfig, TypesafeJevScorer
 from openeyes.record.abstract import (
+    graph_to_natural_language,
     merge_trajectories,
     to_natural_language,
-    graph_to_natural_language,
 )
-from openeyes.record.export.codex_skill import to_codex_skill
+from openeyes.record.event import InputEvent, Trajectory, UIAEvent
 from openeyes.record.export.action_receipt import to_action_receipt
+from openeyes.record.export.codex_skill import to_codex_skill
 from openeyes.record.export.opencua import to_opencua_trajectory
 from openeyes.record.generator import generate_trajectory_from_prompt
-from openeyes.decision import JevScore, JevScorer, ThresholdConfig, TypesafeJevScorer
-
+from openeyes.record.recorder import Recorder, _build_selector
+from openeyes.record.replayer import Replayer
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -530,7 +529,7 @@ class TestHybridGenerate:
         recorded = self._make_recorded()
         try:
             hybrid_generate(recorded, "x", backend="invalid")
-            assert False, "should raise"
+            raise AssertionError("should raise")
         except ValueError:
             pass
 

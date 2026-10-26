@@ -23,7 +23,6 @@ import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
 DEFAULT_GATE_URL = "http://127.0.0.1:3080/"
 DEFAULT_NEXT_RECHECK = "2026-09-10T16:30:00+08:00"
 #: Status codes that prove the host process is listening and answering.

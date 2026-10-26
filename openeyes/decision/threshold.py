@@ -9,6 +9,7 @@ Plus the `uncertain band` [0.30, 0.70] from consistency_noul cookbook:
 prob in [0.30, 0.70] AND confidence < 0.85 -> UNCERTAIN (must verify).
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 

@@ -22,12 +22,17 @@ Why a thin layer (not a fork of JevClient):
   semantics, it just routes between fake Jev and real Jev.
 """
 from __future__ import annotations
-from openeyes.decision.threshold import ThresholdConfig, classify_confidence, DecisionBand
+
 from openeyes.decision.action import Action, ActionKind
+from openeyes.decision.router import DecisionContext, decide
 from openeyes.decision.scorer import (
-    JevScorer, FakeJevScorer, TypesafeJevScorer, JevAskError, JevScore,
+    FakeJevScorer,
+    JevAskError,
+    JevScore,
+    JevScorer,
+    TypesafeJevScorer,
 )
-from openeyes.decision.router import decide, DecisionContext
+from openeyes.decision.threshold import DecisionBand, ThresholdConfig, classify_confidence
 
 __all__ = [
     "ThresholdConfig", "classify_confidence", "DecisionBand",

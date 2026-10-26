@@ -18,7 +18,6 @@ import sys
 import threading
 from pathlib import Path
 
-
 EXPECTED_TOOLS = [
     "list_windows",
     "capture_window",

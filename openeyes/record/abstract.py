@@ -6,12 +6,12 @@ No vision needed. We work only on:
 - step.intent (free text)
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
-from collections import Counter, defaultdict
-import json
 
-from .event import Trajectory, UIAEvent, InputEvent
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from typing import Any
+
+from .event import InputEvent, Trajectory, UIAEvent
 
 
 @dataclass
@@ -27,9 +27,9 @@ class ActionNode:
     label: str
     action: str
     selector: str
-    element_summary: Dict[str, Any]
+    element_summary: dict[str, Any]
     count: int = 1
-    sample_intents: List[str] = field(default_factory=list)
+    sample_intents: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -42,11 +42,11 @@ class ActionEdge:
 
 @dataclass
 class ActionGraph:
-    nodes: List[ActionNode] = field(default_factory=list)
-    edges: List[ActionEdge] = field(default_factory=list)
+    nodes: list[ActionNode] = field(default_factory=list)
+    edges: list[ActionEdge] = field(default_factory=list)
     workflow_name: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "workflow_name": self.workflow_name,
             "node_count": len(self.nodes),
@@ -71,7 +71,7 @@ class ActionGraph:
         return "\n".join(lines)
 
 
-def _node_key_for_step(step) -> Optional[str]:
+def _node_key_for_step(step) -> str | None:
     """Build a stable key for dedup; None if the step can't participate in the graph."""
     if isinstance(step, InputEvent):
         if step.action == "wait":
@@ -87,7 +87,7 @@ def _node_key_for_step(step) -> Optional[str]:
     return None
 
 
-def _node_label_for_step(step) -> Tuple[str, Dict[str, Any]]:
+def _node_label_for_step(step) -> tuple[str, dict[str, Any]]:
     if isinstance(step, InputEvent):
         return f"Hotkey {step.combo}", {"kind": "hotkey", "combo": step.combo}
     ed = step.element
@@ -111,19 +111,19 @@ def _node_label_for_step(step) -> Tuple[str, Dict[str, Any]]:
     return label, summary
 
 
-def merge_trajectories(trajectories: List[Trajectory], workflow_name: str = "") -> ActionGraph:
+def merge_trajectories(trajectories: list[Trajectory], workflow_name: str = "") -> ActionGraph:
     """Build a DAG from one or more trajectories of the same workflow.
 
     Consecutive steps with the same key are merged. Edges track how often a
     transition occurred across recordings - useful to see both happy path and
     detours.
     """
-    nodes_by_key: Dict[str, ActionNode] = {}
+    nodes_by_key: dict[str, ActionNode] = {}
     edge_counts: Counter = Counter()
-    edge_meta: Dict[Tuple[str, str], List[str]] = defaultdict(list)
+    edge_meta: dict[tuple[str, str], list[str]] = defaultdict(list)
 
     for traj in trajectories:
-        prev_key: Optional[str] = None
+        prev_key: str | None = None
         for step in traj.steps:
             key = _node_key_for_step(step)
             if key is None:
@@ -132,9 +132,10 @@ def merge_trajectories(trajectories: List[Trajectory], workflow_name: str = "") 
             if key in nodes_by_key:
                 n = nodes_by_key[key]
                 n.count += 1
-                if isinstance(step, UIAEvent) and step.intent and step.intent not in n.sample_intents:
-                    if len(n.sample_intents) < 5:
-                        n.sample_intents.append(step.intent)
+                if (isinstance(step, UIAEvent) and step.intent
+                        and step.intent not in n.sample_intents
+                        and len(n.sample_intents) < 5):
+                    n.sample_intents.append(step.intent)
             else:
                 n = ActionNode(
                     key=key,

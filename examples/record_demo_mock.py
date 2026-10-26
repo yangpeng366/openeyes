@@ -12,19 +12,25 @@ It will:
 
 All output goes to examples/out/.
 """
-import os, sys, json
+import json
+import sys
 from pathlib import Path
 
 # Make the package importable when running from the repo root
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from openeyes.record import (
-    Recorder, Replayer, Trajectory,
-    merge_trajectories, to_natural_language,
+from openeyes.record import (  # noqa: E402 - sys.path is bootstrapped above
+    Recorder,
+    Replayer,
+    Trajectory,
+    merge_trajectories,
+    to_natural_language,
 )
-from openeyes.record.export import (
-    to_codex_skill, to_action_receipt, to_opencua_trajectory,
+from openeyes.record.export import (  # noqa: E402 - sys.path is bootstrapped above
+    to_action_receipt,
+    to_codex_skill,
+    to_opencua_trajectory,
 )
 
 

@@ -7,18 +7,21 @@ Run modes:
     python examples/demo_prompt.py                 # mock backend (always works)
     LLM_API_KEY=sk-... python examples/demo_prompt.py --real   # real backend
 """
-import os, sys, json
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from openeyes.record import (
+from openeyes.record import (  # noqa: E402 - sys.path is bootstrapped above
     generate_trajectory_from_prompt,
-    to_natural_language, merge_trajectories,
+    merge_trajectories,
+    to_natural_language,
 )
-from openeyes.record.export import (
-    to_codex_skill, to_action_receipt, to_opencua_trajectory,
+from openeyes.record.export import (  # noqa: E402 - sys.path is bootstrapped above
+    to_action_receipt,
+    to_codex_skill,
+    to_opencua_trajectory,
 )
 
 

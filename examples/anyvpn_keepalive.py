@@ -35,12 +35,10 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-from openeyes import (click_element, detect_elements, ensure_dpi_awareness,
-                      find_elements)
+from openeyes import click_element, detect_elements, ensure_dpi_awareness, find_elements
 
 # Coordinates must be physical screen pixels, otherwise the click lands
 # a few pixels off (or on a different element) on scaled monitors.

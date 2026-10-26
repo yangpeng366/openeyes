@@ -9,12 +9,12 @@ Reference: xlang-ai/PC-Agent-E (arxiv:2505.13909) - human trajectories
 boosted by AI augmentation outperform the original model.
 """
 from __future__ import annotations
-import time
-from typing import List, Optional, Dict, Any
 
-from .event import Trajectory, UIAEvent, InputEvent
+import time
+
 from .abstract import to_natural_language
-from .generator import _call_llm, LLMUnavailable
+from .event import InputEvent, Trajectory, UIAEvent
+from .generator import LLMUnavailable, _call_llm
 from .prompt_template import SYSTEM_PROMPT
 
 
@@ -22,11 +22,11 @@ def hybrid_generate(
     recorded: Trajectory,
     description: str,
     *,
-    few_shot: Optional[List[Trajectory]] = None,
+    few_shot: list[Trajectory] | None = None,
     backend: str = "auto",
-    model: Optional[str] = None,
-    base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> Trajectory:
     """Generate an enhanced Trajectory from a recorded one + NL description.
 
@@ -92,10 +92,10 @@ def _hybrid_real(
     recorded: Trajectory,
     description: str,
     *,
-    few_shot: Optional[List[Trajectory]] = None,
-    model: Optional[str] = None,
-    base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
+    few_shot: list[Trajectory] | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> Trajectory:
     """Call LLM with recorded trajectory NL + description -> refined steps."""
     recorded_nl = to_natural_language(recorded)
@@ -141,7 +141,7 @@ def _parse_llm_trajectory(
     if not lines:
         return _hybrid_mock(recorded, description)
 
-    steps: List[UIAEvent] = []
+    steps: list[UIAEvent] = []
     for line in lines:
         try:
             obj = json.loads(line)

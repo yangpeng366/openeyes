@@ -10,15 +10,18 @@ Run:
         e.g. python examples/demo_real.py Feishu
              python examples/demo_real.py AnyVPN
 """
-import os, sys, json
+import json
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from openeyes.record import Recorder, Replayer, Trajectory
-from openeyes.record.export import (
-    to_codex_skill, to_action_receipt, to_opencua_trajectory,
+from openeyes.record import Recorder, Replayer, Trajectory  # noqa: E402 - sys.path is bootstrapped above
+from openeyes.record.export import (  # noqa: E402 - sys.path is bootstrapped above
+    to_action_receipt,
+    to_codex_skill,
+    to_opencua_trajectory,
 )
 
 try:
@@ -37,7 +40,7 @@ def main(window_substring: str = ""):
     wins = openeyes.list_windows()
     matches = [w for w in wins if not window_substring or
                window_substring.lower() in (w.title or "").lower()]
-    print(f"  found {len(watches := matches)} match(es)")
+    print(f"  found {len(matches)} match(es)")
     for w in matches[:10]:
         print(f"    hwnd={w.hwnd:>8}  title={w.title!r}  class={w.class_name!r}")
 

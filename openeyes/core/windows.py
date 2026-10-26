@@ -1,7 +1,9 @@
 """List / find top-level windows."""
 from __future__ import annotations
+
 import re
 import sys
+
 from openeyes.core.schema import WindowInfo
 
 
@@ -37,12 +39,12 @@ def _platform_backend():
         try:
             from openeyes.backends import ax as ax_backend  # type: ignore
             return ax_backend
-        except ImportError:
-            raise NotImplementedError("macOS AX backend not yet implemented")
+        except ImportError as exc:
+            raise NotImplementedError("macOS AX backend not yet implemented") from exc
     if sys.platform.startswith("linux"):
         try:
             from openeyes.backends import atspi as atspi_backend  # type: ignore
             return atspi_backend
-        except ImportError:
-            raise NotImplementedError("Linux AT-SPI backend not yet implemented")
+        except ImportError as exc:
+            raise NotImplementedError("Linux AT-SPI backend not yet implemented") from exc
     raise NotImplementedError(f"unsupported platform: {sys.platform}")

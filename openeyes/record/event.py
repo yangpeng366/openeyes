@@ -7,11 +7,12 @@ Every recording event is one of:
 Both are JSON-serialisable via to_dict() so the trajectory is plain text.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List, Dict, Any
+
 import json
 import time
 import uuid
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -26,17 +27,17 @@ class UIAEvent:
     """
     ts: float
     action: str           # "click" | "double_click" | "right_click" | "type" | "drag" | "scroll"
-    element: Dict[str, Any]   # OpenEyes Element.to_dict()
+    element: dict[str, Any]   # OpenEyes Element.to_dict()
     selector: str        # "automation_id=<id>" or "name=<n>|type=<t>"
     app_name: str = ""
     window_title: str = ""
     hwnd: int = 0
     pid: int = 0
     intent: str = ""          # optional natural-language intent for this step
-    input_text: Optional[str] = None
-    meta: Dict[str, Any] = field(default_factory=dict)
+    input_text: str | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -45,14 +46,14 @@ class InputEvent:
     """Raw input without an element (global hotkey, scroll wheel without target, etc.)."""
     ts: float
     action: str           # "hotkey" | "scroll" | "wait"
-    combo: Optional[str] = None       # e.g. "ctrl+s"
-    dx: Optional[int] = None
-    dy: Optional[int] = None
-    duration_ms: Optional[int] = None
+    combo: str | None = None       # e.g. "ctrl+s"
+    dx: int | None = None
+    dy: int | None = None
+    duration_ms: int | None = None
     intent: str = ""
-    meta: Dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -65,13 +66,13 @@ class Trajectory:
     id: str
     name: str
     started_at: float
-    ended_at: Optional[float] = None
+    ended_at: float | None = None
     app_name: str = ""
     description: str = ""
-    steps: List[Any] = field(default_factory=list)   # list[UIAEvent | InputEvent]
+    steps: list[Any] = field(default_factory=list)   # list[UIAEvent | InputEvent]
 
     @staticmethod
-    def new(name: str, app_name: str = "", description: str = "") -> "Trajectory":
+    def new(name: str, app_name: str = "", description: str = "") -> Trajectory:
         return Trajectory(
             id=str(uuid.uuid4()),
             name=name,
@@ -106,7 +107,7 @@ class Trajectory:
         return "\n".join(lines) + "\n"
 
     @classmethod
-    def from_jsonl(cls, text: str) -> "Trajectory":
+    def from_jsonl(cls, text: str) -> Trajectory:
         lines = [ln for ln in text.splitlines() if ln.strip()]
         if not lines:
             raise ValueError("empty trajectory jsonl")
@@ -135,11 +136,11 @@ class Trajectory:
             f.write(self.to_jsonl())
 
     @classmethod
-    def load(cls, path: str) -> "Trajectory":
-        with open(path, "r", encoding="utf-8") as f:
+    def load(cls, path: str) -> Trajectory:
+        with open(path, encoding="utf-8") as f:
             return cls.from_jsonl(f.read())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
