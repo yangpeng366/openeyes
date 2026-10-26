@@ -270,7 +270,7 @@ As of 2026-08-25 the user has granted **full delegation** on this repo:
 ### Red lines
 - **No force push** to `main`. Rebase / amend only on the same local branch before the push lands.
 - **No push of `.codex/`** — local round artifacts; keep on disk, do not `git add`. Add `.codex/` to `.gitignore` as a follow-up commit if it is not already ignored.
-- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented 13-tool contract requires a feature branch + PR with rationale in the body.
+- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (15 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
 - **No secrets** in commits. The repo has no secrets today; if any are ever needed, use env vars and document in the PR.
 
 ### Push workaround (Windows host)

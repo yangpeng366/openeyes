@@ -286,7 +286,7 @@ openeyes/
 ├── docs/
 │   ├── architecture.md
 │   ├── RECORD_DESIGN.md        # Record & Replay design rationale
-│   ├── capability-contract.md   # 13-tool MCP contract (read / write / high-risk)
+│   ├── capability-contract.md   # 15-tool MCP contract (read / write / high-risk)
 │   └── dsh-web-acceptance.md    # manual acceptance guide for dsh web
 ├── examples/
 │   ├── feishu_first_test.py
@@ -307,7 +307,7 @@ openeyes/
 │   ├── test_smoke.py
 │   ├── test_cdp.py
 │   ├── test_hints.py
-│   ├── test_mcp_contract.py     # locks the 13-tool contract
+│   ├── test_mcp_contract.py     # locks the 15-tool contract
 │   ├── test_mcp_stdio_probe.py
 │   ├── test_maintenance_round_probes.py
 │   ├── test_dsh_mount_contract.py

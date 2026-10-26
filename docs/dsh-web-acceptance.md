@@ -146,7 +146,7 @@ Never add `"go": true` to this acceptance request. A real click is outside this 
 ## Pass criteria
 
 - dsh starts with `mcp-openeyes` enabled and does not report an MCP startup failure.
-- `tools/list` exposes the complete 13-tool contract.
+- `tools/list` exposes the complete 15-tool contract.
 - The matching `url_contains` call resolves only the intended tab and remains a dry-run.
 - The unmatched `url_contains` call fails closed without touching either tab.
 
@@ -7549,3 +7549,15 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 - 按 otherwise 分支留证；未启动服务、未执行 section 4、未发送 browser_click；既有 record/ 相关改动原状，与本轮 gate-readiness 无关。
 - blocker(high)：gate 不可达，:3080 仍无监听者，需服务负责人恢复 dsh web host。
 - 下一轮：优先等待服务恢复事件或人工确认 :3080 监听恢复，再运行 readiness probe；仅 HTTP 200 时执行 section 4。同质记录已连 75 轮（516-590），建议 planner 改为恢复事件触发或授权归档历史 Round note。
+## Round 591 evidence - 2026-10-26 (dsh gate ready, section 4 acceptance PASSED) [codex]
+- 记录时间：2026-10-26T12:10:00+08:00。
+- 根因修复（52452ea）：dsh 0.1.2-rc.1 裸 URL 返回 401（需 `?token=`），旧探针把 401 当未就绪；现 `{200,401}` 皆算 alive。
+- 命令：python examples\dsh-gate-readiness.py
+- 原始输出：{"ready": true, "status_code": 401, "error": null, "next_action": "Host is up (HTTP 401 = token required). ..."}，退出码 0。
+- 旁证：`dsh --profile web --no-open` 起服务，stdout 打印 `dsh web: http://127.0.0.1:3080/?token=...`；带 token GET 返回 303 -> /（换 cookie）；MCP 子进程 `python -m openeyes.mcp.server` 挂在 dsh 进程下（无启动失败）。
+- Section 4（仓库内替身，mcp-stdio）：python examples\browser-click-acceptance.py --cdp-port 9222
+- 原始输出：{"passed": true, "transport": "mcp-stdio", "acceptance_tabs": 2, "matched_click": {"clicked": false, "would_click": true, "target": {... "name": "Learn more", "bbox": {"x": 8, "y": 167, "w": 85, "h": 23}}}, "missing_click_error": "no page target matched url_contains='missing-target'; available URLs: ..."}，退出码 0。
+- Section 4（dsh 端到端，agent 真调）：`dsh --profile headless`（headless profile 已挂 mcp-openeyes），prompt 要求调用 browser_click(url_contains="target-a", name_contains="Learn more") 且不传 go。
+- 原始输出：agent 调用 `mcp__openeyes__browser_click`，返回 {"clicked": false, "would_click": true, "center": {"x": 51, "y": 179}, "target": {"backend": "cdp", "control_type": "Hyperlink", "name": "Learn more", "automation_id": "learn-more", "hint": "a", "parent_chain": ["body","p"]}}；未传 go 故未发生真实点击，target-a 与 decoy 两页状态均未变。
+- 结论：Pass criteria 四条全过（dsh 起且 MCP 无失败 / tools/list 15 工具 / 匹配调用只命中目标页且保持 dry-run / 不匹配调用 fail-closed）。
+- 下一轮：无需重跑本节；如需 UI 目视，改用 stdout 的 `?token=` URL 打开 dsh web。
