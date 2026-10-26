@@ -199,8 +199,17 @@ python examples\record_demo_real.py        # real Edge window (needs openeyes in
 ```
 
 `generate_trajectory_from_prompt(..., backend="jev")` uses the deterministic
-fake JEV scorer by default and switches to TypeSafe only when
-`TYPESAFE_API_KEY` is configured. Confidence routing reuses `0.85` / `0.60`.
+fake JEV scorer by default and switches to the real System One wire when
+`TYPESAFE_API_KEY` is configured, or when `TYPESAFE_BASE_URL` points at a
+loopback node (a local XERJ node may answer keyless). Confidence routing
+reuses `0.85` / `0.60`; a local history vote answers with support scores
+rather than a distribution, so its confidence scale is its own.
+
+```powershell
+$env:TYPESAFE_BASE_URL = "http://127.0.0.1:9201"     # local XERJ node
+$env:XERJ_API_KEY = (Get-Content E:\AI-Portable\xerj-data\admin.key -Raw).Trim()
+python examples\systemone-local-acceptance.py
+```
 
 See [`docs/RECORD_DESIGN.md`](docs/RECORD_DESIGN.md) for the full design rationale.
 
