@@ -1,4 +1,3 @@
-# coding: utf-8
 """Lightpanda CDP backend for OpenEyes.
 
 Lightpanda is an AI-native headless browser written in Zig with a minimal
@@ -12,9 +11,14 @@ and from the eyes-mcp ``browser_launch`` tool. The DOM probe, click_center,
 type_text, navigate, and scroll paths are unchanged - they already talk CDP
 through ``openeyes.backends.cdp.connect``.
 
-Hard-won facts (this machine):
-- WSL2 + Docker 29.4.3 already installed. Lightpanda ships as
-  ``lightpanda/browser:nightly`` (Docker) or a single Linux binary.
+Prerequisites on this host:
+- WSL2 with a **running Docker daemon inside the distro**. The daemon does
+  not always come back after a WSL restart: ``wsl -e bash -lc "docker
+  version"`` is the check and ``wsl -e bash -lc "sudo systemctl start
+  docker"`` is the fix. When the daemon is down, ``launch_lightpanda``
+  raises ``LightpandaError`` naming that cause instead of hanging.
+- Lightpanda ships as ``lightpanda/browser:nightly`` (Docker) or a single
+  Linux binary.
 - WSL forwards ``localhost:9222`` to the Windows host automatically, so the
   OpenEyes CDP client keeps using ``127.0.0.1:9222``.
 - Each Lightpanda session has its own cookies / no persistent profile.
@@ -31,8 +35,8 @@ do not have to shell out themselves.
 """
 from __future__ import annotations
 
+import contextlib
 import json
-import os
 import shutil
 import subprocess
 import time
@@ -41,7 +45,6 @@ import urllib.request
 from typing import Any
 
 from openeyes.backends.cdp import CDP_DEFAULT_PORT, CDP_LOCALHOST, list_tabs
-
 
 LIGHTPANDA_IMAGE = "lightpanda/browser:nightly"
 LIGHTPANDA_CONTAINER = "lightpanda"
@@ -157,10 +160,8 @@ def launch_lightpanda(
         try:
             conn.navigate(url)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 conn.close()
-            except Exception:
-                pass
     return info
 
 
