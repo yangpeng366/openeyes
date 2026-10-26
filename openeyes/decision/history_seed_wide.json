@@ -1,0 +1,1230 @@
+{
+  "version": 2,
+  "note": "The wide set: the same options plus the action vocabulary of the products this workstation automates (审核 / 通过 / 驳回 / 发布 / 推送 / 重试 ...). It measures WORSE, because the vote cannot arbitrate sibling options that differ by one word - the Chinese family drops from about 0.94 to 0.58 accuracy and the strict act floor disappears. Kept for the record and to reproduce that comparison; not the default.",
+  "fields": {
+    "label": "the option name the vote should return",
+    "text": "<goal> | <option> | <distractor>..."
+  },
+  "examples": [
+    {
+      "id": "zh-消息",
+      "label": "消息",
+      "goal": "点击消息按钮",
+      "distractors": [
+        "通知",
+        "搜索"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-消息-alt",
+      "label": "消息",
+      "goal": "打开消息列表",
+      "distractors": [
+        "通知",
+        "搜索"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-通知",
+      "label": "通知",
+      "goal": "查看通知",
+      "distractors": [
+        "消息",
+        "设置"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-通知-alt",
+      "label": "通知",
+      "goal": "打开通知中心",
+      "distractors": [
+        "消息",
+        "设置"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-设置",
+      "label": "设置",
+      "goal": "打开设置",
+      "distractors": [
+        "登录",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-设置-alt",
+      "label": "设置",
+      "goal": "进入设置页",
+      "distractors": [
+        "登录",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-提交",
+      "label": "提交",
+      "goal": "提交表单",
+      "distractors": [
+        "保存",
+        "取消"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-提交-alt",
+      "label": "提交",
+      "goal": "确认提交",
+      "distractors": [
+        "保存",
+        "取消"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-保存",
+      "label": "保存",
+      "goal": "保存文件",
+      "distractors": [
+        "提交",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-保存-alt",
+      "label": "保存",
+      "goal": "保存当前内容",
+      "distractors": [
+        "提交",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-下载",
+      "label": "下载",
+      "goal": "下载附件",
+      "distractors": [
+        "上传",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-下载-alt",
+      "label": "下载",
+      "goal": "另存到本地",
+      "distractors": [
+        "上传",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-搜索",
+      "label": "搜索",
+      "goal": "搜索内容",
+      "distractors": [
+        "排序",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-搜索-alt",
+      "label": "搜索",
+      "goal": "查找记录",
+      "distractors": [
+        "排序",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-关闭",
+      "label": "关闭",
+      "goal": "关闭窗口",
+      "distractors": [
+        "取消",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-关闭-alt",
+      "label": "关闭",
+      "goal": "关闭当前页面",
+      "distractors": [
+        "取消",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-新建",
+      "label": "新建",
+      "goal": "新建文档",
+      "distractors": [
+        "复制",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-新建-alt",
+      "label": "新建",
+      "goal": "创建新文件",
+      "distractors": [
+        "复制",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-重命名",
+      "label": "重命名",
+      "goal": "重命名文件",
+      "distractors": [
+        "新建",
+        "复制"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-重命名-alt",
+      "label": "重命名",
+      "goal": "修改名称",
+      "distractors": [
+        "新建",
+        "复制"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-复制",
+      "label": "复制",
+      "goal": "复制内容",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-复制-alt",
+      "label": "复制",
+      "goal": "拷贝所选",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-粘贴",
+      "label": "粘贴",
+      "goal": "粘贴内容",
+      "distractors": [
+        "复制",
+        "保存"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-粘贴-alt",
+      "label": "粘贴",
+      "goal": "贴上剪贴板",
+      "distractors": [
+        "复制",
+        "保存"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-打印",
+      "label": "打印",
+      "goal": "打印文档",
+      "distractors": [
+        "导出",
+        "下载"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-打印-alt",
+      "label": "打印",
+      "goal": "打印出来",
+      "distractors": [
+        "导出",
+        "下载"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-刷新",
+      "label": "刷新",
+      "goal": "刷新页面",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-刷新-alt",
+      "label": "刷新",
+      "goal": "重新加载",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-登录",
+      "label": "登录",
+      "goal": "登录账号",
+      "distractors": [
+        "设置",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-登录-alt",
+      "label": "登录",
+      "goal": "进入账户",
+      "distractors": [
+        "设置",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-上传",
+      "label": "上传",
+      "goal": "上传文件",
+      "distractors": [
+        "下载",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-上传-alt",
+      "label": "上传",
+      "goal": "把文件传到服务器",
+      "distractors": [
+        "下载",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-排序",
+      "label": "排序",
+      "goal": "排序列表",
+      "distractors": [
+        "搜索",
+        "全选"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-排序-alt",
+      "label": "排序",
+      "goal": "按日期排列",
+      "distractors": [
+        "搜索",
+        "全选"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-全选",
+      "label": "全选",
+      "goal": "全选所有",
+      "distractors": [
+        "取消",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-全选-alt",
+      "label": "全选",
+      "goal": "勾选全部行",
+      "distractors": [
+        "取消",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-导出",
+      "label": "导出",
+      "goal": "导出报表",
+      "distractors": [
+        "下载",
+        "打印"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-导出-alt",
+      "label": "导出",
+      "goal": "导出为文件",
+      "distractors": [
+        "下载",
+        "打印"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-删除",
+      "label": "删除",
+      "goal": "删除所选",
+      "distractors": [
+        "取消",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-删除-alt",
+      "label": "删除",
+      "goal": "移除这一项",
+      "distractors": [
+        "取消",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-取消",
+      "label": "取消",
+      "goal": "取消操作",
+      "distractors": [
+        "提交",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-取消-alt",
+      "label": "取消",
+      "goal": "关闭对话框不保存",
+      "distractors": [
+        "提交",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-编辑",
+      "label": "编辑",
+      "goal": "编辑这条内容",
+      "distractors": [
+        "保存",
+        "发布"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-编辑-alt",
+      "label": "编辑",
+      "goal": "修改这条内容",
+      "distractors": [
+        "保存",
+        "发布"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-审核",
+      "label": "审核",
+      "goal": "审核这条稿件",
+      "distractors": [
+        "通过",
+        "驳回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-审核-alt",
+      "label": "审核",
+      "goal": "进入审核",
+      "distractors": [
+        "通过",
+        "驳回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-通过",
+      "label": "通过",
+      "goal": "审核通过",
+      "distractors": [
+        "审核",
+        "驳回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-通过-alt",
+      "label": "通过",
+      "goal": "批准这一条",
+      "distractors": [
+        "审核",
+        "驳回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-预览",
+      "label": "预览",
+      "goal": "预览这条稿件",
+      "distractors": [
+        "发布",
+        "编辑"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-预览-alt",
+      "label": "预览",
+      "goal": "先看看效果",
+      "distractors": [
+        "发布",
+        "编辑"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-发布",
+      "label": "发布",
+      "goal": "发布这条稿件",
+      "distractors": [
+        "预览",
+        "定时"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-发布-alt",
+      "label": "发布",
+      "goal": "把它发出去",
+      "distractors": [
+        "预览",
+        "定时"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-重试",
+      "label": "重试",
+      "goal": "重试这次推送",
+      "distractors": [
+        "推送",
+        "撤回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-重试-alt",
+      "label": "重试",
+      "goal": "再发一次",
+      "distractors": [
+        "推送",
+        "撤回"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-推送",
+      "label": "推送",
+      "goal": "推送到渠道",
+      "distractors": [
+        "发布",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-推送-alt",
+      "label": "推送",
+      "goal": "把这稿推出去",
+      "distractors": [
+        "发布",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-移动",
+      "label": "移动",
+      "goal": "移动这条内容",
+      "distractors": [
+        "关联",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-移动-alt",
+      "label": "移动",
+      "goal": "换个位置",
+      "distractors": [
+        "关联",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-评论",
+      "label": "评论",
+      "goal": "写一条评论",
+      "distractors": [
+        "消息",
+        "通知"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-评论-alt",
+      "label": "评论",
+      "goal": "给这条留言",
+      "distractors": [
+        "消息",
+        "通知"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-绑定",
+      "label": "绑定",
+      "goal": "绑定这个账号",
+      "distractors": [
+        "关联",
+        "启用"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-绑定-alt",
+      "label": "绑定",
+      "goal": "关联上这个账号",
+      "distractors": [
+        "关联",
+        "启用"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-清空",
+      "label": "清空",
+      "goal": "清空这个列表",
+      "distractors": [
+        "删除",
+        "恢复"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-清空-alt",
+      "label": "清空",
+      "goal": "把内容清掉",
+      "distractors": [
+        "删除",
+        "恢复"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-启用",
+      "label": "启用",
+      "goal": "启用这个功能",
+      "distractors": [
+        "关联",
+        "恢复"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-启用-alt",
+      "label": "启用",
+      "goal": "把它打开",
+      "distractors": [
+        "关联",
+        "恢复"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-收藏",
+      "label": "收藏",
+      "goal": "收藏这条内容",
+      "distractors": [
+        "评论",
+        "关联"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-收藏-alt",
+      "label": "收藏",
+      "goal": "把它存起来",
+      "distractors": [
+        "评论",
+        "关联"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-关联",
+      "label": "关联",
+      "goal": "关联这两条内容",
+      "distractors": [
+        "绑定",
+        "移动"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-关联-alt",
+      "label": "关联",
+      "goal": "建立关联",
+      "distractors": [
+        "绑定",
+        "移动"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-定时",
+      "label": "定时",
+      "goal": "定时发布这篇",
+      "distractors": [
+        "发布",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-定时-alt",
+      "label": "定时",
+      "goal": "设定发布时间",
+      "distractors": [
+        "发布",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-撤回",
+      "label": "撤回",
+      "goal": "撤回刚才的发布",
+      "distractors": [
+        "推送",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-撤回-alt",
+      "label": "撤回",
+      "goal": "取消这次推送",
+      "distractors": [
+        "推送",
+        "重试"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-恢复",
+      "label": "恢复",
+      "goal": "恢复这条内容",
+      "distractors": [
+        "清空",
+        "删除"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-恢复-alt",
+      "label": "恢复",
+      "goal": "把它还原",
+      "distractors": [
+        "清空",
+        "删除"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-退出",
+      "label": "退出",
+      "goal": "退出登录",
+      "distractors": [
+        "登录",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-退出-alt",
+      "label": "退出",
+      "goal": "退出这个账号",
+      "distractors": [
+        "登录",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-筛选",
+      "label": "筛选",
+      "goal": "筛选这些结果",
+      "distractors": [
+        "搜索",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-筛选-alt",
+      "label": "筛选",
+      "goal": "按条件过滤",
+      "distractors": [
+        "搜索",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "en-Message",
+      "label": "Message",
+      "goal": "click the message button",
+      "distractors": [
+        "Notifications",
+        "Search"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Message-alt",
+      "label": "Message",
+      "goal": "open the message list",
+      "distractors": [
+        "Notifications",
+        "Search"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Notifications",
+      "label": "Notifications",
+      "goal": "open the notifications panel",
+      "distractors": [
+        "Message",
+        "Settings"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Notifications-alt",
+      "label": "Notifications",
+      "goal": "view the alerts",
+      "distractors": [
+        "Message",
+        "Settings"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Settings",
+      "label": "Settings",
+      "goal": "open the settings page",
+      "distractors": [
+        "Sign in",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Settings-alt",
+      "label": "Settings",
+      "goal": "change the preferences",
+      "distractors": [
+        "Sign in",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Submit",
+      "label": "Submit",
+      "goal": "submit the form",
+      "distractors": [
+        "Save",
+        "Cancel"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Submit-alt",
+      "label": "Submit",
+      "goal": "send the form",
+      "distractors": [
+        "Save",
+        "Cancel"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Save",
+      "label": "Save",
+      "goal": "save the current file",
+      "distractors": [
+        "Submit",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Save-alt",
+      "label": "Save",
+      "goal": "keep my changes",
+      "distractors": [
+        "Submit",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Download",
+      "label": "Download",
+      "goal": "download the attachment",
+      "distractors": [
+        "Upload",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Download-alt",
+      "label": "Download",
+      "goal": "fetch the file",
+      "distractors": [
+        "Upload",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Search",
+      "label": "Search",
+      "goal": "search for the report",
+      "distractors": [
+        "Sort",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Search-alt",
+      "label": "Search",
+      "goal": "look something up",
+      "distractors": [
+        "Sort",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Close",
+      "label": "Close",
+      "goal": "close the window",
+      "distractors": [
+        "Cancel",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Close-alt",
+      "label": "Close",
+      "goal": "dismiss the dialog",
+      "distractors": [
+        "Cancel",
+        "Refresh"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-New",
+      "label": "New",
+      "goal": "create a new document",
+      "distractors": [
+        "Copy",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-New-alt",
+      "label": "New",
+      "goal": "start a blank file",
+      "distractors": [
+        "Copy",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Rename",
+      "label": "Rename",
+      "goal": "rename the current file",
+      "distractors": [
+        "New",
+        "Copy"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Rename-alt",
+      "label": "Rename",
+      "goal": "change the name",
+      "distractors": [
+        "New",
+        "Copy"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Copy",
+      "label": "Copy",
+      "goal": "copy the selected text",
+      "distractors": [
+        "Paste",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Copy-alt",
+      "label": "Copy",
+      "goal": "duplicate the item",
+      "distractors": [
+        "Paste",
+        "Rename"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Paste",
+      "label": "Paste",
+      "goal": "paste from the clipboard",
+      "distractors": [
+        "Copy",
+        "Save"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Paste-alt",
+      "label": "Paste",
+      "goal": "insert the clipboard content",
+      "distractors": [
+        "Copy",
+        "Save"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Print",
+      "label": "Print",
+      "goal": "print the document",
+      "distractors": [
+        "Export",
+        "Download"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Print-alt",
+      "label": "Print",
+      "goal": "produce a paper copy",
+      "distractors": [
+        "Export",
+        "Download"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Refresh",
+      "label": "Refresh",
+      "goal": "refresh the page",
+      "distractors": [
+        "Search",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Refresh-alt",
+      "label": "Refresh",
+      "goal": "reload the view",
+      "distractors": [
+        "Search",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sign in",
+      "label": "Sign in",
+      "goal": "sign in to the account",
+      "distractors": [
+        "Settings",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sign in-alt",
+      "label": "Sign in",
+      "goal": "log into the account",
+      "distractors": [
+        "Settings",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Upload",
+      "label": "Upload",
+      "goal": "upload a file",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Upload-alt",
+      "label": "Upload",
+      "goal": "push the file to the server",
+      "distractors": [
+        "Download",
+        "Export"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sort",
+      "label": "Sort",
+      "goal": "sort the list by date",
+      "distractors": [
+        "Search",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Sort-alt",
+      "label": "Sort",
+      "goal": "order the rows",
+      "distractors": [
+        "Search",
+        "Select all"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Select all",
+      "label": "Select all",
+      "goal": "select all rows",
+      "distractors": [
+        "Cancel",
+        "Sort"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Select all-alt",
+      "label": "Select all",
+      "goal": "tick every line",
+      "distractors": [
+        "Cancel",
+        "Sort"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Export",
+      "label": "Export",
+      "goal": "export the report as csv",
+      "distractors": [
+        "Download",
+        "Print"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Export-alt",
+      "label": "Export",
+      "goal": "save the report to a file",
+      "distractors": [
+        "Download",
+        "Print"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Delete",
+      "label": "Delete",
+      "goal": "delete the selected item",
+      "distractors": [
+        "Cancel",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Delete-alt",
+      "label": "Delete",
+      "goal": "remove this entry",
+      "distractors": [
+        "Cancel",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Cancel",
+      "label": "Cancel",
+      "goal": "cancel the operation",
+      "distractors": [
+        "Submit",
+        "Close"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "en-Cancel-alt",
+      "label": "Cancel",
+      "goal": "dismiss without saving",
+      "distractors": [
+        "Submit",
+        "Close"
+      ],
+      "lang": "en"
+    }
+  ]
+}

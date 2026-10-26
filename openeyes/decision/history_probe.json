@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 5,
   "note": "Held-out goals: the same options as the labelled history, phrased differently, so a vote has to generalise instead of recognising the document it was built from. This is the set the local judge's thresholds are measured on - the seed itself can only show that the mechanism works.",
   "examples": [
     {
@@ -9,6 +9,206 @@
       "distractors": [
         "通知",
         "搜索"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-通知-heldout",
+      "label": "通知",
+      "goal": "看看有什么提醒",
+      "distractors": [
+        "消息",
+        "设置"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-设置-heldout",
+      "label": "设置",
+      "goal": "调整一下配置",
+      "distractors": [
+        "登录",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-提交-heldout",
+      "label": "提交",
+      "goal": "把表单发出去",
+      "distractors": [
+        "保存",
+        "取消"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-保存-heldout",
+      "label": "保存",
+      "goal": "先存下来",
+      "distractors": [
+        "提交",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-下载-heldout",
+      "label": "下载",
+      "goal": "把附件取回来",
+      "distractors": [
+        "上传",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-搜索-heldout",
+      "label": "搜索",
+      "goal": "查一下报表",
+      "distractors": [
+        "排序",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-关闭-heldout",
+      "label": "关闭",
+      "goal": "把这个窗口关掉",
+      "distractors": [
+        "取消",
+        "刷新"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-新建-heldout",
+      "label": "新建",
+      "goal": "起一个空白表格",
+      "distractors": [
+        "复制",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-重命名-heldout",
+      "label": "重命名",
+      "goal": "换个标题",
+      "distractors": [
+        "新建",
+        "复制"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-复制-heldout",
+      "label": "复制",
+      "goal": "留一份副本",
+      "distractors": [
+        "粘贴",
+        "重命名"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-粘贴-heldout",
+      "label": "粘贴",
+      "goal": "把复制的东西放进来",
+      "distractors": [
+        "复制",
+        "保存"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-打印-heldout",
+      "label": "打印",
+      "goal": "出一份纸质的",
+      "distractors": [
+        "导出",
+        "下载"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-刷新-heldout",
+      "label": "刷新",
+      "goal": "把当前画面更新一下",
+      "distractors": [
+        "搜索",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-登录-heldout",
+      "label": "登录",
+      "goal": "把这个账号登进去",
+      "distractors": [
+        "设置",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-上传-heldout",
+      "label": "上传",
+      "goal": "把这个文件传上去",
+      "distractors": [
+        "下载",
+        "导出"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-排序-heldout",
+      "label": "排序",
+      "goal": "把最新的排在前面",
+      "distractors": [
+        "搜索",
+        "全选"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-全选-heldout",
+      "label": "全选",
+      "goal": "每一行都打上勾",
+      "distractors": [
+        "取消",
+        "排序"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-导出-heldout",
+      "label": "导出",
+      "goal": "存成表格文件",
+      "distractors": [
+        "下载",
+        "打印"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-删除-heldout",
+      "label": "删除",
+      "goal": "把这条清掉",
+      "distractors": [
+        "取消",
+        "关闭"
+      ],
+      "lang": "zh"
+    },
+    {
+      "id": "zh-取消-heldout",
+      "label": "取消",
+      "goal": "这个先不做了",
+      "distractors": [
+        "提交",
+        "关闭"
       ],
       "lang": "zh"
     },
@@ -23,32 +223,14 @@
       "lang": "en"
     },
     {
-      "id": "zh-通知-heldout",
-      "label": "通知",
-      "goal": "查看提醒",
-      "distractors": [
-        "消息"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Notifications-heldout",
       "label": "Notifications",
       "goal": "check the alert centre",
       "distractors": [
-        "Message"
+        "Message",
+        "Settings"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-设置-heldout",
-      "label": "设置",
-      "goal": "修改配置",
-      "distractors": [
-        "登录",
-        "刷新"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Settings-heldout",
@@ -61,34 +243,14 @@
       "lang": "en"
     },
     {
-      "id": "zh-提交-heldout",
-      "label": "提交",
-      "goal": "发送表单",
-      "distractors": [
-        "保存",
-        "全选"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Submit-heldout",
       "label": "Submit",
       "goal": "confirm the submission",
       "distractors": [
         "Save",
-        "Select all"
+        "Cancel"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-保存-heldout",
-      "label": "保存",
-      "goal": "保留修改",
-      "distractors": [
-        "提交",
-        "导出"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Save-heldout",
@@ -101,94 +263,44 @@
       "lang": "en"
     },
     {
-      "id": "zh-下载-heldout",
-      "label": "下载",
-      "goal": "获取附件",
-      "distractors": [
-        "上传",
-        "打印"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Download-heldout",
       "label": "Download",
       "goal": "get the attachment locally",
       "distractors": [
         "Upload",
-        "Print"
+        "Export"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-搜索-heldout",
-      "label": "搜索",
-      "goal": "查询报表",
-      "distractors": [
-        "刷新",
-        "排序"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Search-heldout",
       "label": "Search",
       "goal": "query the records",
       "distractors": [
-        "Refresh",
-        "Sort"
+        "Sort",
+        "Refresh"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-关闭-heldout",
-      "label": "关闭",
-      "goal": "关掉对话框",
-      "distractors": [
-        "刷新",
-        "删除"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Close-heldout",
       "label": "Close",
       "goal": "shut this panel",
       "distractors": [
-        "Refresh",
-        "Delete"
+        "Cancel",
+        "Refresh"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-新建-heldout",
-      "label": "新建",
-      "goal": "开始新表格",
-      "distractors": [
-        "重命名",
-        "导出"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-New-heldout",
       "label": "New",
       "goal": "make another sheet",
       "distractors": [
-        "Rename",
-        "Export"
+        "Copy",
+        "Rename"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-重命名-heldout",
-      "label": "重命名",
-      "goal": "换个名字",
-      "distractors": [
-        "新建",
-        "复制"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Rename-heldout",
@@ -201,16 +313,6 @@
       "lang": "en"
     },
     {
-      "id": "zh-复制-heldout",
-      "label": "复制",
-      "goal": "复制一份",
-      "distractors": [
-        "粘贴",
-        "重命名"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Copy-heldout",
       "label": "Copy",
       "goal": "make a copy of it",
@@ -219,16 +321,6 @@
         "Rename"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-粘贴-heldout",
-      "label": "粘贴",
-      "goal": "把剪贴板内容放进来",
-      "distractors": [
-        "复制",
-        "保存"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Paste-heldout",
@@ -241,34 +333,14 @@
       "lang": "en"
     },
     {
-      "id": "zh-打印-heldout",
-      "label": "打印",
-      "goal": "出一份纸质",
-      "distractors": [
-        "下载",
-        "导出"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Print-heldout",
       "label": "Print",
       "goal": "send it to the printer",
       "distractors": [
-        "Download",
-        "Export"
+        "Export",
+        "Download"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-刷新-heldout",
-      "label": "刷新",
-      "goal": "更新当前视图",
-      "distractors": [
-        "搜索",
-        "关闭"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Refresh-heldout",
@@ -281,34 +353,14 @@
       "lang": "en"
     },
     {
-      "id": "zh-登录-heldout",
-      "label": "登录",
-      "goal": "登进去",
-      "distractors": [
-        "设置",
-        "提交"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Sign in-heldout",
       "label": "Sign in",
       "goal": "get into my account",
       "distractors": [
         "Settings",
-        "Submit"
+        "Close"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-上传-heldout",
-      "label": "上传",
-      "goal": "传文件上去",
-      "distractors": [
-        "下载",
-        "导出"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Upload-heldout",
@@ -321,16 +373,6 @@
       "lang": "en"
     },
     {
-      "id": "zh-排序-heldout",
-      "label": "排序",
-      "goal": "把最新的排前面",
-      "distractors": [
-        "搜索",
-        "全选"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Sort-heldout",
       "label": "Sort",
       "goal": "put the newest first",
@@ -341,82 +383,42 @@
       "lang": "en"
     },
     {
-      "id": "zh-全选-heldout",
-      "label": "全选",
-      "goal": "每一行都标记",
-      "distractors": [
-        "排序",
-        "删除"
-      ],
-      "lang": "zh"
-    },
-    {
       "id": "en-Select all-heldout",
       "label": "Select all",
       "goal": "mark everything",
       "distractors": [
-        "Sort",
-        "Delete"
+        "Cancel",
+        "Sort"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-导出-heldout",
-      "label": "导出",
-      "goal": "存成表格文件",
-      "distractors": [
-        "打印",
-        "上传"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Export-heldout",
       "label": "Export",
       "goal": "download the table as a sheet",
       "distractors": [
-        "Print",
-        "Upload"
+        "Download",
+        "Print"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-删除-heldout",
-      "label": "删除",
-      "goal": "清掉这条",
-      "distractors": [
-        "全选",
-        "关闭"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Delete-heldout",
       "label": "Delete",
       "goal": "clear that record",
       "distractors": [
-        "Select all",
+        "Cancel",
         "Close"
       ],
       "lang": "en"
-    },
-    {
-      "id": "zh-取消-heldout",
-      "label": "取消",
-      "goal": "别做了",
-      "distractors": [
-        "关闭",
-        "提交"
-      ],
-      "lang": "zh"
     },
     {
       "id": "en-Cancel-heldout",
       "label": "Cancel",
       "goal": "never mind that",
       "distractors": [
-        "Close",
-        "Submit"
+        "Submit",
+        "Close"
       ],
       "lang": "en"
     }

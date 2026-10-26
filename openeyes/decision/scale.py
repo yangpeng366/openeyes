@@ -11,19 +11,22 @@ scale it is on. The local profile is measured rather than guessed:
 `examples/systemone-calibration.py` runs the repo's labelled history and a
 held-out set of rephrased goals through a local node.
 
-The history is bilingual - the node holds one index, and a goal only
-retrieves the documents of its own language, so the Chinese and the English
-family are measured apart and get a profile each. On the held-out goals the
-Chinese family separates (precision 0.75 at the bottom, 1.00 above 0.4552)
-while the English one does not (0.45 overall, and roughly a coin flip
-below the top) - so the English profile acts only on a very strong match.
+The history holds one family at a time - the node keeps a single decisions
+index, and a mixed index lets one language's neighbours compete with the
+other's. The Chinese family is the measured one and the default; the
+English family is opt-in until its wording is fixed.
 
     family   act (>=)   review (>=)   measured on the held-out goals
-    zh       0.4552     0.2276        7 of 15 right act, 0 wrong; review 0.87
-    en       0.4268     0.4268        2 of 5 right act, 0 wrong; no review band
+    zh       0.5121     0.2845        15 of 18 right; act 0 wrong; review 0.83
+    en       0.4552     0.3414        7 of 14 right; act 0 wrong; review 0.80
 
-See `docs/jev-local-judge.md` for the run, its raw numbers and what is still
-unproven.
+Both numbers are the conservative end of what the runs showed: the node
+answers one or two goals differently from run to run, so the act floor
+takes the highest value any run put above a wrong answer, and the review
+floor the one that keeps the band at 0.80 precision.
+
+See `docs/jev-local-judge.md` for the runs, their raw numbers and what is
+still unproven.
 """
 from __future__ import annotations
 
@@ -32,25 +35,25 @@ from openeyes.decision.threshold import ThresholdConfig
 SCALE_PROBABILITY = "probability"
 SCALE_SUPPORT_SHARE = "support_share"
 
-# Measured on the held-out goals (2026-10-26, 84-document history). The
-# uncertainty band is empty on purpose: a share has no "risky middle" - the
-# gap between the winner and the runner-up would be the signal, and the
+# Measured on the held-out goals (2026-10-26, 42-document Chinese history).
+# The uncertainty band is empty on purpose: a share has no "risky middle" -
+# the gap between the winner and the runner-up would be the signal, and the
 # threshold model has no place for it yet.
 HISTORY_VOTE_THRESHOLDS_ZH = ThresholdConfig(
     confidence_floor=0.0,
-    low_stakes_threshold=0.2276,
-    high_stakes_threshold=0.4552,
+    low_stakes_threshold=0.2845,
+    high_stakes_threshold=0.5121,
     uncertain_low=0.0,
     uncertain_high=0.0,
 )
 
-# The English family is not proven yet: 11 of 21 held-out goals were answered
-# at all and the ones below the top are close to a coin flip. So it acts only
-# on a strong match and offers nothing for review.
+# The English family is weaker: 14 of 21 held-out goals were answered at
+# all and the ones below the top are close to a coin flip. It is opt-in
+# (the seeding script seeds the Chinese family by default).
 HISTORY_VOTE_THRESHOLDS_EN = ThresholdConfig(
     confidence_floor=0.0,
-    low_stakes_threshold=0.4268,
-    high_stakes_threshold=0.4268,
+    low_stakes_threshold=0.3414,
+    high_stakes_threshold=0.4552,
     uncertain_low=0.0,
     uncertain_high=0.0,
 )
@@ -74,14 +77,12 @@ def thresholds_for_scale(scale: str, cfg: ThresholdConfig | None = None, candida
 
     An explicitly supplied config always wins; otherwise the scale picks its
     own profile, and the local profile is the family the candidates belong
-    to. Without candidates the stricter of the two is used.
+    to. Without candidates the measured (Chinese) family is used.
     """
     if cfg is not None:
         return cfg
     if scale == SCALE_SUPPORT_SHARE:
-        if candidates is None:
-            return HISTORY_VOTE_THRESHOLDS_ZH
-        if family_of(candidates) == "zh":
-            return HISTORY_VOTE_THRESHOLDS_ZH
-        return HISTORY_VOTE_THRESHOLDS_EN
+        if candidates is not None and family_of(candidates) == "en":
+            return HISTORY_VOTE_THRESHOLDS_EN
+        return HISTORY_VOTE_THRESHOLDS_ZH
     return ThresholdConfig()

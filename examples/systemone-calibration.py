@@ -59,16 +59,21 @@ def _evidence(base_url: str, api_key: str, index: str, question: str) -> list[di
 
 
 def _precision_floor(correct: list[float], wrong: list[float], target: float) -> float:
-    """The lowest threshold whose precision still reaches `target`."""
-    best = 0.0
+    """The lowest threshold whose precision still reaches `target`.
+
+    The lowest one, not the highest: a triage band should surface as much as
+    it can while keeping its quality, and the band is everything below the
+    act floor.
+    """
+    meeting = []
     for threshold in sorted(set(correct) | set(wrong)):
         hits = sum(1 for value in correct if value >= threshold)
         misses = sum(1 for value in wrong if value >= threshold)
         if hits == 0:
             continue
         if hits / (hits + misses) >= target:
-            best = max(best, threshold)
-    return best
+            meeting.append(threshold)
+    return min(meeting) if meeting else 0.0
 
 
 def _strict_floor(correct: list[float], wrong: list[float]) -> float:
@@ -107,6 +112,8 @@ def main() -> int:
     parser.add_argument("--base-url", default=os.environ.get("TYPESAFE_BASE_URL", "http://127.0.0.1:9201"))
     parser.add_argument("--api-key", default=os.environ.get("TYPESAFE_API_KEY") or os.environ.get("XERJ_API_KEY") or "")
     parser.add_argument("--index", default="judgements")
+    parser.add_argument("--seed-file", help="an alternative seed file to measure")
+    parser.add_argument("--probe-file", help="an alternative probe file to measure")
     parser.add_argument("--no-evidence", action="store_true", help="skip the /_decide evidence lookup")
     args = parser.parse_args()
 
@@ -168,7 +175,9 @@ def main() -> int:
         # that surfaces the most right answers per wrong one, which is the
         # right trade for a band a human confirms anyway.
         act_floor, review_floor = _floors(correct_shares, wrong_shares)
-        precision_floor = _precision_floor(correct_shares, wrong_shares, 0.85)
+        # A review suggestion is confirmed by a human, so the target is 0.80:
+        # one in five wrong is tolerable there, not under an automatic act.
+        precision_floor = _precision_floor(correct_shares, wrong_shares, 0.80)
         margin_floor = _strict_floor(correct_margins, wrong_margins)
         score_floor = _strict_floor(correct_scores, wrong_scores)
         return {
@@ -189,8 +198,8 @@ def main() -> int:
             "win_score_floor": score_floor,
         }
 
-    seed_rows = measure(load_seed())
-    probe_rows = measure(load_probe())
+    seed_rows = measure(load_seed(Path(args.seed_file) if args.seed_file else None))
+    probe_rows = measure(load_probe(Path(args.probe_file) if args.probe_file else None))
     seed = summarise(seed_rows)
     probe = summarise(probe_rows)
 

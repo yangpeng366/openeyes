@@ -102,13 +102,21 @@ def _start_node(process: tuple[str, list[str]]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--index", default="judgements", help="target index name")
+    parser.add_argument(
+        "--file",
+        help="an alternative seed file (the wide set, for instance, which measures worse)",
+    )
     parser.add_argument("--data-dir", default=r"E:\AI-Portable\xerj-data")
     parser.add_argument("--dry-run", action="store_true", help="print the command, ingest nothing")
     parser.add_argument(
         "--lang",
-        choices=("zh", "en"),
-        help="seed one language only (the node holds one decisions index; a mixed "
-             "index lets one language's neighbours compete with the other's)",
+        choices=("zh", "en", "all"),
+        default="zh",
+        help="which family to seed. The Chinese family is the default because it is the "
+             "measured one (0.94 accuracy against 0.45 for the English family, and a mixed "
+             "index pulls the Chinese family down to 0.89); the node holds one decisions "
+             "index, so a mixed index lets one language's neighbours compete with the "
+             "other's",
     )
     parser.add_argument(
         "--keep-node-running",
@@ -122,8 +130,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    examples = load_seed()
-    if args.lang:
+    examples = load_seed(Path(args.file) if args.file else None)
+    if args.lang and args.lang != "all":
         examples = [example for example in examples if example.lang == args.lang]
     records = to_records(examples)
     ndjson = "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)

@@ -77,19 +77,19 @@ def test_a_middle_share_is_flagged_for_review():
     assert "flag_for_review" in action.reason
 
 
-def test_a_small_share_falls_back():
+def test_a_tiny_share_falls_back():
     action = decide(elements=[_element("消息")], goal="点击消息按钮",
-                    ctx=DecisionContext(enabled=True, scorer=_ShareScorer(0.10)))
+                    ctx=DecisionContext(enabled=True, scorer=_ShareScorer(0.05)))
     assert action is not None
     assert action.kind == ActionKind.BLOCKED
     assert "fallback" in action.reason
 
 
-def test_the_english_family_has_no_review_band():
-    """The English half of the history is not proven: below the top it is
-    close to a coin flip, so it says nothing rather than guessing."""
+def test_the_english_family_is_narrower_than_the_chinese_one():
+    """The English half is not proven: its review band starts higher and its
+    act floor leaves one answer in five, so below that it says nothing."""
     action = decide(elements=[_element("Save"), _element("Search")], goal="save the file",
-                    ctx=DecisionContext(enabled=True, scorer=_ShareScorer(0.341417)))
+                    ctx=DecisionContext(enabled=True, scorer=_ShareScorer(0.20)))
     assert action is not None
     assert action.kind == ActionKind.BLOCKED
     assert "fallback" in action.reason
