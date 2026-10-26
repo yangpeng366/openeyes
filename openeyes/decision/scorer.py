@@ -1,18 +1,14 @@
 """Scorer interface + FakeJevScorer (no API key, deterministic).
 
-The real `JevScorer` calls `https://api.typesafe.ai/v1/systemone` and is
-intentionally **not implemented in this layer**. ACH
-(`com.agentcloud.scorer.JevAsker`) owns the canonical implementation;
-OpenEyes consumers that want a real scorer should either:
+The real `JevScorer` calls `https://api.typesafe.ai/v1/systemone` (override
+the host with `TYPESAFE_BASE_URL`; a local XERJ node speaks the same wire on
+its native REST port, e.g. `http://127.0.0.1:9201/v1`, and needs no hosted
+key). ACH (`com.agentcloud.scorer.JevAsker`) owns the canonical hosted
+implementation; this module keeps the wire contract locally so the decision
+layer can also run against a keyless local node.
 
-  (a) reuse ACH via subprocess / HTTP gateway, or
-  (b) call the TypeSafe endpoint directly with the protocol documented at
-      https://docs.typesafe.ai/llms.txt (see `JEV_OFFICIAL_SKILL_ABSORPTION.md`).
-
-This module exposes the protocol surface only: a `JevScorer` ABC + a
-deterministic `FakeJevScorer` for unit tests. Wire-up of a real client
-is left to the consumer (mirrors ACH's choice to keep the real client out
-of `fast-jev-compaction`).
+The protocol surface is a `JevScorer` ABC + a deterministic
+`FakeJevScorer` for unit tests, plus `TypesafeJevScorer` for the real wire.
 
 Why FakeJevScorer matters:
 - Per `Jev-OpenEyes-experience.md` §3, the fake Jev contract test
@@ -27,12 +23,13 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
-def validate_probabilities(probabilities, choice, candidate_ids):
+def validate_probabilities(probabilities, choice, candidate_ids, *, require_distribution=True):
     """Enforce the Jev response contract (mirrors jev-ultrafast `validate_choice`).
 
     Rules:
@@ -41,6 +38,11 @@ def validate_probabilities(probabilities, choice, candidate_ids):
     3. Every value must be finite and in [0, 1].
     4. Sum of probabilities must be approximately 1 (tolerance 0.02).
     5. The chosen key must equal the top-1 probability (tolerance 1e-6).
+
+    `require_distribution=False` drops rule 4 only. The hosted Jev API
+    returns a distribution, but a local XERJ history vote returns per-option
+    *support* scores (the winner's share of the labelled neighbours, losers
+    at 0.0), which sum to well under 1. Rules 1, 2, 3 and 5 still hold there.
 
     Raises `ValueError` on any violation. Returns None on success.
 
@@ -60,11 +62,34 @@ def validate_probabilities(probabilities, choice, candidate_ids):
             raise ValueError(f"probabilities[{k!r}] = {v!r} not finite in [0,1]")
         nums.append(float(v))
     s = sum(nums)
-    if abs(s - 1.0) >= 0.02:
+    if require_distribution and abs(s - 1.0) >= 0.02:
         raise ValueError(f"sum(probabilities) = {s:.4f}, must be within 0.02 of 1.0")
     top = max(nums)
     if float(probabilities[choice]) < top - 1e-6:
         raise ValueError(f"choice {choice!r} ({probabilities[choice]}) is not top-1 (max={top})")
+
+def _error_reason(exc: urllib.error.HTTPError) -> str:
+    """Best-effort human reason out of an error response body.
+
+    A local XERJ node answers 422/503 with `{"error": {"type", "reason"}}`;
+    the hosted API answers with its own shape. Both are reduced to one line
+    so the caller sees what actually went wrong.
+    """
+    try:
+        raw = exc.read().decode("utf-8", "replace").strip()
+    except Exception:
+        return str(exc.reason or "")
+    if not raw:
+        return str(exc.reason or "")
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw[:400]
+    error = parsed.get("error") if isinstance(parsed, dict) else None
+    if isinstance(error, dict):
+        return str(error.get("reason") or error.get("type") or raw[:400])
+    return raw[:400]
+
 
 class JevAskError(RuntimeError):
     """Real scorer transport / parse failures. Caller falls back."""
@@ -208,20 +233,43 @@ class FakeJevScorer(JevScorer):
         return self._build(0, 0.55, prob_floor, candidates)
 
 
+def _criteria_for(candidates: list[str]) -> tuple[dict[str, str], dict[str, int]]:
+    """Build the System One ``criteria`` map plus a label -> candidate index map.
+
+    The System One protocol names each option by the KEY of ``criteria`` —
+    upstream examples read ``{"spam": "prize claims...", "ham": "..."}`` — so
+    the candidate names are the keys. A local XERJ node votes over a labelled
+    history whose labels are candidate names, and that only lines up when the
+    keys are the names; index keys stay the fallback for empty or duplicated
+    candidate names.
+    """
+    names = [candidate or "" for candidate in candidates]
+    if all(names) and len(set(names)) == len(names):
+        labels = list(names)
+    else:
+        labels = [str(index) for index in range(len(candidates))]
+    criteria = {label: names[index] or label for index, label in enumerate(labels)}
+    return criteria, {label: index for index, label in enumerate(labels)}
+
+
 class TypesafeJevScorer(JevScorer):
-    """Real Jev scorer backed by the TypeSafe ``choice`` protocol."""
+    """Real Jev scorer backed by the TypeSafe ``choice`` protocol.
+
+    The same wire is served by a local XERJ node on its native REST port
+    (`http://127.0.0.1:9201/v1/systemone`); such a node may run keyless
+    (`--insecure`) or with its own admin key, so an empty key is allowed
+    and simply omits the Authorization header.
+    """
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str = "",
         *,
         base_url: str | None = None,
         model: str = "jev-latest",
         timeout: float = 25.0,
     ) -> None:
-        if not api_key:
-            raise ValueError("TYPESAFE_API_KEY is required")
-        self.api_key = api_key
+        self.api_key = (api_key or "").strip()
         self.base_url = (
             base_url
             or os.environ.get("TYPESAFE_BASE_URL")
@@ -238,10 +286,7 @@ class TypesafeJevScorer(JevScorer):
         return f"{self.base_url}/v1/systemone"
 
     def _request(self, goal: str, candidates: list[str], *, app_name: str) -> dict:
-        criteria = {
-            str(index): candidate or f"candidate {index}"
-            for index, candidate in enumerate(candidates)
-        }
+        criteria, label_to_index = _criteria_for(candidates)
         payload = {
             "model": self.model,
             "state": {"app_name": app_name, "goal": goal},
@@ -256,30 +301,40 @@ class TypesafeJevScorer(JevScorer):
                 }
             },
         }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(
             self._url(),
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         started = time.perf_counter()
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            raise JevAskError(
+                f"Jev request failed with HTTP {exc.code}: {_error_reason(exc)}"
+            ) from exc
         except Exception as exc:
             raise JevAskError(f"TypeSafe Jev request failed: {exc}") from exc
         latency_ms = max(0, round((time.perf_counter() - started) * 1000))
         try:
-            return {"body": json.loads(body), "latency_ms": latency_ms}
+            return {
+                "body": json.loads(body),
+                "latency_ms": latency_ms,
+                "label_to_index": label_to_index,
+            }
         except json.JSONDecodeError as exc:
             raise JevAskError("TypeSafe Jev returned malformed JSON") from exc
 
     def ask(self, goal: str, candidates: list[str], *, app_name: str = "") -> JevScore:
         result = self._request(goal, candidates, app_name=app_name)
-        answer = result["body"].get("answers", {}).get("target")
+        label_to_index = result["label_to_index"]
+        body = result["body"]
+        answer = body.get("answers", {}).get("target")
         if not isinstance(answer, dict):
             raise JevAskError("TypeSafe Jev response is missing answers.target")
         choice = answer.get("choice")
@@ -287,20 +342,39 @@ class TypesafeJevScorer(JevScorer):
         probabilities = answer.get("probabilities")
         if not isinstance(choice, str) or not isinstance(probabilities, dict):
             raise JevAskError("TypeSafe Jev choice answer is malformed")
+        # A local XERJ history vote answers with per-option support scores
+        # (the winner's share of the labelled neighbours, losers at 0.0)
+        # instead of a probability distribution, and echoes its own model
+        # name instead of a Jev model name.
+        support_scores = (
+            body.get("model") == "xerj-history-vote-1" or "decisions" in body
+        )
         try:
             confidence_value = float(confidence)
+            if support_scores:
+                probabilities = {
+                    label: float(probabilities.get(label, 0.0))
+                    for label in label_to_index
+                }
             validate_probabilities(
                 probabilities,
                 choice,
-                [str(index) for index in range(len(candidates))],
+                list(label_to_index),
+                require_distribution=not support_scores,
             )
+            target_index = label_to_index.get(choice)
+            if target_index is None:
+                raise JevAskError(f"TypeSafe Jev choice {choice!r} is not a known candidate")
+            by_index = {
+                str(index): probabilities[label] for label, index in label_to_index.items()
+            }
             return JevScore(
-                target_index=int(choice),
+                target_index=target_index,
                 confidence=confidence_value,
                 prob=float(probabilities[choice]),
                 latency_ms=result["latency_ms"],
                 raw=answer,
-                probabilities=probabilities,
+                probabilities=by_index,
             )
         except (TypeError, ValueError, KeyError) as exc:
             raise JevAskError(f"TypeSafe Jev choice answer is invalid: {exc}") from exc

@@ -354,3 +354,219 @@ def test_jevscore_rejects_non_dict_probabilities():
     with pytest.raises(TypeError):
         JevScore(target_index=0, confidence=0.5, prob=0.5, latency_ms=0,
                  probabilities="not a dict")
+
+
+# ---------- System One criteria (label keys) ----------
+
+def test_criteria_uses_candidate_names_as_keys():
+    """The System One protocol names options by the criteria KEY."""
+    from openeyes.decision.scorer import _criteria_for
+    criteria, mapping = _criteria_for(["消息", "文件"])
+    assert list(criteria) == ["消息", "文件"]
+    assert criteria == {"消息": "消息", "文件": "文件"}
+    assert mapping == {"消息": 0, "文件": 1}
+
+
+def test_criteria_falls_back_to_index_keys():
+    """Empty or duplicated candidate names fall back to index keys."""
+    from openeyes.decision.scorer import _criteria_for
+    criteria, mapping = _criteria_for(["", "文件"])
+    assert list(criteria) == ["0", "1"]
+    criteria, mapping = _criteria_for(["同", "同"])
+    assert list(criteria) == ["0", "1"]
+    assert mapping == {"0": 0, "1": 1}
+
+
+def test_typesafe_scorer_maps_name_keyed_answer_back_to_index(monkeypatch):
+    """A name-keyed answer maps back to the candidate index."""
+    import json
+    from openeyes.decision import scorer as scorer_mod
+
+    payload = {
+        "answers": {
+            "target": {
+                "type": "choice",
+                "choice": "文件",
+                "confidence": 0.8,
+                "probabilities": {"消息": 0.2, "文件": 0.8},
+            }
+        }
+    }
+    captured = {}
+
+    class _Response:
+        def read(self):
+            return json.dumps(payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _Response()
+
+    monkeypatch.setattr(scorer_mod.urllib.request, "urlopen", fake_urlopen)
+    scorer = scorer_mod.TypesafeJevScorer("local-key", base_url="http://127.0.0.1:9201/v1")
+    score = scorer.ask(goal="open the file menu", candidates=["消息", "文件"], app_name="openeyes")
+
+    assert captured["url"] == "http://127.0.0.1:9201/v1/systemone"
+    assert captured["body"]["questions"]["target"]["criteria"] == {"消息": "消息", "文件": "文件"}
+    assert score.target_index == 1
+    assert score.prob == 0.8
+    assert score.probabilities == frozenset({("0", 0.2), ("1", 0.8)})
+# ---------- local XERJ node (keyless loopback endpoint) ----------
+
+def _response(payload):
+    import json
+
+    class _Response:
+        def read(self):
+            return json.dumps(payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    return _Response()
+
+
+def _capture(monkeypatch, scorer_mod, payload):
+    import json
+
+    captured = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["url"] = request.full_url
+        captured["headers"] = dict(request.header_items())
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _response(payload)
+
+    monkeypatch.setattr(scorer_mod.urllib.request, "urlopen", fake_urlopen)
+    return captured
+
+
+def test_typesafe_scorer_omits_authorization_header_without_key(monkeypatch):
+    """A keyless local node gets no Authorization header at all."""
+    from openeyes.decision import scorer as scorer_mod
+
+    captured = _capture(monkeypatch, scorer_mod, {
+        "answers": {
+            "target": {
+                "type": "choice",
+                "choice": "\u6587\u4ef6",
+                "confidence": 0.6,
+                "probabilities": {"\u6d88\u606f": 0.4, "\u6587\u4ef6": 0.6},
+            }
+        }
+    })
+    scorer = scorer_mod.TypesafeJevScorer("")
+    score = scorer.ask(goal="open the file menu", candidates=["\u6d88\u606f", "\u6587\u4ef6"],
+                       app_name="openeyes")
+
+    assert "Authorization" not in captured["headers"]
+    assert score.target_index == 1
+    assert score.prob == 0.6
+
+
+def test_typesafe_scorer_sends_bearer_scheme_with_key(monkeypatch):
+    """The hosted bearer scheme is also what a local XERJ node accepts."""
+    from openeyes.decision import scorer as scorer_mod
+
+    captured = _capture(monkeypatch, scorer_mod, {
+        "answers": {
+            "target": {
+                "type": "choice",
+                "choice": "\u6587\u4ef6",
+                "confidence": 0.6,
+                "probabilities": {"\u6d88\u606f": 0.4, "\u6587\u4ef6": 0.6},
+            }
+        }
+    })
+    scorer = scorer_mod.TypesafeJevScorer("local-key", base_url="http://127.0.0.1:9201/v1")
+    scorer.ask(goal="open the file menu", candidates=["\u6d88\u606f", "\u6587\u4ef6"],
+               app_name="openeyes")
+
+    assert captured["headers"]["Authorization"] == "Bearer local-key"
+    assert captured["url"] == "http://127.0.0.1:9201/v1/systemone"
+
+
+def test_typesafe_scorer_accepts_support_scores_without_distribution(monkeypatch):
+    """A local history vote returns support scores, not a distribution."""
+    from openeyes.decision import scorer as scorer_mod
+
+    _capture(monkeypatch, scorer_mod, {
+        "model": "xerj-history-vote-1",
+        "answers": {
+            "target": {
+                "type": "choice",
+                "choice": "\u6d88\u606f",
+                "confidence": 0.512126,
+                "probabilities": {"\u6d88\u606f": 0.512126, "\u6587\u4ef6": 0.0},
+            }
+        },
+        "decisions": {"index": "judgements", "k": 10},
+    })
+    scorer = scorer_mod.TypesafeJevScorer("local-key", base_url="http://127.0.0.1:9201/v1")
+    score = scorer.ask(goal="click the message button", candidates=["\u6d88\u606f", "\u6587\u4ef6"],
+                       app_name="openeyes")
+
+    assert score.target_index == 0
+    assert score.prob == 0.512126
+    assert score.probabilities == frozenset({("0", 0.512126), ("1", 0.0)})
+
+
+def test_typesafe_scorer_fills_missing_support_labels_with_zero(monkeypatch):
+    """A candidate the vote never scored is support 0, not a contract break."""
+    from openeyes.decision import scorer as scorer_mod
+
+    _capture(monkeypatch, scorer_mod, {
+        "model": "xerj-history-vote-1",
+        "answers": {
+            "target": {
+                "type": "choice",
+                "choice": "\u6d88\u606f",
+                "confidence": 0.5,
+                "probabilities": {"\u6d88\u606f": 0.5},
+            }
+        },
+        "decisions": {"index": "judgements", "k": 10},
+    })
+    scorer = scorer_mod.TypesafeJevScorer("local-key", base_url="http://127.0.0.1:9201/v1")
+    score = scorer.ask(goal="click the message button", candidates=["\u6d88\u606f", "\u6587\u4ef6"],
+                       app_name="openeyes")
+
+    assert score.probabilities == frozenset({("0", 0.5), ("1", 0.0)})
+
+
+def test_typesafe_scorer_surfaces_http_error_status_and_reason(monkeypatch):
+    """A 422 from the node says what went wrong, not just 'request failed'."""
+    import io
+    import json
+    import urllib.error
+
+    from openeyes.decision import scorer as scorer_mod
+
+    payload = json.dumps({
+        "error": {"type": "no_support", "reason": "no labelled neighbour in `judgements`"}
+    }).encode("utf-8")
+
+    def fake_urlopen(request, timeout=None):
+        raise urllib.error.HTTPError(
+            request.full_url, 422, "Unprocessable Entity", {}, io.BytesIO(payload)
+        )
+
+    monkeypatch.setattr(scorer_mod.urllib.request, "urlopen", fake_urlopen)
+    scorer = scorer_mod.TypesafeJevScorer("local-key", base_url="http://127.0.0.1:9201/v1")
+
+    with pytest.raises(scorer_mod.JevAskError) as excinfo:
+        scorer.ask(goal="buy a ticket to mars", candidates=["\u8d2d\u4e70", "\u9000\u8d27"],
+                   app_name="openeyes")
+
+    assert "422" in str(excinfo.value)
+    assert "no labelled neighbour" in str(excinfo.value)

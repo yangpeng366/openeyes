@@ -19,6 +19,7 @@ import os
 import time
 import uuid
 from typing import List, Dict, Any, Optional
+from urllib.parse import urlsplit
 
 from .event import UIAEvent, InputEvent, Trajectory
 from .prompt_template import render_system, render_user
@@ -100,9 +101,10 @@ def generate_trajectory_from_prompt(
         - "auto": real LLM if LLM_API_KEY is set, else mock.
         - "real": force real LLM (raise LLMUnavailable if no key).
         - "mock": always deterministic template generator.
-        - "jev": select an inventory element with JEV. Uses real TypeSafe
-          only when TYPESAFE_API_KEY is configured; otherwise uses the
-          deterministic fake scorer.
+        - "jev": select an inventory element with JEV. Uses the real
+          System One wire when TYPESAFE_API_KEY is configured, or when
+          TYPESAFE_BASE_URL points at a loopback node (a local XERJ node
+          may answer keyless); otherwise uses the deterministic fake scorer.
     """
     inv = element_inventory or []
     if backend == "real":
@@ -125,10 +127,25 @@ def generate_trajectory_from_prompt(
         return _generate_mock(description, app_name, inv, few_shot_examples)
 
 
+def _is_local_base_url(base_url: str) -> bool:
+    """True for a loopback System One endpoint (a local XERJ node)."""
+    if not base_url:
+        return False
+    host = urlsplit(base_url).hostname or ""
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def _create_jev_scorer() -> JevScorer:
+    """Pick the scorer that can actually answer.
+
+    A hosted Jev endpoint needs `TYPESAFE_API_KEY`; a local XERJ node speaks
+    the same wire and may run keyless, so a loopback `TYPESAFE_BASE_URL` is
+    enough to opt into the real scorer.
+    """
     api_key = (os.environ.get("TYPESAFE_API_KEY") or "").strip()
-    if api_key:
-        return TypesafeJevScorer(api_key)
+    base_url = (os.environ.get("TYPESAFE_BASE_URL") or "").strip()
+    if api_key or _is_local_base_url(base_url):
+        return TypesafeJevScorer(api_key, base_url=base_url or None)
     return FakeJevScorer()
 
 

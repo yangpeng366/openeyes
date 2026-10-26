@@ -367,6 +367,7 @@ class TestJevGenerator:
 
     def test_fake_jev_is_default_without_typesafe_key(self, monkeypatch):
         monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+        monkeypatch.delenv("TYPESAFE_BASE_URL", raising=False)
         trajectory = generate_trajectory_from_prompt(
             "Search box",
             app_name="Edge",
@@ -380,6 +381,26 @@ class TestJevGenerator:
         assert step.meta["decision_band"] == "act"
         assert step.meta["thresholds"]["low_stakes"] == 0.60
         assert step.meta["thresholds"]["high_stakes"] == 0.85
+
+    def test_real_jev_is_selected_for_a_local_node_without_key(self, monkeypatch):
+        monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+        monkeypatch.setenv("TYPESAFE_BASE_URL", "http://127.0.0.1:9201")
+        calls = []
+
+        def _ask(self, goal, candidates, *, app_name=""):
+            calls.append((goal, candidates, app_name))
+            return JevScore(target_index=1, confidence=0.95,
+                            prob=0.92, latency_ms=7)
+
+        monkeypatch.setattr(TypesafeJevScorer, "ask", _ask)
+        trajectory = generate_trajectory_from_prompt(
+            "Cancel the dialog",
+            app_name="Edge",
+            element_inventory=self._inventory(),
+            backend="jev",
+        )
+        assert calls
+        assert trajectory.steps[0].meta["decision_backend"] == "TypesafeJevScorer"
 
     def test_real_jev_is_selected_only_with_typesafe_key(self, monkeypatch):
         monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
