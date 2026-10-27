@@ -1,6 +1,6 @@
 # OpenEyes MCP capability contract
 
-This contract describes the 15 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
+This contract describes the 16 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools plus the `app_ensure` lifecycle tool). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
 
 ## Safety classes
 
@@ -27,6 +27,7 @@ This contract describes the 15 tools exposed by `openeyes.mcp.server` (v0.1.x sh
 | `browser_shot` | Browser | write | `dry_run=true` default; `false` writes | Captures a viewport PNG to the requested path. |
 | `resolve_elements` | Any | read | none | Walks the `uia -> cdp -> vision` chain and returns the first non-empty element set, the tier that answered, and the per-tier trail (ok / count / reason). Never actuates. |
 | `vision_detect` | Vision | read | none | Parses screen-parsing detections (OmniParser v2 compatible) into `Element[]`. Reads a file path or inline JSON; no model runs on the host. |
+| `app_ensure` | Native | write | `dry_run=true` default; `false` revives | Reports the app state (`running` / `window-gone` / `not-running`), restores a hidden window without stealing focus, or launches it (exe / Store AUMID) and waits until it is **observed** usable. `ok` is true only when usability was observed. |
 
 ## Dry-run contract
 
@@ -90,7 +91,7 @@ Add
 ## Acceptance sequence
 
 1. Send MCP `initialize`, then the initialized notification.
-2. Call `tools/list` and require exactly the 15 names in the matrix above.
+2. Call `tools/list` and require exactly the 16 names in the matrix above.
 3. Call `browser_click` with a selector and no `go` field; require `clicked: false`, `would_click: true`, and a resolved target. When the browser has multiple page targets, include `url_contains` for the disposable page so resolution is deterministic rather than relying on the first tab.
 4. Verify no application state changed during step 3.
 
@@ -116,20 +117,28 @@ CLI / Python surfaces remain available.
 
 Why this is additive rather than a breaking change: no tool was renamed or
 removed, no required argument changed, and no default execution mode changed.
-The two new tools are classified **read** — they observe the accessibility
-tree, the DOM, or a local detection file, and never actuate. Existing clients
-that enumerate a fixed tool list keep working; a client that asserts an exact
-count must move from 13 to 15.
+`resolve_elements` and `vision_detect` are classified **read** — they
+observe the accessibility tree, the DOM, or a local detection file, and
+never actuate. `app_ensure` is classified **write**: it can restore a window
+and start a process, so it defaults to `dry_run=true` and executes only when
+that is explicitly disabled. Existing clients that enumerate a fixed tool
+list keep working; a client that asserts an exact count must move from 13 to
+16.
 
 `resolve_elements` and `vision_detect` never actuate. `resolve_elements`
 defaults to `port=9222` for the cdp tier; pass `port=0` to skip it.
 
-## Python surface additions (additive, no MCP change)
+`app_ensure` follows the same rule as the rest of this repository: a
+delivered launch is not an effective launch. `ok` is true only when the app
+was **observed** to be usable, never merely because a launch command was
+issued. In `dry_run` it reports the planned action (`restore` / `launch`)
+and performs nothing.
 
-The MCP tool matrix above is unchanged — 15 tools, same names, same
-required arguments, same dry-run defaults. The following are **Python-only**
-additions that make an existing action trustworthy; they do not appear in the
-MCP surface and do not alter it.
+## Python surface additions (additive)
+
+`app_ensure` is the one addition to the MCP matrix in this round; the
+entries below are **Python-only** additions that make an existing action
+trustworthy. They do not appear in the MCP surface and do not alter it.
 
 | Surface | Entry | Notes |
 | --- | --- | --- |
@@ -139,6 +148,10 @@ MCP surface and do not alter it.
 | Python | `openeyes.find_elements(elements, automation_id=...)` | Filters on the stable control id — the visible name of a live control (a countdown, a spinner) is not a stable selector. |
 | Python | `openeyes.ensure_dpi_awareness()` / `openeyes.current_dpi_awareness()` | Per-monitor-v2 awareness, applied once and never downgraded from what the host process already set. Every reported coordinate is then a real screen pixel. |
 | Python | `openeyes.move_to(x, y, settle_ms=60, steps=2)` / `openeyes.cursor_pos()` | Moves the cursor in steps and settles before the press; a single `SetCursorPos` followed by a click can be delivered at the *previous* cursor position. |
+| Python | `openeyes.app_state(title_contains=, class_name=, process_name=)` | Tells `running` / `window-gone` / `not-running` apart, with the evidence behind the verdict. A session timeout closes the window; the process may still be alive, and the two cases need different remedies. |
+| Python | `openeyes.ensure_app(..., ready=None, timeout=30.0, dry_run=True)` | State check → non-activating restore → relaunch → wait until the app is **observed** usable. `ready=` can demand more than "a window exists". |
+| Python | `openeyes.restore_window(hwnd)` | Restores a minimised/hidden window with `SW_SHOWNOACTIVATE`, so the accessibility tree comes back without taking the foreground. |
+| Python | `openeyes.launch_app(exe=, aumid=)` | Starts an app; Store (MSIX) apps go through `shell:AppsFolder\<AUMID>`. `launched` means the start was issued, not that the app is usable. |
 
 Why this matters for a host that drives a long-lived loop: a click that was
 delivered is not a click that took effect. AnyVPN's keepalive button carries

@@ -95,3 +95,17 @@ def test_live_container_serves_cdp_and_a_page():
             conn.close()
     finally:
         lpmod.stop_lightpanda(container)
+def test_a_wsl_timeout_is_reported_as_a_lightpanda_error(monkeypatch):
+    """A cold WSL boot must not leak a raw subprocess timeout.
+
+    The contract says a backend that cannot start a container must say so;
+    a bare TimeoutExpired says nothing about which layer failed.
+    """
+    def boom(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="wsl", timeout=60)
+
+    monkeypatch.setattr(lpmod.subprocess, "run", boom)
+    with pytest.raises(lpmod.LightpandaError) as excinfo:
+        lpmod.launch_lightpanda(port=_free_port(), wait_s=5.0)
+    message = str(excinfo.value).lower()
+    assert "wsl" in message or "docker" in message

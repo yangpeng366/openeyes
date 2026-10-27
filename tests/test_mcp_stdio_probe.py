@@ -20,7 +20,7 @@ def test_mcp_stdio_probe_passes():
     assert result.returncode == 0, result.stderr or result.stdout
     payload = json.loads(result.stdout)
     assert payload["ready"] is True
-    assert payload["tool_count"] == 15
+    assert payload["tool_count"] == 16
 
     type_call = payload["tool_calls"]["browser_type"]
     assert type_call == {

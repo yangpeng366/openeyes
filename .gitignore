@@ -33,6 +33,7 @@ coverage.xml
 
 # Project artefacts
 /.codex/
+/.backup/
 /-w
 *.log
 logs/

@@ -76,26 +76,74 @@ def _wsl_docker_pull(image: str) -> None:
     )
 
 
+def _require_wsl_docker() -> None:
+    """Fail fast, and with a named cause, when the docker daemon is not up.
+
+    A cold WSL boot costs tens of seconds, and a `docker run` against a
+    dead daemon would burn that time twice (once for the cleanup, once for
+    the run) before reporting anything. Probing first turns a slow,
+    opaque failure into one fast, named one.
+    """
+    try:
+        probe = subprocess.run(
+            ["wsl", "-e", "bash", "-lc", "docker version >/dev/null 2>&1"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise LightpandaError(
+            "the docker daemon inside WSL did not answer within 30s: "
+            "wsl -e bash -lc 'docker version'"
+        ) from exc
+    except OSError as exc:
+        raise LightpandaError(
+            f"could not reach WSL: {exc}"
+        ) from exc
+    if probe.returncode != 0:
+        raise LightpandaError(
+            "the docker daemon inside WSL is not reachable: "
+            "wsl -e bash -lc 'sudo systemctl start docker'"
+        )
+
+
 def _wsl_docker_run(container: str, image: str, port: int) -> str:
     """Start (or restart) the Lightpanda container; return the docker run stdout."""
-    # Stop a previous container with the same name first so we always bind fresh.
-    subprocess.run(
-        ["wsl", "-e", "bash", "-lc", f"docker rm -f {container} 2>/dev/null; true"],
-        capture_output=True, text=True, timeout=20,
-    )
-    proc = subprocess.run(
-        [
-            "wsl", "-e", "bash", "-lc",
-            f"docker run -d --name {container} --rm -p 127.0.0.1:{port}:{port} {image}",
-        ],
-        capture_output=True, text=True, timeout=60,
-    )
+    _require_wsl_docker()
+    # Stop a previous container with the same name first so we always bind
+    # fresh. This cleanup is best-effort: a cold WSL boot can outlast the
+    # timeout, and a stale container is caught by the `docker run` below,
+    # which reports the real cause.
+    with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+        subprocess.run(
+            ["wsl", "-e", "bash", "-lc",
+             f"docker rm -f {container} 2>/dev/null; true"],
+            capture_output=True, text=True, timeout=20,
+        )
+    try:
+        proc = subprocess.run(
+            [
+                "wsl", "-e", "bash", "-lc",
+                f"docker run -d --name {container} --rm "
+                f"-p 127.0.0.1:{port}:{port} {image}",
+            ],
+            capture_output=True, text=True, timeout=60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise LightpandaError(
+            "docker run timed out inside WSL after "
+            f"{exc.timeout}s (the WSL distro or the docker daemon may be "
+            "cold or unreachable): wsl -e bash -lc 'docker version'"
+        ) from exc
+    except OSError as exc:
+        raise LightpandaError(
+            f"could not run docker through WSL: {exc}"
+        ) from exc
     if proc.returncode != 0:
         raise LightpandaError(
-            "docker run failed (rc=" + str(proc.returncode) + "): "
-            + (proc.stderr.strip() or proc.stdout.strip())
+            "docker run failed (rc=" + str(proc.returncode) + "): " +
+            (proc.stderr.strip() or proc.stdout.strip())
         )
     return proc.stdout.strip()
+
 
 
 def _wait_for_cdp(port: int, timeout_s: float) -> dict[str, Any]:

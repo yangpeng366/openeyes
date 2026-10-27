@@ -579,6 +579,47 @@ def resolve(window: int, port: int, url_contains: str | None,
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+# ----- app lifecycle -------------------------------------------------------
+
+@cli.group()
+def app() -> None:
+    """Inspect and revive an app (window gone / process gone)."""
+
+
+@app.command("state")
+@click.option("--title-contains")
+@click.option("--class-name")
+@click.option("--process-name")
+def app_state_cmd(title_contains: str | None, class_name: str | None,
+                 process_name: str | None) -> None:
+    """Report whether the app is running, window-gone, or not running."""
+    from openeyes.core.lifecycle import app_state
+    state = app_state(title_contains=title_contains, class_name=class_name,
+                     process_name=process_name)
+    click.echo(json.dumps(state.to_dict(), ensure_ascii=False, indent=2))
+
+
+@app.command("ensure")
+@click.option("--title-contains")
+@click.option("--class-name")
+@click.option("--process-name")
+@click.option("--exe", default=None, help="executable to start")
+@click.option("--aumid", default=None,
+              help="Store app id, e.g. Family!App")
+@click.option("--timeout", type=float, default=30.0, show_default=True)
+@click.option("--dry-run/--go", default=True,
+              help="default only reports what would be done")
+def app_ensure_cmd(title_contains: str | None, class_name: str | None,
+                  process_name: str | None, exe: str | None, aumid: str | None,
+                  timeout: float, dry_run: bool) -> None:
+    """Make sure the app is alive and usable, then prove it."""
+    from openeyes.core.lifecycle import ensure_app
+    result = ensure_app(title_contains=title_contains, class_name=class_name,
+                       process_name=process_name, exe=exe, aumid=aumid,
+                       timeout=timeout, dry_run=dry_run)
+    click.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+
+
 def main() -> int:
     """Console entrypoint."""
     try:

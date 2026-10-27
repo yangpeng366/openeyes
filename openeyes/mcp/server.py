@@ -24,6 +24,9 @@ Tools (15 = 7 native + 6 browser + 2 structured-first):
                                 -> {used_backend, attempts: [...], elements: [...]}
     vision_detect(detections_path?|--detections, origin_x?, origin_y?, score?)
                                 -> [{backend, control_type, name, bbox, center, ...}, ...]
+    app_ensure(title_contains?, class_name?, process_name?, exe?, aumid?,
+              timeout?, dry_run?)
+                                -> {ok, state, action, hwnd, pid, ...}
 
 Run:
     eyes-mcp
@@ -331,6 +334,31 @@ async def list_tools() -> list[Tool]:
                     "origin_y": {"type": "integer", "default": 0},
                     "score": {"type": "number", "default": 0.9},
                     "max_results": {"type": "integer", "default": 200},
+                },
+            },
+        ),
+        Tool(
+            name="app_ensure",
+            description="Ensure an app is alive and usable, then prove it. "
+                        "Reports whether the app is running, window-gone or not "
+                        "running; restores a hidden window without stealing focus, "
+                        "or launches it (exe / Store AUMID) and waits until it is "
+                        "actually usable. ok is true only when usability was "
+                        "observed, not merely when a launch was issued.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title_contains": {"type": "string",
+                                        "description": "substring of the window title"},
+                    "class_name": {"type": "string"},
+                    "process_name": {"type": "string",
+                                       "description": "process name, with or without .exe"},
+                    "exe": {"type": "string",
+                            "description": "executable to start when the app is gone"},
+                    "aumid": {"type": "string",
+                            "description": "Store app id, e.g. Family!App"},
+                    "timeout": {"type": "number", "default": 30.0},
+                    "dry_run": {"type": "boolean", "default": True},
                 },
             },
         ),
@@ -750,6 +778,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             )
             payload = result.to_dict()
             payload["elements"] = payload["elements"][: arguments.get("max_results", 200)]
+            return [TextContent(type="text", text=_to_json(payload))]
+
+        if name == "app_ensure":
+            from openeyes.core.lifecycle import ensure_app
+            result = ensure_app(
+                title_contains=arguments.get("title_contains"),
+                class_name=arguments.get("class_name"),
+                process_name=arguments.get("process_name"),
+                exe=arguments.get("exe"),
+                aumid=arguments.get("aumid"),
+                timeout=float(arguments.get("timeout", 30.0)),
+                dry_run=bool(arguments.get("dry_run", True)),
+            )
+            payload = result.to_dict()
+            payload["dry_run"] = bool(arguments.get("dry_run", True))
             return [TextContent(type="text", text=_to_json(payload))]
 
         return [TextContent(type="text", text=_to_json(

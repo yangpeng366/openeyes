@@ -31,6 +31,20 @@ versioning: [Semantic Versioning](https://semver.org/).
   the caller's next strategy when it did not take, and reports `{ok,
   attempts, result, elapsed, error}` — `ok` is True only when the expected
   state was observed.
+- **App lifecycle primitives** (`openeyes.core.lifecycle`): `app_state`,
+  `restore_window`, `launch_app` and `ensure_app`. A session timeout makes
+  an app close its own window; "the window is gone" is not a diagnosis,
+  because the process may still be alive (restore) or gone (relaunch).
+  `app_state` tells `running` / `window-gone` / `not-running` apart with
+  the evidence behind the verdict, and `ensure_app` follows the same rule
+  as `act_until`: `ok` is true only when usability was **observed**, never
+  merely because a launch command was issued. `restore_window` uses
+  `SW_SHOWNOACTIVATE`, so a minimised window comes back with a populated
+  accessibility tree without stealing the foreground.
+- `eyes app state` / `eyes app ensure` CLI verbs, and the `app_ensure` MCP
+  tool (tool surface 15 -> 16; `dry_run=true` by default). The AnyVPN
+  keepalive example now uses these primitives instead of its own
+  hard-coded window hunt, restore and relaunch.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a

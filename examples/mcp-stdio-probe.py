@@ -34,6 +34,7 @@ EXPECTED_TOOLS = [
     "browser_shot",
     "resolve_elements",
     "vision_detect",
+    "app_ensure",
 ]
 
 PROBE_TEXT = "acceptance"

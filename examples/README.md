@@ -2,6 +2,21 @@
 
 Runnable demonstrations. Default behavior is dry-run unless `--go` is passed.
 
+## App lifecycle
+
+```powershell
+# is the app up, or did it close its own window?
+python -m openeyes.cli.main app state --title-contains "Any VPN" --process-name "Any VPN"
+
+# revive it (dry-run by default; --go to act)
+python -m openeyes.cli.main app ensure --title-contains "Any VPN" \
+    --aumid "AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App" --go
+```
+
+`ensure_app` restores a hidden window without stealing the focus, relaunches
+the app when the process is gone, and reports `ok: true` only when the app
+was **observed** to be usable.
+
 ## anyvpn_keepalive.py
 
 Keep Any VPN's free session alive by re-clicking the secure/reset button.

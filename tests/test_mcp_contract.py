@@ -33,6 +33,7 @@ def test_mcp_exposes_stable_tool_set():
         "browser_shot",
         "resolve_elements",
         "vision_detect",
+        "app_ensure",
     ]
 
 
@@ -46,6 +47,7 @@ def test_side_effecting_tools_declare_dry_run_default():
         "browser_launch",
         "browser_type",
         "browser_shot",
+        "app_ensure",
     ):
         assert by_name[name].inputSchema["properties"]["dry_run"] == {
             "type": "boolean",

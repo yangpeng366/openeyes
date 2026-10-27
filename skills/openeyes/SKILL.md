@@ -91,7 +91,7 @@ without describing coordinates — same UX as UIA mode.
 
 ## MCP server
 
-`eyes-mcp` exposes 15 primitives as MCP tools:
+`eyes-mcp` exposes 16 primitives as MCP tools:
 
 **Native (UIA):**
 - `list_windows`
@@ -188,6 +188,55 @@ Three rules that keep a long-running loop usable:
 3. **Assert the control's current meaning before clicking it.** One control
    can read "Secure my connection" in one state and "Disconnect" in the next;
    clicking the wrong meaning kills a live session.
+
+## App lifecycle: window gone is two different diseases
+
+A session timeout makes an app close its own window. "The window is gone"
+is not a diagnosis: the **process** may still be alive (the app only closed
+its window) or gone entirely. The two need different remedies - restoring
+a window that exists, versus relaunching one that does not.
+
+```python
+from openeyes import app_state, ensure_app
+
+state = app_state(title_contains="Any VPN", process_name="Any VPN")
+# -> running | window-gone | not-running | unknown, with evidence
+
+result = ensure_app(title_contains="Any VPN",
+                    process_name="Any VPN",
+                    aumid="AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App",
+                    timeout=30.0, dry_run=False)
+result.ok        # True only when the app was OBSERVED usable
+result.action    # "none" | "restore" | "launch"
+```
+
+- `restore` uses `SW_SHOWNOACTIVATE`, so a minimised window comes back with
+  a populated accessibility tree **without** stealing the foreground.
+- `launch` starts a Store app through `shell:AppsFolder\<AUMID>`.
+- `ok` is True only when usability was **observed** - a delivered launch is
+  not an effective launch, the same rule as `act_until`.
+- `ready=` tightens the bar, e.g. `ready=lambda hwnd: bool(detect_elements(hwnd))`.
+
+```bash
+# read-only: is the app up?
+eyes app state --title-contains "Any VPN" --process-name "Any VPN"
+
+# revive it (dry-run by default; --go to act)
+eyes app ensure --title-contains "Any VPN" \
+    --aumid "AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App" --go
+```
+
+MCP: `app_ensure(title_contains, process_name, aumid, timeout, dry_run)`.
+
+## Troubleshooting cards
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| **Empty control tree** | The window is minimised, so UIA has nothing to report | `restore_window(hwnd)` (no focus steal) or `detect_elements(hwnd, restore=True)` |
+| **Element not found by name** | The visible label changes (a live countdown, "0:18 left - click to reset") | Anchor on `automation_id` (`KeepFreeAliveButton`), never the label |
+| **Click lands a few pixels off** | The process is not DPI-aware, so coords and pixels disagree | `ensure_dpi_awareness()` once at process start |
+| **Click delivered, nothing happened** | "The action was sent" was mistaken for "the action took effect" | `act_until(act, expect)`; `expect` must read business state (a counter that went back up), not the label |
+| **App vanished mid-run** | Session timeout closed its window | `ensure_app(...)` - it tells restore from relaunch, and proves the app came back |
 
 ## Lightpanda backend (CDP, low RAM, unattended)
 
@@ -404,7 +453,7 @@ As of 2026-08-25 the user has granted **full delegation** on this repo:
 ### Red lines
 - **No force push** to `main`. Rebase / amend only on the same local branch before the push lands.
 - **No push of `.codex/`** — local round artifacts; keep on disk, do not `git add`. Add `.codex/` to `.gitignore` as a follow-up commit if it is not already ignored.
-- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (15 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
+- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (16 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
 - **No secrets** in commits. The repo has no secrets today; if any are ever needed, use env vars and document in the PR.
 
 ### Push workaround (Windows host)

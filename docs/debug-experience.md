@@ -112,6 +112,61 @@ python -m pytest tests/test_keepalive_logic.py tests/test_verify.py -q
 
 ---
 
+## 应用生命周期原语（2026-10-27）：把「窗口没了」拆成两种病
+
+第 6 条根因（"应用生命周期是自动化的隐形边界"）此前只有 AnyVPN 脚本里的
+零散代码兜着，现已抽成通用原语 `openeyes.core.lifecycle`。
+
+### 现象
+
+会话超时后 App 自己关掉窗口。此时一句「窗口没了」是**不够的诊断**：
+
+- 进程还在、窗口没了 → App 只是关窗，补救是**恢复窗口**（不抢焦点）。
+- 进程也没了 → 补救是**重新拉起**。
+
+两者都表现为「找不到窗口」，但一个该 restore、一个该 launch。判断错了，
+要么白等（对着死进程轮询），要么误重启一个本来活着的 App。
+
+### 原语
+
+| 函数 | 作用 |
+|---|---|
+| `app_state(title_contains=, class_name=, process_name=)` | 判定 `running` / `window-gone` / `not-running` / `unknown`，并给出证据 |
+| `restore_window(hwnd)` | `SW_SHOWNOACTIVATE` 唤回，**不抢焦点** |
+| `launch_app(exe=, aumid=)` | 拉起 App（Store 应用走 `shell:AppsFolder`） |
+| `ensure_app(..., ready=)` | 组合拳：查状态 → 恢复/拉起 → **等它真的可用** |
+
+`ensure_app` 沿用 openEyes 一贯的「送达 ≠ 生效」原则：`ok=True` 只在
+**观测到 App 真的可用** 时成立，launch 动作发出不算数；`ready` 判据可
+再收紧（例如「UIA 树非空」「按钮已就位」）。
+
+### 判定顺序
+
+先看**进程**在不在，再看**窗口**在不在：
+
+- 进程在 + 窗口在 + 未最小化 → `running`（直接可用）。
+- 进程在 + 窗口最小化 → `window-gone`（控件树是空的，需 restore）。
+- 进程在 + 找不到窗口 → `window-gone`（无句柄可恢复，直接 launch）。
+- 进程不在 → `not-running`（launch）。
+
+### 出口
+
+```powershell
+eyes app state --title-contains "Any VPN" --process-name "Any VPN"
+eyes app ensure --title-contains "Any VPN" --aumid "AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App" --go
+```
+
+MCP 侧新增 `app_ensure`（工具面 15 → 16，默认 `dry_run=true`）。
+
+### 复现命令
+
+```powershell
+python -m pytest tests/test_lifecycle.py -q
+python -m openeyes.cli.main app state --title-contains "Any VPN" --process-name "Any VPN"
+```
+
+---
+
 ## Branch / commit 推进约定
 
 - 主巡检分支：`feat/decision-jev-layer`（已 ahead origin 47+ commits）。

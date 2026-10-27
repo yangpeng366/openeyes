@@ -34,11 +34,11 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import time
 from pathlib import Path
 
 from openeyes import click_element, detect_elements, ensure_dpi_awareness, find_elements
+from openeyes.core.lifecycle import app_state, ensure_app, restore_window
 from openeyes.core.verify import act_until
 
 # Coordinates must be physical screen pixels, otherwise the click lands
@@ -62,6 +62,14 @@ RENEWAL_AUTOMATION_IDS = (RESET_AID,)
 # Microsoft Store app id — used to relaunch Any VPN after the free
 # session lapses and the app closes its window.
 APP_AUMID = r"shell:AppsFolder\AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App"
+APP_AUMID_ID = r"AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App"
+
+# How to recognise the Any VPN window and its process. The app is a
+# Microsoft Store (MSIX) package, so the frame window's class is
+# ApplicationFrameWindow.
+WINDOW_TITLE = "Any VPN"
+WINDOW_CLASS = "ApplicationFrameWindow"
+PROCESS_NAME = "Any VPN.exe"
 
 COUNTDOWN_RE = re.compile(r"(\d+):(\d+)\s*left", re.IGNORECASE)
 
@@ -114,16 +122,16 @@ def should_connect(*, has_keepalive_button: bool, bootstrap: bool) -> bool:
 
 
 def find_anyvpn_window() -> int | None:
-    """hwnd of the Any VPN frame window, or None when the app is not up."""
-    hits: list[int] = []
+    """hwnd of the Any VPN frame window, or None when the app is not up.
 
-    def cb(h, _):
-        if (win32gui.GetWindowText(h) == "Any VPN"
-                and "ApplicationFrameWindow" in win32gui.GetClassName(h)):
-            hits.append(h)
-
-    win32gui.EnumWindows(cb, None)
-    return hits[0] if hits else None
+    The lookup itself lives in openeyes.core.lifecycle: the app-state
+    tier separates "the process is gone" from "the window is gone",
+    which is exactly the distinction a keepalive loop has to make.
+    """
+    state = app_state(title_contains=WINDOW_TITLE,
+                      class_name=WINDOW_CLASS,
+                      process_name=PROCESS_NAME)
+    return state.hwnd or None
 
 
 def show_without_focus(hwnd: int) -> None:
@@ -133,12 +141,7 @@ def show_without_focus(hwnd: int) -> None:
     an empty one) while leaving the user's foreground window and keyboard
     focus untouched.
     """
-    try:
-        if win32gui.IsIconic(hwnd) or not win32gui.IsWindowVisible(hwnd):
-            win32gui.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
-            time.sleep(0.35)
-    except Exception:
-        pass
+    restore_window(hwnd)
 
 
 def hide_window(hwnd: int) -> bool:
@@ -155,11 +158,13 @@ def hide_window(hwnd: int) -> bool:
 
 def relaunch_app() -> bool:
     """Start Any VPN again (the free session closing takes the window with it)."""
-    try:
-        subprocess.Popen(["explorer.exe", APP_AUMID])
-        return True
-    except Exception:
-        return False
+    result = ensure_app(title_contains=WINDOW_TITLE,
+                        class_name=WINDOW_CLASS,
+                        process_name=PROCESS_NAME,
+                        aumid=APP_AUMID_ID,
+                        timeout=20.0,
+                        dry_run=False)
+    return bool(result.ok)
 
 
 def read_keepalive(hwnd: int):
