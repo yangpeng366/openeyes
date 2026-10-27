@@ -34,6 +34,8 @@ def test_mcp_exposes_stable_tool_set():
         "resolve_elements",
         "vision_detect",
         "app_ensure",
+        "click_by_id",
+        "act_and_verify",
     ]
 
 

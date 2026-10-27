@@ -283,7 +283,7 @@ pwsh -NoProfile -File examples\quality-gate.ps1
 |---|---|
 | `ruff check .` | the tree is lint-clean under the repo's own rule set |
 | `python examples/bom-sweep.py` | every source file is UTF-8 **without** BOM |
-| `python examples/mcp-stdio-probe.py` | the MCP server starts and exposes the 16-tool contract |
+| `python examples/mcp-stdio-probe.py` | the MCP server starts and exposes the 18-tool contract |
 | `python -m pytest tests/ -q` | the behaviour holds |
 
 ## Repository layout
@@ -313,12 +313,12 @@ openeyes/
 │   │   ├── generator.py    # Path B: prompt → trajectory (LLM-driven)
 │   │   ├── prompt_template.py
 │   │   └── export/         # codex_skill / action_receipt / opencua exporters
-│   └── mcp/               # MCP server — 16 tools (7 native + 6 browser + 2 structured-first + 1 lifecycle)
+│   └── mcp/               # MCP server — 18 tools (7 native + 6 browser + 2 structured-first + 1 lifecycle + 2 act-then-prove)
 │       └── server.py
 ├── docs/
 │   ├── architecture.md
 │   ├── RECORD_DESIGN.md        # Record & Replay design rationale
-│   ├── capability-contract.md   # 16-tool MCP contract (read / write / high-risk)
+│   ├── capability-contract.md   # 18-tool MCP contract (read / write / high-risk)
 │   └── dsh-web-acceptance.md    # manual acceptance guide for dsh web
 ├── examples/
 │   ├── feishu_first_test.py
@@ -339,7 +339,7 @@ openeyes/
 │   ├── test_smoke.py
 │   ├── test_cdp.py
 │   ├── test_hints.py
-│   ├── test_mcp_contract.py     # locks the 16-tool contract
+│   ├── test_mcp_contract.py     # locks the 18-tool contract
 │   ├── test_mcp_stdio_probe.py
 │   ├── test_maintenance_round_probes.py
 │   ├── test_dsh_mount_contract.py

@@ -2,6 +2,23 @@
 
 Runnable demonstrations. Default behavior is dry-run unless `--go` is passed.
 
+## measure-interference.py
+
+Measure what a long-running loop costs and how often it lies: false
+positives (successes that did not happen) and interference (cursor moves,
+focus theft).
+
+```powershell
+# the built-in menu scenario: does the menu really open?
+python examples\measure-interference.py --hwnd 12345 \\
+    --name-contains "View" --menu-probe --rounds 4 --method invoke
+```
+
+Measured on this machine (2026-10-27, 4 rounds each): Invoke 4/4
+effective, 0% false positives, 0 cursor moves; the pixel path 0/4
+effective with 100% false positives - the click was delivered but the
+menu never opened, because the window was not in the foreground.
+
 ## App lifecycle
 
 ```powershell

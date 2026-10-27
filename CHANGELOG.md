@@ -45,6 +45,26 @@ versioning: [Semantic Versioning](https://semver.org/).
   tool (tool surface 15 -> 16; `dry_run=true` by default). The AnyVPN
   keepalive example now uses these primitives instead of its own
   hard-coded window hunt, restore and relaunch.
+- **Act, then prove it worked - over MCP.** The Python surface had
+  `act_until`, but an MCP host could not use it, and `click` still
+  addressed controls by their visible name and clicked them by pixels.
+  Two tools close that gap: `click_by_id` addresses a control by its
+  stable `automation_id` and prefers the UIA Invoke pattern (no pixel
+  maths, no cursor movement, no focus theft), and `act_and_verify` acts
+  and then reads the live accessibility tree to prove the expected state
+  (`element_appears` / `element_vanishes` / `label_matches`). `ok` is true
+  only when the state was **observed**; a delivered action that changed
+  nothing is a miss, and the report carries the evidence.
+- **`examples/measure-interference.py`** - measures what a long-running
+  loop costs and how often it lies: false positives (successes that did
+  not happen) and interference (cursor moves, focus theft). Interference
+  is attributed to the *automation*, not to the desktop: the user's own
+  cursor keeps moving and the focus may already sit on the target.
+  Measured on this machine (2026-10-27, Notepad menu, 4 rounds each):
+  Invoke 4/4 effective with 0% false positives and 0 cursor moves; the
+  pixel path 0/4 effective with **100% false positives** - the click was
+  delivered, the menu never opened, because the window was not in the
+  foreground.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a

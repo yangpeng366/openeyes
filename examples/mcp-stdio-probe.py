@@ -35,6 +35,8 @@ EXPECTED_TOOLS = [
     "resolve_elements",
     "vision_detect",
     "app_ensure",
+    "click_by_id",
+    "act_and_verify",
 ]
 
 PROBE_TEXT = "acceptance"

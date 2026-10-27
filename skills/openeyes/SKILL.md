@@ -91,7 +91,7 @@ without describing coordinates — same UX as UIA mode.
 
 ## MCP server
 
-`eyes-mcp` exposes 16 primitives as MCP tools:
+`eyes-mcp` exposes 18 primitives as MCP tools:
 
 **Native (UIA):**
 - `list_windows`
@@ -227,6 +227,67 @@ eyes app ensure --title-contains "Any VPN" \
 ```
 
 MCP: `app_ensure(title_contains, process_name, aumid, timeout, dry_run)`.
+
+## Act, then prove it worked - over MCP
+
+The Python surface has `act_until`. MCP hosts now get the same discipline
+through two tools, so an agent cannot mistake a delivered click for an
+effective one:
+
+```json
+{"tool": "click_by_id",
+ "arguments": {"hwnd": 12345, "automation_id": "KeepFreeAliveButton"}}
+```
+
+`click_by_id` addresses a control by its **stable** id and prefers the UIA
+Invoke pattern - no pixel maths, no cursor movement, no focus theft. The
+visible label of a live control ticks on its own; the id does not.
+
+```json
+{"tool": "act_and_verify",
+ "arguments": {
+   "hwnd": 12345,
+   "automation_id": "KeepFreeAliveButton",
+   "expect": {"element_appears": {"automation_id": "ConnectButton"}},
+   "retries": 3, "timeout": 5.0
+ }}
+```
+
+`expect` reads the **live accessibility tree**, not the label it just
+wrote. Three shapes are supported: `element_appears`,
+`element_vanishes`, and `label_matches` (a regex against a control's
+visible label). `ok` is true only when the expected state was **observed**
+after the action; a click that changed nothing is a miss, and the report
+carries the evidence (`observed`) so a miss can be explained.
+
+## Measuring a loop instead of trusting it
+
+A long-running loop that lives on someone's desktop has to be judged on
+two numbers: how often it claims a success that did not happen, and how
+often it disturbs the human.
+
+```bash
+python examples\measure-interference.py --hwnd 12345 \\
+    --name-contains "View" --menu-probe --rounds 4 --method invoke
+```
+
+Measured on this machine (2026-10-27, Notepad menu, 4 rounds each):
+
+| Path | Effective | False positives | Cursor moves |
+| --- | --- | --- | --- |
+| **Invoke** | 4/4 | **0%** | 0 |
+| Pixel | 0/4 | **100%** | 3/4 |
+
+The pixel row is the lesson: the click was *delivered* (the cursor landed
+on the control) yet the menu never opened, because the window was not in
+the foreground. A loop that reported "delivered" as "success" would have
+reported four successes and opened nothing.
+
+Interference is attributed to the **automation**, not to the desktop: the
+user's own cursor keeps moving, and the focus may already sit on the
+target. A cursor move counts only when the automation drove the pointer
+(a pixel click that landed); a focus theft counts only when the
+automation pulled the focus onto the target from somewhere else.
 
 ## Troubleshooting cards
 
@@ -453,7 +514,7 @@ As of 2026-08-25 the user has granted **full delegation** on this repo:
 ### Red lines
 - **No force push** to `main`. Rebase / amend only on the same local branch before the push lands.
 - **No push of `.codex/`** — local round artifacts; keep on disk, do not `git add`. Add `.codex/` to `.gitignore` as a follow-up commit if it is not already ignored.
-- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (16 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
+- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (18 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
 - **No secrets** in commits. The repo has no secrets today; if any are ever needed, use env vars and document in the PR.
 
 ### Push workaround (Windows host)

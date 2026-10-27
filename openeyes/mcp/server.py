@@ -20,6 +20,10 @@ Tools (15 = 7 native + 6 browser + 2 structured-first):
     browser_type(--text, --hint|--idx|--name-contains?, dry_run?)
                                 -> {sent_chars: int, into: str, press_enter: bool}
     browser_shot(--out, dry_run?) -> {path: str, captured: bool}
+    click_by_id(hwnd, automation_id, method?, dry_run?)
+                                -> {ok, method, name, center, landed, error}
+    act_and_verify(hwnd, automation_id, expect, method?, retries?, timeout?)
+                                -> {ok, attempts, observed, elapsed, error}
     resolve_elements(hwnd?, port?, url_contains?, detections_path?)
                                 -> {used_backend, attempts: [...], elements: [...]}
     vision_detect(detections_path?|--detections, origin_x?, origin_y?, score?)
@@ -39,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -81,6 +86,82 @@ def _load_detections(arguments: dict) -> tuple[Any, str | None]:
         except json.JSONDecodeError as exc:
             return None, f"invalid inline detection JSON: {exc}"
     return None, "need detections_path or detections"
+
+
+def _match_elements(hwnd: int, selector: dict) -> list:
+    """Elements of a window matching a selector dict.
+
+    A selector may carry ``automation_id`` (the stable anchor), plus
+    ``name_contains`` / ``control_type`` / ``regex``.
+    """
+    if not selector:
+        return []
+    elems = detect_elements(hwnd, restore=True)
+    return find_elements(
+        elems,
+        automation_id=selector.get("automation_id"),
+        name_contains=selector.get("name_contains"),
+        control_type=selector.get("control_type"),
+        regex=selector.get("regex"),
+    )
+
+
+def _observe(hwnd: int, expect: dict) -> dict:
+    """Read the live state an expectation talks about.
+
+    Returns ``{"satisfied": bool, "detail": str, "evidence": {...}}``. The
+    evidence names what was actually seen, so a miss can be explained
+    instead of merely reported.
+    """
+    if not isinstance(expect, dict) or not expect:
+        return {"satisfied": False,
+                "detail": "empty expectation: it needs element_appears, "
+                          "element_vanishes or label_matches",
+                "evidence": {}}
+
+    appears = expect.get("element_appears")
+    vanishes = expect.get("element_vanishes")
+    label = expect.get("label_matches")
+
+    if appears:
+        hits = _match_elements(hwnd, appears)
+        return {
+            "satisfied": bool(hits),
+            "detail": ("element appeared" if hits else
+                       "element did not appear"),
+            "evidence": {"selector": appears,
+                         "names": [e.name for e in hits[:5]]},
+        }
+
+    if vanishes:
+        hits = _match_elements(hwnd, vanishes)
+        return {
+            "satisfied": not hits,
+            "detail": ("element vanished" if not hits else
+                       "element is still there"),
+            "evidence": {"selector": vanishes,
+                         "names": [e.name for e in hits[:5]]},
+        }
+
+    if label:
+        selector = {k: v for k, v in label.items() if k != "regex"}
+        pattern = label.get("regex")
+        hits = _match_elements(hwnd, selector)
+        names = [e.name or "" for e in hits]
+        matched = [n for n in names
+                   if pattern is None or re.search(pattern, n, re.IGNORECASE)]
+        return {
+            "satisfied": bool(matched),
+            "detail": ("label matched" if matched else
+                       "label did not match"),
+            "evidence": {"selector": selector, "regex": pattern,
+                         "names": names[:5], "matched": matched[:5]},
+        }
+
+    return {"satisfied": False,
+            "detail": "expectation needs element_appears, element_vanishes "
+                      "or label_matches",
+            "evidence": {}}
 
 
 @server.list_tools()
@@ -362,6 +443,93 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="click_by_id",
+            description="Click an element addressed by its stable automation_id. "
+                        "Use this instead of click-by-name when the visible label "
+                        "changes (a live countdown, a spinner): the automation id "
+                        "is the anchor that does not move. Prefers the UIA Invoke "
+                        "pattern, so it needs no pixel maths, does not move the "
+                        "user's cursor and does not steal focus. "
+                        "Default dry_run=true (resolves the target, clicks nothing).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer"},
+                    "automation_id": {"type": "string"},
+                    "control_type": {"type": "string"},
+                    "method": {"type": "string", "enum": ["auto", "invoke", "pixel"],
+                               "default": "auto",
+                               "description": "auto tries Invoke first and falls "
+                                              "back to a pixel click"},
+                    "dry_run": {"type": "boolean", "default": True},
+                },
+                "required": ["hwnd", "automation_id"],
+            },
+        ),
+        Tool(
+            name="act_and_verify",
+            description="Act, then prove the act worked. Runs an action and "
+                        "reports ok=true ONLY when the expected state was "
+                        "observed - never merely because the action was "
+                        "delivered. The expectation is read from the live "
+                        "accessibility tree (an element that must appear or "
+                        "vanish, or a control whose label must match), so a "
+                        "click that changed nothing is a miss, not a success.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer"},
+                    "automation_id": {"type": "string",
+                                      "description": "the element to act on"},
+                    "control_type": {"type": "string"},
+                    "name_regex": {"type": "string",
+                                   "description": "fallback selector when the "
+                                                  "automation_id is absent"},
+                    "method": {"type": "string", "enum": ["auto", "invoke", "pixel"],
+                               "default": "auto"},
+                    "expect": {
+                        "type": "object",
+                        "description": "the state to observe after the action",
+                        "properties": {
+                            "element_appears": {
+                                "type": "object",
+                                "description": "an element that must exist afterwards",
+                                "properties": {
+                                    "automation_id": {"type": "string"},
+                                    "name_contains": {"type": "string"},
+                                    "control_type": {"type": "string"},
+                                },
+                            },
+                            "element_vanishes": {
+                                "type": "object",
+                                "description": "an element that must be gone afterwards",
+                                "properties": {
+                                    "automation_id": {"type": "string"},
+                                    "name_contains": {"type": "string"},
+                                    "control_type": {"type": "string"},
+                                },
+                            },
+                            "label_matches": {
+                                "type": "object",
+                                "description": "a control whose visible label must "
+                                               "match this regex afterwards",
+                                "properties": {
+                                    "automation_id": {"type": "string"},
+                                    "name_contains": {"type": "string"},
+                                    "regex": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                    "retries": {"type": "integer", "default": 3},
+                    "timeout": {"type": "number", "default": 5.0},
+                    "interval": {"type": "number", "default": 0.2},
+                    "dry_run": {"type": "boolean", "default": True},
+                },
+                "required": ["hwnd", "expect"],
+            },
+        ),
 
     ]
 
@@ -450,6 +618,92 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "center": {"x": cx, "y": cy},
                 "target": target.to_dict() if target else None,
             }))]
+
+        if name == "click_by_id":
+            from openeyes.core.selector import click_element
+            hwnd = arguments["hwnd"]
+            report = click_element(
+                hwnd,
+                automation_id=arguments.get("automation_id"),
+                control_type=arguments.get("control_type"),
+                method=arguments.get("method", "auto"),
+                dry_run=arguments.get("dry_run", True),
+            )
+            return [TextContent(type="text", text=_to_json(report))]
+
+        if name == "act_and_verify":
+            from openeyes.core.selector import click_element
+            from openeyes.core.verify import act_until
+
+            hwnd = arguments["hwnd"]
+            expect = arguments.get("expect") or {}
+            dry_run = arguments.get("dry_run", True)
+            method = arguments.get("method", "auto")
+            automation_id = arguments.get("automation_id")
+            control_type = arguments.get("control_type")
+            name_regex = arguments.get("name_regex")
+
+            if dry_run:
+                # A dry run resolves the target and reports the plan; it must
+                # not click and must not claim the action took effect.
+                hits = _match_elements(hwnd, {
+                    "automation_id": automation_id,
+                    "control_type": control_type,
+                })
+                return [TextContent(type="text", text=_to_json({
+                    "ok": False,
+                    "dry_run": True,
+                    "attempts": 0,
+                    "target": hits[0].to_dict() if hits else None,
+                    "resolved": bool(hits),
+                    "expect": expect,
+                    "detail": "would act, then verify the expected state",
+                }))]
+
+            state = {"method": method}
+
+            def act():
+                report = click_element(
+                    hwnd,
+                    automation_id=automation_id,
+                    name_regex=name_regex,
+                    control_type=control_type,
+                    method=state["method"],
+                    dry_run=False,
+                )
+                if not report.get("ok") and name_regex:
+                    report = click_element(
+                        hwnd,
+                        name_contains=name_regex,
+                        control_type=control_type,
+                        method=state["method"],
+                        dry_run=False,
+                    )
+                return report
+
+            def observe():
+                return _observe(hwnd, expect)["satisfied"]
+
+            def on_retry(attempt, _result):
+                # switch strategy: the pixel fallback is the last resort
+                state["method"] = ("pixel" if state["method"] != "pixel"
+                                   else "invoke")
+
+            outcome = act_until(act, observe,
+                                retries=int(arguments.get("retries", 3)),
+                                timeout=float(arguments.get("timeout", 5.0)),
+                                interval=float(arguments.get("interval", 0.2)),
+                                on_retry=on_retry)
+            observed = _observe(hwnd, expect)
+            payload = {
+                "ok": bool(outcome["ok"]),
+                "attempts": outcome["attempts"],
+                "result": outcome["result"],
+                "elapsed": outcome["elapsed"],
+                "error": outcome["error"],
+                "observed": observed,
+            }
+            return [TextContent(type="text", text=_to_json(payload))]
 
         if name == "grid":
             import win32gui
