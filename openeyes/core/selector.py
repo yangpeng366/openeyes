@@ -7,7 +7,7 @@ from openeyes.core.schema import Element
 
 
 def detect_elements(hwnd: int, *, restore: bool = False,
-                    max_depth: int = 12) -> list[Element]:
+                    max_depth: int | None = None) -> list[Element]:
     """Enumerate interactive elements in a window via the platform backend.
 
     On UWP / Windows Store apps, the accessibility tree is empty when the
@@ -15,6 +15,8 @@ def detect_elements(hwnd: int, *, restore: bool = False,
     first.
     """
     from openeyes.backends import uia as backend
+    if max_depth is None:
+        max_depth = backend.DEFAULT_MAX_DEPTH
     return backend.detect_elements(hwnd, restore=restore, max_depth=max_depth)
 
 

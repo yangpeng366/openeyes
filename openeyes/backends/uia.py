@@ -24,6 +24,16 @@ INTERACTIVE_TYPES = {
 user32 = ctypes.windll.user32
 
 
+#: How deep the accessibility tree is walked by default.
+#:
+#: 12 is enough for ordinary Win32 / UWP chrome, but a WebView2 surface
+#: (Tauri, Electron, WebView2 apps such as Yuanbao) buries the DOM far
+#: deeper: its send button only appears around depth 20. A default that
+#: cannot see the control makes every id-anchored lookup miss, so the
+#: default is deep enough to reach a web surface.
+DEFAULT_MAX_DEPTH = 30
+
+
 def list_windows() -> list[WindowInfo]:
     import win32gui
     ensure_dpi_awareness()
@@ -101,7 +111,7 @@ def _walk(node, depth: int, max_depth: int, out: list[Element],
 
 
 def detect_elements(hwnd: int, *, restore: bool = False,
-                    max_depth: int = 12) -> list[Element]:
+                    max_depth: int = DEFAULT_MAX_DEPTH) -> list[Element]:
     """Enumerate UIA elements under the given hwnd.
 
     On UWP / Windows Store apps, the accessibility tree is empty when the
@@ -123,7 +133,7 @@ def detect_elements(hwnd: int, *, restore: bool = False,
 
 
 def find_by_automation_id(hwnd: int, automation_id: str, *,
-                          max_depth: int = 12) -> Element | None:
+                          max_depth: int = DEFAULT_MAX_DEPTH) -> Element | None:
     """Return the first element whose automation_id matches.
 
     The automation id is the stable anchor of a control (e.g. Any VPN's

@@ -65,6 +65,25 @@ versioning: [Semantic Versioning](https://semver.org/).
   pixel path 0/4 effective with **100% false positives** - the click was
   delivered, the menu never opened, because the window was not in the
   foreground.
+- **The accessibility tree is now walked deep enough to reach a web
+  surface.** The old default of 12 levels is fine for Win32 / UWP chrome,
+  but a WebView2 app (Yuanbao, a Tauri shell) buries its DOM far deeper:
+  its send button only appears around level 20. With the old default every
+  id-anchored lookup missed, and the miss looked like "this control does
+  not exist". The default is now 30, `eyes detect --depth` and the MCP
+  `detect_elements(depth=)` are explicit, and the core selector takes the
+  backend's constant.
+- **`openeyes.backends.webview2`** - reach the DOM inside a WebView2
+  desktop app (Tauri / Wails / Electron). Such a shell looks like a few
+  empty panes to UIA: the tree stops at `BrowserRootView` and the DOM is
+  invisible, so the only structured view of the UI is the DevTools
+  protocol. WebView2 reads `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when it
+  creates its browser process, so a shell started with that variable gets
+  a DevTools port. `eyes webview describe` reports whether a port is
+  open and names the exact way to open one; `eyes webview launch` starts
+  a shell with the port enabled.
+- **`eyes detect --automation-id`** - keep only the control with a given
+  stable id, the anchor that does not move when the visible label ticks.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a

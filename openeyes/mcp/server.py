@@ -203,7 +203,7 @@ async def list_tools() -> list[Tool]:
                     "hwnd": {"type": "integer"},
                     "restore": {"type": "boolean", "default": False,
                                 "description": "call ShowWindow(SW_RESTORE) first (UWP)"},
-                    "depth": {"type": "integer", "default": 12},
+                    "depth": {"type": "integer", "default": 30},
                     "name_contains": {"type": "string"},
                     "control_type": {"type": "string"},
                     "regex": {"type": "string"},
@@ -568,7 +568,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             elems = detect_elements(
                 hwnd,
                 restore=arguments.get("restore", False),
-                max_depth=arguments.get("depth", 12),
+                max_depth=arguments.get("depth", 30),
             )
             elems = find_elements(
                 elems,

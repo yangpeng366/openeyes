@@ -289,6 +289,48 @@ target. A cursor move counts only when the automation drove the pointer
 (a pixel click that landed); a focus theft counts only when the
 automation pulled the focus onto the target from somewhere else.
 
+## Desktop apps whose UI is a web view
+
+Tauri, Wails and Electron apps paint their UI in a WebView2 surface. To
+UIA such an app looks like a few empty panes: the accessibility tree
+stops at `BrowserRootView` and the DOM is invisible. Two consequences:
+
+- **The tree must be walked deep.** A WebView2 DOM sits around level 20;
+  the old default of 12 could not see the controls. The default is now 30,
+  and `eyes detect --depth N` / MCP `detect_elements(depth=N)` are
+  explicit.
+- **For the DOM itself, use the DevTools port.** WebView2 reads
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when it creates its browser
+  process, so a shell started with that variable in its environment gets
+  `--remote-debugging-port`:
+
+```bash
+# is a web view exposing its DOM?
+eyes webview describe --port 9333
+
+# start a shell so that it does (the shell must be closed first)
+eyes webview launch --exe "C:\Program Files\CCX\CCX Desktop\ccx-desktop.exe" --port 9333
+```
+
+Then the ordinary CDP tools work against it: `eyes browser tabs --port
+9333`, `eyes browser scan --port 9333`, `eyes browser click --port 9333`.
+
+Caveat worth knowing: a shell that sets its own WebView2 browser
+arguments (Wails does) overrides the environment variable, and the port
+stays closed. `eyes webview describe` says so instead of leaving you to
+guess.
+
+### What a WebView2 app looks like in practice (Yuanbao, 2026-10-27)
+
+- The **send button** has a stable id: `yuanbao-send-btn`. Its visible
+  name is "发送" - usable, but a name is not an anchor.
+- The **input area** is a custom div: no `Edit` control appears in the
+  tree, only the placeholder text "发送消息". Typing into it needs the
+  DOM (CDP), not UIA.
+- `act_and_verify` against `yuanbao-send-btn` succeeded on the first
+  attempt in ~2.0 s, with the Invoke pattern and without moving the
+  cursor.
+
 ## Troubleshooting cards
 
 | Symptom | Cause | Fix |

@@ -77,7 +77,11 @@ def capture(window: int, out: str, as_json: bool) -> None:
 @cli.command()
 @click.option("--window", type=int, required=True)
 @click.option("--restore", is_flag=True, help="call ShowWindow(SW_RESTORE) first (UWP)")
-@click.option("--depth", type=int, default=12)
+@click.option("--depth", type=int, default=30, show_default=True,
+              help="how deep to walk the accessibility tree (a web "
+                   "surface buries its DOM around depth 20)")
+@click.option("--automation-id", default=None,
+              help="keep only the control with this stable id")
 @click.option("--name-contains")
 @click.option("--control-type")
 @click.option("--regex")
@@ -85,7 +89,7 @@ def capture(window: int, out: str, as_json: bool) -> None:
 @click.option("--pretty", is_flag=True)
 def detect(window: int, restore: bool, depth: int,
            name_contains: str | None, control_type: str | None, regex: str | None,
-           max: int, pretty: bool) -> None:
+           automation_id: str | None, max: int, pretty: bool) -> None:
     """Enumerate interactive elements in a window."""
     try:
         elems = detect_elements(window, restore=restore, max_depth=depth)
@@ -94,7 +98,8 @@ def detect(window: int, restore: bool, depth: int,
         click.echo(f"detect failed for hwnd={window}: {msg}", err=True)
         sys.exit(4)
     elems = find_elements(elems, name_contains=name_contains,
-                          control_type=control_type, regex=regex)
+                          control_type=control_type, regex=regex,
+                          automation_id=automation_id)
     elems = elems[:max]
     if pretty:
         for e in elems:
@@ -577,6 +582,41 @@ def resolve(window: int, port: int, url_contains: str | None,
         payload = result.to_dict()
         payload["elements"] = payload["elements"][:max]
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+# ----- webview -------------------------------------------------------------
+
+@cli.group()
+def webview() -> None:
+    """Reach the DOM inside a WebView2 desktop app (Tauri / Wails / Electron)."""
+
+
+@webview.command("describe")
+@click.option("--port", type=int, default=9333, show_default=True)
+def webview_describe(port: int) -> None:
+    """Report whether a web view exposes a DevTools endpoint."""
+    from openeyes.backends import webview2
+    report = webview2.describe(port)
+    click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    if not report["reachable"]:
+        raise SystemExit(2)
+
+
+@webview.command("launch")
+@click.option("--exe", required=True, help="the desktop shell to start")
+@click.option("--port", type=int, default=9333, show_default=True)
+@click.option("--wait", type=float, default=20.0, show_default=True)
+def webview_launch(exe: str, port: int, wait: float) -> None:
+    """Start a shell with a DevTools port for its web view.
+
+    The shell must be closed first: the environment variable that opens
+    the port is only read when the web view is created.
+    """
+    from openeyes.backends import webview2
+    report = webview2.launch_shell(exe, port=port, wait_s=wait)
+    click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    if not report["launched"]:
+        raise SystemExit(3)
 
 
 # ----- app lifecycle -------------------------------------------------------

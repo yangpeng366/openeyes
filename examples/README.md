@@ -2,6 +2,21 @@
 
 Runnable demonstrations. Default behavior is dry-run unless `--go` is passed.
 
+## WebView2 desktop apps
+
+```powershell
+# is a Tauri / Wails app exposing its DOM over DevTools?
+python -m openeyes.cli.main webview describe --port 9333
+
+# start the shell so that it does (close it first)
+python -m openeyes.cli.main webview launch --exe "C:\Program Files\CCX\CCX Desktop\ccx-desktop.exe" --port 9333
+```
+
+A WebView2 app looks like a few empty panes to UIA - the tree stops at
+`BrowserRootView`. The DOM is only reachable over the DevTools port, and
+`webview describe` says so (with the exact way to open it) when the port
+is closed.
+
 ## measure-interference.py
 
 Measure what a long-running loop costs and how often it lies: false

@@ -112,6 +112,72 @@ python -m pytest tests/test_keepalive_logic.py tests/test_verify.py -q
 
 ---
 
+## 实战元宝桌面客户端（2026-10-27）：深度默认值是真缺口
+
+用户点名要「测点其他功能，比如 openeyes 操作元宝桌面客户端」。元宝是
+Tauri + WebView2（`yuanbao.exe` v2.90.0.60），这一测就测出两个真问题。
+
+### 问题 1：`max_depth=12` 够不到 WebView2 的 DOM
+
+UIA 深度 12 时元宝只有 **25** 个元素，止步于 `BrowserRootView`；深度 25
+时是 **387** 个元素，整个 DOM 露出来了（对话列表、发送按钮、输入区）。
+
+更要命的是**发送按钮只在深度 20 才出现**：
+
+| 深度 | 元素数 | 找到 `yuanbao-send-btn` |
+| --- | --- | --- |
+| 12 | 25 | ❌ |
+| 20 | 255 | ✅ |
+| 25 | 387 | ✅ |
+
+于是 `act_and_verify` 报了 miss，证据是 `names: []` —— 看起来像
+「这个控件不存在」，其实只是**没看够深**。这是最坏的一种失败：报错
+把「没找」说成了「没有」。
+
+**修法**（根因，不是打补丁）：默认深度 12 → 30（`uia.DEFAULT_MAX_DEPTH`），
+core / CLI（`--depth`）/ MCP（`depth=`）三处统一，`eyes detect
+--automation-id` 可按稳定 id 直查。
+
+### 问题 2：WebView2 应用，UIA 拿不到 DOM
+
+UIA 能看到按钮（Invoke 可用），但**输入框不是 Edit 控件**——它是个自定义
+div，树上只有占位符文字「发送消息」。要往里打字、要读 DOM 结构，就得上
+CDP。
+
+WebView2 在创建浏览器进程时读 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`，
+所以带这个环境变量启动外壳就能开 DevTools 端口。已落
+`openeyes/backends/webview2.py` + `eyes webview describe|launch`。
+
+**实测坑**：CCX Desktop（Wails）自己设了 WebView2 浏览器参数，**覆盖了
+环境变量**，端口不开；命令行 `--remote-debugging-port` 也不行（Wails 要
+在 `wails.Run` 里设）。元宝未测（Tauri 是否覆盖需实测）。
+
+> 所以 `eyes webview describe` 存在的意义就是：**端口不通时说清怎么通**，
+> 而不是让人猜。
+
+### 实机通过
+
+```
+eyes detect --window 1380868 --automation-id yuanbao-send-btn --pretty
+  -> [Group] (1714,1068) 37x37 '发送'
+
+click_by_id(dry_run=true)          -> ok, method=dry-run, center 精确定位
+act_and_verify(dry_run=false)      -> ok=true, attempts=1, elapsed 2.03s
+```
+
+点击真的送到了：元宝回了「👌 收到～ 看起来你是确认了一下，没发送消息」
+（空输入时点击后的真实回应）。全程 Invoke，**未动用户鼠标**。
+
+### 元宝的锚点与可操作面
+
+| 目标 | UIA 锚点 | 能否操作 |
+| --- | --- | --- |
+| 发送按钮 | `yuanbao-send-btn` | ✅ Invoke 稳定 |
+| 输入框 | 无（自定义 div） | ❌ 需 CDP |
+| 侧栏会话 | 仅有可见名 | ⚠️ 名字当锚点，可用但不稳 |
+
+---
+
 ## 度量而不是相信：误报率与干扰度（2026-10-27）
 
 保活脚本「日志一片 verified，会话其实在掉」这件事，靠人眼看不出来——
