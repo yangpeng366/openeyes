@@ -39,6 +39,7 @@ import time
 from pathlib import Path
 
 from openeyes import click_element, detect_elements, ensure_dpi_awareness, find_elements
+from openeyes.core.verify import act_until
 
 # Coordinates must be physical screen pixels, otherwise the click lands
 # a few pixels off (or on a different element) on scaled monitors.
@@ -201,39 +202,50 @@ def _shoot(out_dir: Path | None, hwnd: int, label: str) -> None:
 
 def renew(hwnd: int, *, dry_run: bool, retries: int,
           out_dir: Path | None, iteration: int) -> tuple[str, str]:
-    """Renew the free session. Returns (verdict, detail)."""
+    """Renew the free session. Returns (verdict, detail).
+
+    This is the reference implementation of the act-then-prove pattern:
+    click, then wait until the countdown actually jumped back up. A
+    delivered click that changed nothing is a miss, never a success.
+    """
     label, before = read_keepalive(hwnd)
-    method = "auto"
-    last = ""
-    for attempt in range(1, max(1, retries) + 1):
-        report = click_element(hwnd, automation_id=RESET_AID, control_type="Button",
-                               method=method, dry_run=dry_run)
+    state = {"method": "auto", "last": ""}
+
+    def act():
+        report = click_element(hwnd, automation_id=RESET_AID,
+                               control_type="Button", method=state["method"],
+                               dry_run=dry_run)
         if not report.get("ok"):
             # automation id may be missing on other builds — retry by name
             report = click_element(hwnd, name_regex=RESET_NAME_RE,
-                                   control_type="Button", method=method,
+                                   control_type="Button", method=state["method"],
                                    dry_run=dry_run)
-        last = (f"method={report.get('method')} name={report.get('name')!r} "
-                f"center={report.get('center')} err={report.get('error')}")
-        if dry_run:
-            return "dry-run", last
-        time.sleep(0.7)
+        state["last"] = (f"method={report.get('method')} "
+                         f"name={report.get('name')!r} "
+                         f"center={report.get('center')} err={report.get('error')}")
+        return report
+
+    def expect() -> bool:
         _, after = read_keepalive(hwnd)
-        verdict = judge_renewal(before, after)
-        if verdict == "hit":
-            return verdict, f"{last} timer {before}s -> {after}s"
-        if verdict == "gone":
-            return verdict, f"{last} keepalive button vanished"
-        if verdict == "miss":
-            print(f"[openeyes] iter {iteration}: renewal MISS "
-                  f"(timer {before}s -> {after}s), retry {attempt}/{retries}",
-                  flush=True)
-            # the other method next time round
-            method = "pixel" if method != "pixel" else "invoke"
-            time.sleep(0.4)
-            continue
-        return verdict, last
-    return "miss", last
+        return judge_renewal(before, after) == "hit"
+
+    def on_retry(attempt: int, _result) -> None:
+        print(f"[openeyes] iter {iteration}: renewal MISS "
+              f"(timer {before}s), retry {attempt}/{retries}", flush=True)
+        # the other method next time round
+        state["method"] = "pixel" if state["method"] != "pixel" else "invoke"
+
+    if dry_run:
+        act()
+        return "dry-run", state["last"]
+
+    outcome = act_until(act, expect, retries=retries, timeout=1.2,
+                        interval=0.2, on_retry=on_retry)
+    _, after = read_keepalive(hwnd)
+    verdict = judge_renewal(before, after)
+    detail = (f"{state['last']} timer {before}s -> {after}s "
+              f"(attempts={outcome['attempts']})")
+    return verdict, detail
 
 
 def connect(hwnd: int, *, dry_run: bool) -> tuple[bool, str]:

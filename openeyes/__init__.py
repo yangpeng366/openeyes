@@ -19,6 +19,7 @@ from openeyes.core.dpi import current_dpi_awareness, ensure_dpi_awareness
 from openeyes.core.resolve import Attempt, ResolveResult, resolve_elements
 from openeyes.core.schema import BBox, Center, Element, ElementState, WindowInfo
 from openeyes.core.selector import click_by_selector, click_element, detect_elements, find_elements
+from openeyes.core.verify import act_until, wait_until
 from openeyes.core.windows import find_window, list_windows
 
 # Lazy import for record submodule (optional dependency on openeyes itself)
@@ -34,6 +35,7 @@ __all__ = [
     "click_xy", "send_hotkey", "type_text", "drag", "scroll",
     "move_to", "cursor_pos",
     "ensure_dpi_awareness", "current_dpi_awareness",
+    "act_until", "wait_until",
     "resolve_elements", "ResolveResult", "Attempt",
     "__version__",
 ]

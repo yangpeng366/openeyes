@@ -147,6 +147,48 @@ hits = find_elements(elements, automation_id="KeepFreeAliveButton")
 - `click_xy` holds the button for `press_ms` - XAML/UWP controls can ignore a
   zero-duration click.
 
+## Act, then prove it worked
+
+A delivered click is not an effective click. Any VPN's keepalive button carries
+a live countdown ("0:18 left - click to reset"), so "the label changed" proves
+nothing - only the countdown jumping back up proves the session was renewed.
+`openeyes.core.verify.act_until` makes that distinction reusable.
+
+```python
+from openeyes import act_until, click_element
+
+def act():
+    return click_element(hwnd, automation_id="KeepFreeAliveButton",
+                         method="auto", dry_run=False)
+
+def expect():
+    countdown = read_countdown(hwnd)      # business state, not the label
+    return countdown is not None and countdown > before
+
+report = act_until(act, expect, retries=3, timeout=1.2, interval=0.2)
+# -> {"ok": True, "attempts": 1, "result": {...}, "elapsed": 0.9, "error": None}
+```
+
+- `ok` is True only when the expected state was **observed**; a delivered
+  action that changed nothing is a miss, never a success.
+- `on_retry(attempt, result)` fires only when another attempt follows - use it
+  to switch strategy (Invoke first, then a pixel click).
+- `expect` must read **business state** (a counter that went back up, a
+  control that disappeared, a field that now holds a value), never "the label
+  differs".
+
+Three rules that keep a long-running loop usable:
+
+1. **State-driven cadence, not a fixed interval.** A 20s poll against a 20s
+   expiry clicks exactly at the expiry. Read the state and renew while a
+   margin is left.
+2. **Coexist with the user.** `SW_SHOWNOACTIVATE` restores a minimised
+   window's (empty) accessibility tree without taking the foreground, and the
+   Invoke pattern needs no focus and never moves the user's cursor.
+3. **Assert the control's current meaning before clicking it.** One control
+   can read "Secure my connection" in one state and "Disconnect" in the next;
+   clicking the wrong meaning kills a live session.
+
 ## Lightpanda backend (CDP, low RAM, unattended)
 
 Lightpanda is an AI-native headless browser written in Zig with a minimal

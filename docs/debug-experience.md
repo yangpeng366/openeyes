@@ -72,6 +72,46 @@ Get-Process -Name dsh
 
 ---
 
+## AnyVPN 保活实操（2026-10-26）：送达 ≠ 生效
+
+实战对象：Any VPN（MSIX 包 `AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App`）免费会话保活，脚本 `examples/anyvpn_keepalive.py`。落地提交 `6d57753`、`c646c76`。
+
+### 现象
+
+- 点击报成功，但会话照样掉线；旧脚本的判据是"按钮名字变了"。
+- 续期总是踩在掉线那一刻：免费会话 20 秒到期，而脚本 `interval=20`，等于每次都点�� `0:00 left`。
+- 会话超时后 Any VPN **自己关掉窗口**（进程还在，窗口没了），脚本只能退出。
+- 连上后 Any VPN 以 `RouteMetric 1` 抢下默认路由，此时 `223.5.5.5` / `www.baidu.com` 实测不通；会话过期、路由回落后恢复。出口 IP 实测仍是本地运营商（`182.150.63.187`，`loc=CN`），即"连上了但流量没走隧道"——**此条待复测**。
+
+### 根因（按可复用程度排序）
+
+1. **动作送达不等于业务生效。** 按钮的可访问名是**活的倒计时**（`0:18 left - click to reset`），每秒自变；拿"名字变了"当成功判据等于永远判真。这是产品级信任问题，不是脚本 bug。
+2. **坐标语义不统一。** DPI 不感知进程里 UIA 报物理像素，而 `GetWindowRect` / `SetCursorPos` 报虚拟化坐标，两套坐标系混用 → 点击偏几个像素、甚至点到别的控件。
+3. **元素身份不稳。** 按可见名选元素在活的 UI 上不可靠；`automation_id`（`KeepFreeAliveButton`）才是稳定锚点。
+4. **只有像素点击这一种动作方式。** 抢焦点、动用户鼠标，且 `SetCursorPos` 后紧跟点击可能落在**旧光标位置**（窗口还没处理 `WM_MOUSEMOVE`）；XAML/UWP 还会忽略零时长点击。
+5. **周期任务被写成了固定间隔。** 正确形态是读状态、判阈值、到点才动手。
+6. **应用生命周期是自动化的隐形边界。** UWP 应用会自己退，自动化必须能识别并重建。
+7. **同一控件在不同时刻语义不同。** `ConnectButton` 连接后标签变 `Disconnect`；不做前置断言就可能在会话活着时把它点掉。
+
+### 关键结论（可直接复用）
+
+- **判据要用状态语义，不要用标签文本。** 续期成功 = 倒计时**回跳**（`9s → 19s`），不是"名字变了"。
+- **点击优先 UIA Invoke 图案**：`click_element()` 走 Invoke，不需要像素、不抢焦点、不动用户鼠标；像素点击只作降级。
+- **恢复窗口用 `SW_SHOWNOACTIVATE`（4）**：最小化窗口的控件树是空的，但 `SW_RESTORE` 会抢前台；`SW_SHOWNOACTIVATE` 既重建控件树又不动前台（实测前台始终是原窗口）。
+- **动作前校验控件当前语义**：标签是 `Disconnect` 时拒绝点击 `ConnectButton`。
+- **调用方要能区分"动作已投递"和"状态已改变"**：日志与报告必须分两级。
+- **落成原语**：`openeyes.core.verify.act_until(act, expect, retries=N)`——执行 → 轮询期望 → 不成立换策略重试 → 返回 `{ok, attempts, result, elapsed, error}`。AnyVPN 脚本已改为它的参考实现。
+
+### 复现命令
+
+```powershell
+python examples\anyvpn_keepalive.py --go --bootstrap --trigger 10   # 保活
+python examples\anyvpn_disconnect.py                               # 只断开
+python -m pytest tests/test_keepalive_logic.py tests/test_verify.py -q
+```
+
+---
+
 ## Branch / commit 推进约定
 
 - 主巡检分支：`feat/decision-jev-layer`（已 ahead origin 47+ commits）。
@@ -123,3 +163,4 @@ Get-Process -Name dsh
 
 
 - 2026-09-22：DSH 阻塞连 75+ 轮后首次系统沉淀 debug 经验；201 passed, 1 deselected（历史 flaky 单独排除）。
+- 2026-10-26：AnyVPN 保活实操沉淀"送达 ≠ 生效"这条产品级教训，并落成 `openeyes.core.verify.act_until` 原语（AnyVPN 脚本改为参考实现）。

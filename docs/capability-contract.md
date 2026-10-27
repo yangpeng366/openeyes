@@ -123,3 +123,25 @@ count must move from 13 to 15.
 
 `resolve_elements` and `vision_detect` never actuate. `resolve_elements`
 defaults to `port=9222` for the cdp tier; pass `port=0` to skip it.
+
+## Python surface additions (additive, no MCP change)
+
+The MCP tool matrix above is unchanged — 15 tools, same names, same
+required arguments, same dry-run defaults. The following are **Python-only**
+additions that make an existing action trustworthy; they do not appear in the
+MCP surface and do not alter it.
+
+| Surface | Entry | Notes |
+| --- | --- | --- |
+| Python | `openeyes.act_until(act, expect, retries=3, timeout=5.0, interval=0.2, on_retry=None)` | Acts, then polls `expect` until the expected state is observed; retries with the caller's next strategy when it did not take. Returns `{ok, attempts, result, elapsed, error}`. `ok` is True only when the state was observed — a delivered action that changed nothing is a miss. |
+| Python | `openeyes.wait_until(condition, timeout=5.0, interval=0.2)` | Polls a condition; a raising condition counts as "not yet". |
+| Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto")` | Resolves a live UIA wrapper and prefers the Invoke pattern over a pixel click. `method` is `auto` / `invoke` / `pixel`; `dry_run` defaults to True. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed` and `error`. |
+| Python | `openeyes.find_elements(elements, automation_id=...)` | Filters on the stable control id — the visible name of a live control (a countdown, a spinner) is not a stable selector. |
+| Python | `openeyes.ensure_dpi_awareness()` / `openeyes.current_dpi_awareness()` | Per-monitor-v2 awareness, applied once and never downgraded from what the host process already set. Every reported coordinate is then a real screen pixel. |
+| Python | `openeyes.move_to(x, y, settle_ms=60, steps=2)` / `openeyes.cursor_pos()` | Moves the cursor in steps and settles before the press; a single `SetCursorPos` followed by a click can be delivered at the *previous* cursor position. |
+
+Why this matters for a host that drives a long-lived loop: a click that was
+delivered is not a click that took effect. AnyVPN's keepalive button carries
+a live countdown, so "the label changed" proves nothing — only the countdown
+jumping back up proves the session was renewed. `act_until` is the reusable
+form of that distinction.

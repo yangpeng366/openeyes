@@ -23,6 +23,14 @@ versioning: [Semantic Versioning](https://semver.org/).
   controls can also ignore a zero-duration click.
 - `click_element` and `automation_id` filtering — the stable control id beats
   a visible name that changes every second.
+- `openeyes.core.verify` — `act_until(act, expect, retries=3)` and
+  `wait_until(condition, timeout=5.0)`. A delivered click is not an effective
+  click: AnyVPN's keepalive button carries a live countdown, so "the label
+  changed" proves nothing and only the countdown jumping back up proves the
+  session was renewed. `act_until` acts, polls the expectation, retries with
+  the caller's next strategy when it did not take, and reports `{ok,
+  attempts, result, elapsed, error}` — `ok` is True only when the expected
+  state was observed.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a
