@@ -12,6 +12,51 @@ hardcoded mouse coordinates with **structured detection**: enumerate
 interactive elements, find the one matching the user's intent, click its
 center. LLM never has to read pixels.
 
+## Command table
+
+Every verb answers the same way: `--json` gives machine-readable output
+(before or after the subcommand), the default is a human view of the
+same data, and a failure is a non-zero exit code plus a message that
+names the cause.
+
+
+Every verb answers the same way: `--json` gives machine-readable output
+(before or after the subcommand), the default is a human view of the
+same data, and a failure is a non-zero exit code plus a message that
+names the cause.
+
+| Command | What it does |
+| --- | --- |
+| `eyes windows list` | Enumerate visible top-level windows (`--title-contains`, `--class-name`, `--regex`) |
+| `eyes detect --window H` | Enumerate interactive elements (`--automation-id`, `--name-contains`, `--control-type`, `--regex`, `--depth`) |
+| `eyes status --window H` | Buttons whose name contains an action verb - the "what can I press" snapshot |
+| `eyes click --window H` | Click by coordinates or selector; **dry-run unless `--go`** |
+| `eyes grid --window H --row R --col C` | Vimium-style grid cell click; dry-run unless `--go` |
+| `eyes hotkey --combo ctrl+a` | Send a key chord; dry-run unless `--go` |
+| `eyes type --text "..."` | Type literal text; dry-run unless `--go` |
+| `eyes capture --window H --out f.png` | Screenshot to a PNG |
+| `eyes resolve --window H` | Walk `uia -> cdp -> vision` and report which tier answered |
+| `eyes vision --detections d.json` | Parse screen-parsing detections into elements (no model) |
+| `eyes browser launch/tabs/scan/click/type/shot` | Drive any Chromium browser over CDP |
+| `eyes app state` / `eyes app ensure` | Is the app alive? Revive it (window gone vs process gone) |
+| `eyes webview describe` / `launch` | Reach the DOM inside a Tauri / Wails / Electron app |
+| `eyes record replay <file>` | Inspect a recorded trajectory |
+
+## For AI agents
+
+1. **Always pass `--json`** when you intend to parse the result.
+2. **Check the exit code** - 0 is success; 3 means "no target matched",
+   4 means "the backend could not be reached", 5 means "the action did
+   not take effect".
+3. **Read the error message** - it names the cause and the parameters
+   that were in play. It is written to be actionable on its own.
+4. **Verify the output exists** after a write; a command that exits 0
+   is not proof that the state changed.
+5. **Prefer `automation_id` over a visible name.** A name may change
+   every second; the id does not.
+6. **Actions are dry-run by default.** Pass `--go` (or `dry_run=false` on
+   MCP) only when the action is intended.
+
 ## Four backends, one schema
 
 1. **UIA** (`openeyes.backends.uia`) — Windows / macOS / Linux native apps.

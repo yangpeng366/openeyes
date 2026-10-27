@@ -105,6 +105,26 @@ eyes click --window 123456 --name-contains "Submit" --go
 eyes-mcp
 ```
 
+### Output contract
+
+Every command answers the same way, so a script (or an agent) never has
+to guess:
+
+- `--json` is a **global** flag - it works before *or* after the
+  subcommand: `eyes --json detect --window 123` and
+  `eyes detect --window 123 --json` are the same call.
+- The JSON goes to **stdout**; the human-readable error line goes to
+  **stderr**. Piping stdout into a JSON parser therefore always works.
+- A failure is a **non-zero exit code**: `3` = no target matched, `4` =
+  the backend could not be reached, `5` = the action did not take effect.
+  The message names the cause and the parameters that were in play.
+
+```powershell
+# machine-readable
+eyes --json detect --window 123456 --automation-id "SendButton"
+eyes --json app state --title-contains "Any VPN" --process-name "Any VPN"
+```
+
 ### First showcase — 飞书 client
 
 See [`examples/feishu_first_test.py`](examples/feishu_first_test.py).

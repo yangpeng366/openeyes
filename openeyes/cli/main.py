@@ -25,16 +25,38 @@ import time
 import click
 
 from openeyes import __version__
+from openeyes.cli.output import emit_error, emit_json, render_table, wants_json
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.capture import capture_screen, capture_window
 from openeyes.core.selector import detect_elements, find_elements
 from openeyes.core.windows import find_window
 
 
+def json_option(f):
+    """Add the global --json switch to a command.
+
+    The group declares it, and Click hands the value down through
+    ``ctx.obj``; this decorator lets a subcommand also accept it after
+    its own name, so neither call order surprises a caller.
+    """
+    return click.option(
+        "--json", "as_json", is_flag=True, default=False,
+        help="machine-readable JSON output",
+    )(f)
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="eyes")
-def cli() -> None:
+@click.option("--json", "as_json", is_flag=True,
+              help="machine-readable JSON output (works before or after "
+                   "the subcommand)")
+@click.pass_context
+def cli(ctx: click.Context, as_json: bool) -> None:
     """OpenEyes — AI-friendly computer-use primitives."""
+    # A global --json: `eyes --json detect ...` and `eyes detect ... --json`
+    # must both work, so the flag is propagated to every subcommand.
+    ctx.ensure_object(dict)
+    ctx.obj["as_json"] = as_json
 
 
 # ----- windows --------------------------------------------------------------
@@ -48,11 +70,29 @@ def windows() -> None:
 @click.option("--title-contains")
 @click.option("--class-name")
 @click.option("--regex")
-def windows_list(title_contains: str | None, class_name: str | None, regex: str | None) -> None:
+@json_option
+def windows_list(title_contains: str | None, class_name: str | None,
+                 regex: str | None, as_json: bool) -> None:
     """Enumerate visible top-level windows."""
-    wins = find_window(title_contains=title_contains,
-                       class_name=class_name, regex=regex)
-    click.echo(json.dumps([w.to_dict() for w in wins], ensure_ascii=False, indent=2))
+    try:
+        wins = find_window(title_contains=title_contains,
+                           class_name=class_name, regex=regex)
+    except Exception as exc:
+        emit_error(f"could not enumerate windows: {exc}", code=4)
+        return
+    payload = {"ok": True, "count": len(wins),
+               "windows": [w.to_dict() for w in wins]}
+    if as_json or wants_json():
+        emit_json(payload)
+        return
+    if not wins:
+        click.echo("  (no matching window)")
+        return
+    render_table(
+        ["hwnd", "title", "class", "pid", "x", "y", "w", "h"],
+        [[w.hwnd, w.title, w.class_name, w.pid, w.x, w.y, w.w, w.h]
+         for w in wins],
+    )
 
 
 # ----- capture --------------------------------------------------------------
@@ -87,20 +127,26 @@ def capture(window: int, out: str, as_json: bool) -> None:
 @click.option("--regex")
 @click.option("--max", type=int, default=200)
 @click.option("--pretty", is_flag=True)
+@json_option
 def detect(window: int, restore: bool, depth: int,
            name_contains: str | None, control_type: str | None, regex: str | None,
-           automation_id: str | None, max: int, pretty: bool) -> None:
+           automation_id: str | None, max: int, pretty: bool,
+           as_json: bool) -> None:
     """Enumerate interactive elements in a window."""
     try:
         elems = detect_elements(window, restore=restore, max_depth=depth)
     except BaseException as e:
-        msg = str(e) or repr(e)
-        click.echo(f"detect failed for hwnd={window}: {msg}", err=True)
-        sys.exit(4)
+        emit_error(f"detect failed for hwnd={window}: {str(e) or repr(e)}",
+                   code=4, hwnd=window)
+        return
     elems = find_elements(elems, name_contains=name_contains,
                           control_type=control_type, regex=regex,
                           automation_id=automation_id)
     elems = elems[:max]
+    if as_json or wants_json():
+        emit_json({"ok": True, "hwnd": window, "count": len(elems),
+                   "elements": [e.to_dict() for e in elems]})
+        return
     if pretty:
         for e in elems:
             click.echo(
@@ -108,7 +154,7 @@ def detect(window: int, restore: bool, depth: int,
                 f"{e.bbox.w}x{e.bbox.h}  '{e.name}'"
             )
     else:
-        click.echo(json.dumps([e.to_dict() for e in elems], ensure_ascii=False, indent=2))
+        emit_json([e.to_dict() for e in elems])
 
 
 # ----- status ---------------------------------------------------------------
@@ -117,7 +163,8 @@ def detect(window: int, restore: bool, depth: int,
 @click.option("--window", type=int, required=True)
 @click.option("--restore", is_flag=True)
 @click.option("--max", type=int, default=30)
-def status(window: int, restore: bool, max: int) -> None:
+@json_option
+def status(window: int, restore: bool, max: int, as_json: bool) -> None:
     """Quick snapshot of the most likely-interactive elements in a window.
 
     Useful for live debugging: shows buttons with names that contain any of
@@ -132,10 +179,14 @@ def status(window: int, restore: bool, max: int) -> None:
         "connect", "disconnect", "sign", "log", "upload", "download",
         "browse", "search", "find", "filter", "refresh", "reload",
     )
-    elems = detect_elements(window, restore=restore)
+    try:
+        elems = detect_elements(window, restore=restore)
+    except Exception as exc:
+        emit_error(f"status failed for hwnd={window}: {exc}", code=4,
+                   hwnd=window)
+        return
     seen = set()
-    print(f"[status] hwnd={window} total_elements={len(elems)}")
-    shown = 0
+    hits = []
     for e in elems:
         name_l = (e.name or "").lower()
         if not name_l or e.control_type != "Button":
@@ -147,12 +198,25 @@ def status(window: int, restore: bool, max: int) -> None:
         if key in seen:
             continue
         seen.add(key)
-        print(f"  Button @ ({e.center.x},{e.center.y}) {e.bbox.w}x{e.bbox.h}  {e.name!r}")
-        shown += 1
-        if shown >= max:
+        hits.append(e)
+        if len(hits) >= max:
             break
-    if shown == 0:
-        print("  (no action-verb buttons found)")
+    if as_json or wants_json():
+        emit_json({"ok": True, "hwnd": window, "total_elements": len(elems),
+                   "count": len(hits),
+                   "buttons": [{"name": e.name, "center": {"x": e.center.x,
+                                                           "y": e.center.y},
+                                "w": e.bbox.w, "h": e.bbox.h,
+                                "automation_id": e.automation_id}
+                               for e in hits]})
+        return
+    click.echo(f"[status] hwnd={window} total_elements={len(elems)}")
+    if not hits:
+        click.echo("  (no action-verb buttons found)")
+        return
+    render_table(["center", "size", "name", "automation_id"],
+                 [[f"({e.center.x},{e.center.y})", f"{e.bbox.w}x{e.bbox.h}",
+                   e.name, e.automation_id] for e in hits])
 
 
 # ----- click ----------------------------------------------------------------
@@ -171,27 +235,40 @@ def status(window: int, restore: bool, max: int) -> None:
               help="click title bar first to ensure window focus (UWP-safe)")
 @click.option("--go", "go", is_flag=True,
               help="actually click. Default is dry-run.")
+@json_option
 def tap(window: int, x: int | None, y: int | None,
           name_contains: str | None, control_type: str | None, regex: str | None,
           button: str, double: bool, return_to_origin: bool,
-          focus_titlebar: bool, go: bool) -> None:
+          focus_titlebar: bool, go: bool, as_json: bool) -> None:
     """Click by coordinates OR by element selector.
 
     By default the click is dry-run — only the resolved target is printed.
     Pass --go to actually click.
     """
+    target = None
     if x is not None and y is not None:
         cx, cy = x, y
         desc = f"@ ({cx},{cy})"
     elif name_contains or control_type or regex:
         if not window:
             raise click.UsageError("--window is required for selector-based click")
-        elems = detect_elements(window, restore=True)
+        try:
+            elems = detect_elements(window, restore=True)
+        except Exception as exc:
+            emit_error(f"could not read the tree of hwnd={window}: {exc}",
+                       code=4, hwnd=window)
+            return
         matches = find_elements(elems, name_contains=name_contains,
                                 control_type=control_type, regex=regex)
         if not matches:
-            click.echo("no matching element", err=True)
-            sys.exit(3)
+            emit_error(
+                "no element matched "
+                f"name_contains={name_contains!r} "
+                f"control_type={control_type!r} regex={regex!r} "
+                f"in hwnd={window}",
+                code=3, hwnd=window,
+            )
+            return
         target = matches[0]
         cx, cy = target.center.x, target.center.y
         desc = (f"@ ({cx},{cy})  name={target.name!r} "
@@ -200,6 +277,11 @@ def tap(window: int, x: int | None, y: int | None,
         raise click.UsageError("need --x/--y OR --name-contains/--control-type/--regex")
 
     if not go:
+        if as_json or wants_json():
+            emit_json({"ok": True, "clicked": False, "dry_run": True,
+                       "center": {"x": cx, "y": cy}, "description": desc,
+                       "target": target.to_dict() if target else None})
+            return
         click.echo(f"[dry-run] would click {desc}")
         return
 
@@ -217,6 +299,11 @@ def tap(window: int, x: int | None, y: int | None,
     click_xy(cx, cy, button=button, double=double)
     if return_to_origin:
         win32api.SetCursorPos((ox, oy))
+    if as_json or wants_json():
+        emit_json({"ok": True, "clicked": True, "dry_run": False,
+                   "center": {"x": cx, "y": cy}, "description": desc,
+                   "target": target.to_dict() if target else None})
+        return
     click.echo(f"clicked {desc}")
 
 
@@ -344,17 +431,26 @@ def browser_launch(url: str, port: int, profile_dir: str | None,
 
 @browser.command("tabs")
 @click.option("--port", type=int, default=9222, show_default=True)
-def browser_tabs(port: int) -> None:
+@json_option
+def browser_tabs(port: int, as_json: bool) -> None:
     """List DevTools page targets on the configured port."""
     from openeyes.backends import cdp as browser_backend
     try:
         pages = browser_backend.list_tabs(port)
     except Exception as e:
-        click.echo(f"failed to reach :{port}: {e}", err=True)
-        sys.exit(4)
+        emit_error(f"failed to reach :{port}: {e}", code=4, port=port)
+        return
     short = [{"id": p.get("id"), "title": p.get("title"),
               "url": p.get("url"), "type": p.get("type")} for p in pages]
-    click.echo(json.dumps(short, ensure_ascii=False, indent=2))
+    if as_json or wants_json():
+        emit_json({"ok": True, "port": port, "count": len(short),
+                   "tabs": short})
+        return
+    if not short:
+        click.echo("  (no page target)")
+        return
+    render_table(["id", "type", "title", "url"],
+                 [[t["id"], t["type"], t["title"], t["url"]] for t in short])
 
 
 @browser.command("scan")
@@ -443,19 +539,36 @@ def _resolve_browser_target(conn, port: int, hint: str | None,
 @click.option("--control-type", default=None)
 @click.option("--url-contains", default=None)
 @click.option("--go", "go", is_flag=True, help="actually click")
+@json_option
 def browser_click(port: int, hint: str | None, idx: int | None,
                    name_contains: str | None, control_type: str | None,
-                   url_contains: str | None, go: bool) -> None:
+                   url_contains: str | None, go: bool, as_json: bool) -> None:
     """Click a single element resolved by hint/idx/name-contains."""
     from openeyes.backends import cdp as browser_backend
-    chosen, conn = _resolve_browser_target(
-        None, port, hint, idx, name_contains, control_type, url_contains)
+    try:
+        chosen, conn = _resolve_browser_target(
+            None, port, hint, idx, name_contains, control_type, url_contains)
+    except Exception as exc:
+        emit_error(f"could not resolve a browser target on port {port}: {exc}",
+                   code=4, port=port)
+        return
     desc = (f"[cdp] '{chosen.name}' ({chosen.control_type}) "
             f"center=({chosen.center.x},{chosen.center.y})")
     if not go:
+        if as_json or wants_json():
+            emit_json({"ok": True, "clicked": False, "dry_run": True,
+                       "center": {"x": chosen.center.x, "y": chosen.center.y},
+                       "description": desc,
+                       "target": chosen.to_dict()})
+            return
         click.echo(f"[dry-run] would click {desc}")
         return
     browser_backend.click_center(conn, chosen)
+    if as_json or wants_json():
+        emit_json({"ok": True, "clicked": True, "dry_run": False,
+                   "center": {"x": chosen.center.x, "y": chosen.center.y},
+                   "description": desc, "target": chosen.to_dict()})
+        return
     click.echo(f"clicked {desc}")
 
 
@@ -551,8 +664,10 @@ def vision(detections: str, origin_x: int, origin_y: int, score: float,
               help="detection JSON feeding the vision tier")
 @click.option("--max", type=int, default=200)
 @click.option("--pretty", is_flag=True)
+@json_option
 def resolve(window: int, port: int, url_contains: str | None,
-            vision_detections: str | None, max: int, pretty: bool) -> None:
+            vision_detections: str | None, max: int, pretty: bool,
+            as_json: bool) -> None:
     """Walk the backend chain (uia -> cdp -> vision) and report who answered."""
     from openeyes.core.resolve import resolve_elements
     vision_elements = None
@@ -568,6 +683,11 @@ def resolve(window: int, port: int, url_contains: str | None,
         vision_elements=vision_elements,
     )
     elements = result.elements[:max]
+    payload = result.to_dict()
+    payload["elements"] = payload["elements"][:max]
+    if as_json or wants_json():
+        emit_json(payload)
+        return
     if pretty:
         click.echo(f"used_backend: {result.used_backend or '(none)'}")
         for a in result.attempts:
@@ -579,9 +699,7 @@ def resolve(window: int, port: int, url_contains: str | None,
                 f"{e.bbox.w}x{e.bbox.h}  '{e.name}'  backend={e.backend}"
             )
     else:
-        payload = result.to_dict()
-        payload["elements"] = payload["elements"][:max]
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        emit_json(payload)
 
 
 # ----- webview -------------------------------------------------------------
@@ -593,20 +711,22 @@ def webview() -> None:
 
 @webview.command("describe")
 @click.option("--port", type=int, default=9333, show_default=True)
-def webview_describe(port: int) -> None:
+@json_option
+def webview_describe(port: int, as_json: bool) -> None:
     """Report whether a web view exposes a DevTools endpoint."""
     from openeyes.backends import webview2
     report = webview2.describe(port)
-    click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    emit_json(report)
     if not report["reachable"]:
-        raise SystemExit(2)
+        sys.exit(2)
 
 
 @webview.command("launch")
 @click.option("--exe", required=True, help="the desktop shell to start")
 @click.option("--port", type=int, default=9333, show_default=True)
 @click.option("--wait", type=float, default=20.0, show_default=True)
-def webview_launch(exe: str, port: int, wait: float) -> None:
+@json_option
+def webview_launch(exe: str, port: int, wait: float, as_json: bool) -> None:
     """Start a shell with a DevTools port for its web view.
 
     The shell must be closed first: the environment variable that opens
@@ -614,9 +734,9 @@ def webview_launch(exe: str, port: int, wait: float) -> None:
     """
     from openeyes.backends import webview2
     report = webview2.launch_shell(exe, port=port, wait_s=wait)
-    click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+    emit_json(report)
     if not report["launched"]:
-        raise SystemExit(3)
+        sys.exit(3)
 
 
 # ----- app lifecycle -------------------------------------------------------
@@ -630,13 +750,18 @@ def app() -> None:
 @click.option("--title-contains")
 @click.option("--class-name")
 @click.option("--process-name")
+@json_option
 def app_state_cmd(title_contains: str | None, class_name: str | None,
-                 process_name: str | None) -> None:
+                 process_name: str | None, as_json: bool) -> None:
     """Report whether the app is running, window-gone, or not running."""
     from openeyes.core.lifecycle import app_state
-    state = app_state(title_contains=title_contains, class_name=class_name,
-                     process_name=process_name)
-    click.echo(json.dumps(state.to_dict(), ensure_ascii=False, indent=2))
+    try:
+        state = app_state(title_contains=title_contains, class_name=class_name,
+                          process_name=process_name)
+    except Exception as exc:
+        emit_error(f"could not read the app state: {exc}", code=4)
+        return
+    emit_json(state.to_dict())
 
 
 @app.command("ensure")
@@ -649,15 +774,23 @@ def app_state_cmd(title_contains: str | None, class_name: str | None,
 @click.option("--timeout", type=float, default=30.0, show_default=True)
 @click.option("--dry-run/--go", default=True,
               help="default only reports what would be done")
+@json_option
 def app_ensure_cmd(title_contains: str | None, class_name: str | None,
                   process_name: str | None, exe: str | None, aumid: str | None,
-                  timeout: float, dry_run: bool) -> None:
+                  timeout: float, dry_run: bool, as_json: bool) -> None:
     """Make sure the app is alive and usable, then prove it."""
     from openeyes.core.lifecycle import ensure_app
-    result = ensure_app(title_contains=title_contains, class_name=class_name,
-                       process_name=process_name, exe=exe, aumid=aumid,
-                       timeout=timeout, dry_run=dry_run)
-    click.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    try:
+        result = ensure_app(title_contains=title_contains,
+                            class_name=class_name,
+                            process_name=process_name, exe=exe, aumid=aumid,
+                            timeout=timeout, dry_run=dry_run)
+    except Exception as exc:
+        emit_error(f"could not ensure the app: {exc}", code=4)
+        return
+    emit_json(result.to_dict())
+    if not result.ok and not dry_run:
+        sys.exit(5)
 
 
 def main() -> int:

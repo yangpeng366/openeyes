@@ -84,6 +84,18 @@ versioning: [Semantic Versioning](https://semver.org/).
   a shell with the port enabled.
 - **`eyes detect --automation-id`** - keep only the control with a given
   stable id, the anchor that does not move when the visible label ticks.
+- **One output contract for the whole CLI.** `eyes` spoke several
+  dialects: some commands printed JSON, some printed text, some printed a
+  table. An agent could not rely on any of it. Now `--json` is a global
+  flag (it works before *or* after the subcommand), every command
+  answers with the same envelope, the human view is a rendering of the
+  same data, and a failure is a non-zero exit code plus a message that
+  names the cause. The human error line goes to **stderr** and the JSON
+  to **stdout**, so a caller that pipes stdout into a JSON parser never
+  receives an extra line.
+- **`eyes detect --automation-id`** and a **command table** in the skill,
+  so an agent can locate a control by its stable id and find the right
+  verb without reading prose.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a
