@@ -37,6 +37,7 @@ EXPECTED_TOOLS = [
     "app_ensure",
     "click_by_id",
     "act_and_verify",
+    "native_surfaces",
 ]
 
 PROBE_TEXT = "acceptance"

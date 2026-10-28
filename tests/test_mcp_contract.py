@@ -36,6 +36,7 @@ def test_mcp_exposes_stable_tool_set():
         "app_ensure",
         "click_by_id",
         "act_and_verify",
+        "native_surfaces",
     ]
 
 

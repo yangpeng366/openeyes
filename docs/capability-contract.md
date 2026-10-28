@@ -1,6 +1,6 @@
 # OpenEyes MCP capability contract
 
-This contract describes the 18 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, and the two act-then-prove tools `click_by_id` / `act_and_verify`). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
+This contract describes the 19 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, the two act-then-prove tools `click_by_id` / `act_and_verify`, and the read-only `native_surfaces` discovery tool). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
 
 ## Safety classes
 
@@ -30,6 +30,7 @@ This contract describes the 18 tools exposed by `openeyes.mcp.server` (v0.1.x sh
 | `app_ensure` | Native | write | `dry_run=true` default; `false` revives | Reports the app state (`running` / `window-gone` / `not-running`), restores a hidden window without stealing focus, or launches it (exe / Store AUMID) and waits until it is **observed** usable. `ok` is true only when usability was observed. |
 | `click_by_id` | Native | high-risk | `dry_run=true` default; `false` executes | Clicks a control addressed by its stable `automation_id`, preferring the UIA Invoke pattern (no pixel maths, no cursor movement, no focus theft). The anchor that does not move when the visible label ticks. |
 | `act_and_verify` | Native | high-risk | `dry_run=true` default; `false` executes | Acts, then reads the live accessibility tree to prove the expected state (`element_appears` / `element_vanishes` / `label_matches`). `ok` is true only when the state was observed; a delivered action that changed nothing is a miss. |
+| `native_surfaces` | Any | read | none | Reports the native ways an application can be driven: a command line it ships, a URL scheme it registers, a registered executable, or a Store AUMID. These are cheaper and more deterministic than driving the window. Lists what it probed, so "nothing found" is never confused with "nothing looked for". |
 
 ## Dry-run contract
 
@@ -93,7 +94,7 @@ Add
 ## Acceptance sequence
 
 1. Send MCP `initialize`, then the initialized notification.
-2. Call `tools/list` and require exactly the 18 names in the matrix above.
+2. Call `tools/list` and require exactly the 19 names in the matrix above.
 3. Call `browser_click` with a selector and no `go` field; require `clicked: false`, `would_click: true`, and a resolved target. When the browser has multiple page targets, include `url_contains` for the disposable page so resolution is deterministic rather than relying on the first tab.
 4. Verify no application state changed during step 3.
 

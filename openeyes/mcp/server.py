@@ -24,6 +24,8 @@ Tools (15 = 7 native + 6 browser + 2 structured-first):
                                 -> {ok, method, name, center, landed, error}
     act_and_verify(hwnd, automation_id, expect, method?, retries?, timeout?)
                                 -> {ok, attempts, observed, elapsed, error}
+    native_surfaces(app, cli_names?, schemes?, exe_names?)
+                                -> {found, surfaces: [{kind, target, command}], ...}
     resolve_elements(hwnd?, port?, url_contains?, detections_path?)
                                 -> {used_backend, attempts: [...], elements: [...]}
     vision_detect(detections_path?|--detections, origin_x?, origin_y?, score?)
@@ -530,6 +532,28 @@ async def list_tools() -> list[Tool]:
                 "required": ["hwnd", "expect"],
             },
         ),
+        Tool(
+            name="native_surfaces",
+            description="Report the native ways an application can be driven: "
+                        "a command line it ships, a URL scheme it registers, a "
+                        "registered executable, or a Store AUMID. These are "
+                        "cheaper and more deterministic than driving the "
+                        "window, so look here before clicking. Read-only.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "app": {"type": "string",
+                            "description": "the application display name"},
+                    "cli_names": {"type": "array", "items": {"type": "string"},
+                                  "description": "CLI names to look for"},
+                    "schemes": {"type": "array", "items": {"type": "string"},
+                                "description": "URL schemes to look for"},
+                    "exe_names": {"type": "array", "items": {"type": "string"},
+                                  "description": "App Paths entries to look for"},
+                },
+                "required": ["app"],
+            },
+        ),
 
     ]
 
@@ -618,6 +642,24 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "center": {"x": cx, "y": cy},
                 "target": target.to_dict() if target else None,
             }))]
+
+        if name == "native_surfaces":
+            from openeyes.core.native import discover
+            app = arguments.get("app")
+            if not app:
+                return [TextContent(type="text", text=_to_json(
+                    {"error": "need app", "tool": name}))]
+            try:
+                report = discover(
+                    app,
+                    cli_names=arguments.get("cli_names") or None,
+                    schemes=arguments.get("schemes") or None,
+                    exe_names=arguments.get("exe_names") or None,
+                )
+            except Exception as exc:
+                return [TextContent(type="text", text=_to_json(
+                    {"error": str(exc), "tool": name, "app": app}))]
+            return [TextContent(type="text", text=_to_json(report.to_dict()))]
 
         if name == "click_by_id":
             from openeyes.core.selector import click_element

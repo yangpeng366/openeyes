@@ -702,6 +702,45 @@ def resolve(window: int, port: int, url_contains: str | None,
         emit_json(payload)
 
 
+# ----- native ---------------------------------------------------------------
+
+@cli.group()
+def native() -> None:
+    """Find an application's own way to be driven (CLI / URL / shell)."""
+
+
+@native.command("find")
+@click.argument("app")
+@click.option("--cli-name", "cli_names", multiple=True,
+              help="a CLI name to look for (repeatable)")
+@click.option("--scheme", "schemes", multiple=True,
+              help="a URL scheme to look for (repeatable)")
+@click.option("--exe", "exe_names", multiple=True,
+              help="an App Paths entry to look for (repeatable)")
+@json_option
+def native_find(app: str, cli_names: tuple[str, ...], schemes: tuple[str, ...],
+                exe_names: tuple[str, ...], as_json: bool) -> None:
+    """Report the native surfaces an application offers.
+
+    A native surface is cheaper and more deterministic than driving the
+    window: a command line, a URL scheme, a registered executable or a
+    Store AUMID. When none is found the report says so, so "nothing
+    found" is never confused with "nothing looked for".
+    """
+    from openeyes.core.native import discover
+    try:
+        report = discover(app, cli_names=list(cli_names) or None,
+                          schemes=list(schemes) or None,
+                          exe_names=list(exe_names) or None)
+    except Exception as exc:
+        emit_error(f"could not look for native surfaces of {app!r}: {exc}",
+                   code=4, app=app)
+        return
+    emit_json(report.to_dict())
+    if not report.found:
+        sys.exit(2)
+
+
 # ----- webview -------------------------------------------------------------
 
 @cli.group()

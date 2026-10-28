@@ -40,6 +40,7 @@ names the cause.
 | `eyes browser launch/tabs/scan/click/type/shot` | Drive any Chromium browser over CDP |
 | `eyes app state` / `eyes app ensure` | Is the app alive? Revive it (window gone vs process gone) |
 | `eyes webview describe` / `launch` | Reach the DOM inside a Tauri / Wails / Electron app |
+| `eyes native find <app>` | Find the application's own CLI / URL scheme / registered executable / Store AUMID |
 | `eyes record replay <file>` | Inspect a recorded trajectory |
 
 ## For AI agents
@@ -434,6 +435,35 @@ raises `LightpandaError` naming that cause - it does not hang.
 - WSL forwards `localhost:9222` to the Windows host, so the OpenEyes CDP client keeps using `127.0.0.1:9222`.
 - Health probe: `http://127.0.0.1:9222/json/version` must respond before the launch returns.
 - First run pulls lightpanda/browser:nightly (~150 MB); subsequent runs reuse the local image.
+
+## Before you click: does the app have its own interface?
+
+The cheapest way to drive an application is the interface it already
+offers. A command line is deterministic, needs no coordinates and costs
+no image budget; so is a URL scheme that carries a command. Look here
+*before* reaching for the window.
+
+```bash
+eyes native find "Any VPN"
+eyes native find "7-Zip" --cli-name 7z
+eyes native find "印象笔记" --scheme evernote
+```
+
+Four shapes are probed, each with the lookup it needs:
+
+| Shape | Where it hides | Example |
+| --- | --- | --- |
+| `cli` | next to the GUI executable, often **not** on PATH | `7z.exe` beside `7zFM.exe` |
+| `url-scheme` | `HKCU\...\Classes\<scheme>` | `evernote:`, `obsidian://`, `vscode://` |
+| `app-path` | `HKLM\...\App Paths` | `7zFM.exe` |
+| `msix` | the shell's own application list | `AnywaySoftInc.AnyVPN_0qkrc2qacwvfm!App` |
+
+The report lists what it probed, so "nothing found" is never confused
+with "nothing looked for". When the shell reports an application as an
+opaque id, the report says so rather than dressing it up as a runnable
+path - a fake path is worse than no path.
+
+MCP: `native_surfaces(app, cli_names, schemes, exe_names)` (read-only).
 
 ## Backend priority — structure first, pixels last
 

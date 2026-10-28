@@ -96,6 +96,19 @@ versioning: [Semantic Versioning](https://semver.org/).
 - **`eyes detect --automation-id`** and a **command table** in the skill,
   so an agent can locate a control by its stable id and find the right
   verb without reading prose.
+- **Native surfaces: prefer the application's own interface.**
+  `openeyes.core.native` looks for the ways an application already offers
+  to be driven - a command line it ships, a URL scheme it registers, a
+  registered executable, or a Store AUMID - because those are cheaper and
+  more deterministic than clicking pixels. Four shapes are probed, each
+  with the lookup it needs: a CLI next to its GUI (`7z.exe` beside
+  `7zFM.exe`, usually not on PATH), a URL scheme (`evernote:`,
+  `obsidian://`, `vscode://`), an App Paths entry, and the shell's own
+  view of the application. The report lists what it probed, so "nothing
+  found" is never confused with "nothing looked for", and an opaque shell
+  id is reported as such rather than dressed up as a runnable path.
+  Exits: `eyes native find <app>` and the read-only MCP tool
+  `native_surfaces` (tool surface 18 -> 19).
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a
