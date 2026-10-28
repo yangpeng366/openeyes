@@ -17,6 +17,28 @@ A WebView2 app looks like a few empty panes to UIA - the tree stops at
 `webview describe` says so (with the exact way to open it) when the port
 is closed.
 
+## templates/ - three supervision templates
+
+Keepalive, login and scheduled work are the same loop: read the state,
+act when it is wrong, prove the act took effect, and schedule the next
+round **from the state** rather than from a fixed timer. All three are
+built on `openeyes.core.supervise`.
+
+```powershell
+# keepalive: renew while there is still margin left
+python examples\templates\keepalive.py --title-contains "Any VPN" \\
+    --automation-id KeepFreeAliveButton --trigger 10 --rounds 5
+
+# login: prove the sign-in actually happened
+python examples\templates\login.py --title-contains "Some App" \\
+    --login-automation-id LoginButton --signed-in-automation-id UserMenu
+
+# scheduled task: the command's own result is the proof
+python examples\templates\scheduled_task.py --command "echo done" --every 300
+```
+
+Each template is dry-run by default; pass `--go` to act.
+
 ## measure-interference.py
 
 Measure what a long-running loop costs and how often it lies: false

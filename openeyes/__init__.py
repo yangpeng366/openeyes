@@ -31,6 +31,7 @@ from openeyes.core.lifecycle import (
 from openeyes.core.resolve import Attempt, ResolveResult, resolve_elements
 from openeyes.core.schema import BBox, Center, Element, ElementState, WindowInfo
 from openeyes.core.selector import click_by_selector, click_element, detect_elements, find_elements
+from openeyes.core.supervise import Health, Round, SupervisionReport, supervise
 from openeyes.core.verify import act_until, wait_until
 from openeyes.core.windows import find_window, list_windows
 
@@ -49,6 +50,7 @@ __all__ = [
     "ensure_dpi_awareness", "current_dpi_awareness",
     "act_until", "wait_until",
     "app_state", "ensure_app", "launch_app", "restore_window",
+    "supervise", "Health", "Round", "SupervisionReport",
     "AppState", "EnsureResult",
     "STATE_RUNNING", "STATE_WINDOW_GONE", "STATE_NOT_RUNNING", "STATE_UNKNOWN",
     "resolve_elements", "ResolveResult", "Attempt",

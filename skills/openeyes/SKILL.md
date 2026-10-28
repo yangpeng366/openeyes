@@ -377,6 +377,47 @@ guess.
   attempt in ~2.0 s, with the Invoke pattern and without moving the
   cursor.
 
+## Supervision: keepalive, login and scheduled work are one loop
+
+Three jobs that look different share one shape: **read the state, act
+when it is wrong, prove the act took effect, schedule the next round from
+the state**. `openeyes.core.supervise` is that loop, once.
+
+```python
+from openeyes import supervise, Health
+
+report = supervise(
+    health=lambda: Health(ok=countdown > 10, due_in=countdown - 10),
+    act=lambda: click_element(hwnd, automation_id="KeepFreeAliveButton",
+                               method="invoke", dry_run=False),
+    expect=lambda: countdown > before,     # business state, not the label
+    max_rounds=5,
+)
+report.effective        # rounds where the state really changed
+report.misses           # delivered but nothing happened
+report.false_positive_rate
+report.interference_rate
+```
+
+Three rules the loop enforces:
+
+1. **The next round is scheduled from the state.** A fixed 20s poll
+   against a 20s expiry clicks exactly at 0:00 - the instant the session
+   dies. A state-driven supervisor renews while there is still margin.
+2. **Delivered is not effective.** A round counts as a success only when
+   the expected state was observed afterwards.
+3. **Interference is attributed to the automation.** The user's own
+   cursor keeps moving, so a cursor move counts only when the automation
+   drove the pointer.
+
+Templates for the three common shapes live in `examples/templates/`:
+
+| Template | The state it reads | The proof |
+| --- | --- | --- |
+| `keepalive.py` | a countdown | the countdown went back up |
+| `login.py` | a presence (the login form) | the form is gone |
+| `scheduled_task.py` | the clock | the command's own result |
+
 ## Troubleshooting cards
 
 | Symptom | Cause | Fix |

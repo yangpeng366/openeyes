@@ -109,6 +109,15 @@ versioning: [Semantic Versioning](https://semver.org/).
   id is reported as such rather than dressed up as a runnable path.
   Exits: `eyes native find <app>` and the read-only MCP tool
   `native_surfaces` (tool surface 18 -> 19).
+- **`openeyes.core.supervise`** - the one loop shape behind keepalive,
+  login and scheduled work: read the state, act when it is wrong, prove
+  the act took effect, and schedule the next round from the state. A
+  fixed timer against a deadline clicks exactly at the expiry; a
+  state-driven supervisor renews while there is still margin. A round
+  counts as a success only when the expected state was observed, and
+  interference is attributed to the automation rather than to the
+  desktop. Templates in `examples/templates/` cover the three common
+  shapes.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a
