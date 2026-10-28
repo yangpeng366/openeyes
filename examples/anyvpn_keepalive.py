@@ -39,6 +39,7 @@ from pathlib import Path
 
 from openeyes import click_element, detect_elements, ensure_dpi_awareness, find_elements
 from openeyes.core.lifecycle import app_state, ensure_app, restore_window
+from openeyes.core.supervise import Health, Round, supervise
 from openeyes.core.verify import act_until
 
 # Coordinates must be physical screen pixels, otherwise the click lands
@@ -253,6 +254,20 @@ def renew(hwnd: int, *, dry_run: bool, retries: int,
     return verdict, detail
 
 
+def renew_for_supervisor(hwnd: int, *, dry_run: bool, retries: int,
+                          out_dir: Path | None, iteration: int) -> dict:
+    """Renew once and report it in the shape the supervisor expects.
+
+    The domain verdict (hit / miss / gone / unknown) travels with the
+    report, so the loop can say *why* a round failed instead of only
+    that it did.
+    """
+    verdict, detail = renew(hwnd, dry_run=dry_run, retries=retries,
+                            out_dir=out_dir, iteration=iteration)
+    return {"ok": verdict in ("hit", "dry-run", "unknown"),
+            "method": "invoke", "verdict": verdict, "detail": detail}
+
+
 def connect(hwnd: int, *, dry_run: bool) -> tuple[bool, str]:
     """Click 'Secure my connection' so the free session starts again.
 
@@ -313,120 +328,184 @@ def main() -> int:
 
     out_dir = Path(args.screenshot_dir) if args.screenshot_dir else None
     stats = {"renewed": 0, "missed": 0, "reconnects": 0, "relaunches": 0,
-             "rounds": 0, "unknown": 0}
+             "rounds": 0, "unknown": 0, "failed": 0}
     t_start = time.time()
-    i = 0
-    next_due = time.monotonic()
 
     print(f"[openeyes] keepalive: go={args.go} trigger={args.trigger}s "
           f"interval={args.interval}s bootstrap={args.bootstrap} "
           f"hide={args.hide} dpi={ensure_dpi_awareness()}", flush=True)
 
-    try:
-        while True:
-            stats["rounds"] += 1
-            hwnd = find_anyvpn_window()
-            if hwnd is None:
-                if not args.bootstrap:
-                    if not args.quiet:
-                        print(f"[openeyes] iter {i}: Any VPN not running "
-                              f"(--bootstrap not set, not launching it)",
-                              flush=True)
-                else:
-                    print(f"[openeyes] iter {i}: Any VPN is not running -> "
-                          f"relaunching", flush=True)
-                    stats["relaunches"] += 1
-                    relaunch_app()
-                time.sleep(min(5.0, args.interval))
-                i += 1
-                if args.max_iter and i >= args.max_iter:
-                    break
-                continue
+    # The renewal loop is the generic supervisor: read the countdown,
+    # act when it is inside the renewal window, prove the countdown went
+    # back up, and schedule the next round from the state that remains.
+    # A fixed interval against a 20s session clicks exactly at 0:00.
+    round_index = {"i": 0}
 
-            show_without_focus(hwnd)
-            label, countdown = read_keepalive(hwnd)
+    def supervisor_health() -> Health:
+        """Is the session healthy, and when is the next check due?"""
+        hwnd = find_anyvpn_window()
+        if hwnd is None:
+            if args.bootstrap:
+                print(f"[openeyes] iter {round_index['i']}: Any VPN is not "
+                      "running -> relaunching", flush=True)
+                stats["relaunches"] += 1
+                relaunch_app()
+            elif not args.quiet:
+                print(f"[openeyes] iter {round_index['i']}: Any VPN not "
+                      "running (--bootstrap not set, not launching it)",
+                      flush=True)
+            return Health(ok=False, due_in=min(5.0, args.interval),
+                          detail="Any VPN is not running")
 
+        show_without_focus(hwnd)
+        label, countdown = read_keepalive(hwnd)
+
+        if label is None:
+            # no keepalive button -> the free session is down
+            if should_connect(has_keepalive_button=False,
+                              bootstrap=args.bootstrap):
+                print(f"[openeyes] iter {round_index['i']}: session down -> "
+                      "reconnecting", flush=True)
+                _shoot(out_dir, hwnd, f"before_reconnect{round_index['i']}")
+                ok, detail = connect(hwnd, dry_run=not args.go)
+                if ok:
+                    stats["reconnects"] += 1
+                    label, countdown = wait_for_keepalive(
+                        hwnd, timeout=min(30.0, args.interval))
+                print(f"[openeyes] iter {round_index['i']}: reconnect {detail}",
+                      flush=True)
+            elif not args.quiet:
+                print(f"[openeyes] iter {round_index['i']}: no keepalive button "
+                      "(session down)", flush=True)
+            if args.hide:
+                hide_window(hwnd)
             if label is None:
-                # no keepalive button -> the free session is down
-                if should_connect(has_keepalive_button=False,
-                                  bootstrap=args.bootstrap):
-                    print(f"[openeyes] iter {i}: session down -> reconnecting",
-                          flush=True)
-                    _shoot(out_dir, hwnd, f"before_reconnect{i}")
-                    ok, detail = connect(hwnd, dry_run=not args.go)
-                    if ok:
-                        stats["reconnects"] += 1
-                        # wait for the session to come up instead of
-                        # hammering the connect button every round
-                        label, countdown = wait_for_keepalive(
-                            hwnd, timeout=min(30.0, args.interval))
-                    print(f"[openeyes] iter {i}: reconnect {detail}", flush=True)
-                elif not args.quiet:
-                    print(f"[openeyes] iter {i}: no keepalive button "
-                          f"(session down)", flush=True)
-                if args.hide:
-                    hide_window(hwnd)
-                if label is None:
-                    next_due = time.monotonic() + args.interval
-                else:
-                    next_due = time.monotonic() + seconds_until_due(
-                        countdown, args.trigger)
-            elif not should_renew(countdown, args.trigger):
-                if not args.quiet:
-                    print(f"[openeyes] iter {i}: timer {countdown}s left, "
-                          f"renewal in {seconds_until_due(countdown, args.trigger):.0f}s",
-                          flush=True)
-                if args.hide:
-                    hide_window(hwnd)
-                next_due = time.monotonic() + seconds_until_due(countdown, args.trigger)
-            else:
-                _shoot(out_dir, hwnd, f"before_renew{i}")
-                verdict, detail = renew(hwnd, dry_run=not args.go,
-                                        retries=args.retries, out_dir=out_dir,
-                                        iteration=i)
-                _shoot(out_dir, hwnd, f"after_renew{i}")
-                if verdict == "hit":
-                    stats["renewed"] += 1
-                    print(f"[openeyes] iter {i}: RENEWED  {detail}", flush=True)
-                elif verdict == "dry-run":
-                    print(f"[openeyes] iter {i}: [dry-run] would renew  {detail}",
-                          flush=True)
-                elif verdict == "gone":
-                    stats["missed"] += 1
-                    print(f"[openeyes] iter {i}: session lapsed during renewal "
-                          f"({detail})", flush=True)
-                elif verdict == "unknown":
-                    stats["unknown"] += 1
-                    print(f"[openeyes] iter {i}: renewed (no countdown to verify) "
-                          f"{detail}", flush=True)
-                else:
-                    stats["missed"] += 1
-                    print(f"[openeyes] iter {i}: RENEWAL FAILED  {detail}",
-                          flush=True)
-                if verdict in ("hit", "dry-run", "unknown") and args.hide:
-                    hide_window(hwnd)
-                next_due = time.monotonic() + (
-                    seconds_until_due(countdown, args.trigger) if verdict != "hit"
-                    else max(2.0, seconds_until_due(19, args.trigger)))
+                return Health(ok=False, due_in=args.interval,
+                              detail="no keepalive button (session down)")
+            return Health(ok=False, due_in=seconds_until_due(countdown,
+                                                             args.trigger),
+                          detail=f"timer {countdown}s left - renew now",
+                          state={"countdown": countdown})
 
-            # wait until the next round is due (never touch the UI while waiting)
-            while True:
-                remaining = next_due - time.monotonic()
-                if remaining <= 0:
-                    break
-                time.sleep(min(0.5, remaining))
+        if not should_renew(countdown, args.trigger):
+            if not args.quiet:
+                print(f"[openeyes] iter {round_index['i']}: timer {countdown}s "
+                      f"left, renewal in "
+                      f"{seconds_until_due(countdown, args.trigger):.0f}s",
+                      flush=True)
+            if args.hide:
+                hide_window(hwnd)
+            return Health(ok=True,
+                          due_in=seconds_until_due(countdown, args.trigger),
+                          detail=f"timer {countdown}s left",
+                          state={"countdown": countdown})
 
-            i += 1
-            if args.max_iter and i >= args.max_iter:
-                break
+        return Health(ok=False, due_in=0.0,
+                      detail=f"timer {countdown}s left - renew now",
+                      state={"countdown": countdown})
+
+    def supervisor_act() -> dict:
+        hwnd = find_anyvpn_window()
+        if hwnd is None:
+            return {"ok": False, "method": "none", "verdict": "failed",
+                    "detail": "Any VPN is not running"}
+        _shoot(out_dir, hwnd, f"before_renew{round_index['i']}")
+        report = renew_for_supervisor(hwnd, dry_run=not args.go,
+                                      retries=args.retries, out_dir=out_dir,
+                                      iteration=round_index["i"])
+        _shoot(out_dir, hwnd, f"after_renew{round_index['i']}")
+        return report
+
+    def supervisor_preview() -> dict:
+        """What the action *would* report - a read-only probe.
+
+        A dry run must not act, so the preview answers without clicking:
+        it says whether the app is even there to be clicked.
+        """
+        hwnd = find_anyvpn_window()
+        if hwnd is None:
+            return {"ok": False, "method": "none", "verdict": "failed",
+                    "detail": "Any VPN is not running"}
+        return {"ok": True, "method": "dry-run", "verdict": "dry-run",
+                "detail": "Any VPN is up; the renewal would be attempted"}
+
+    def supervisor_expect() -> bool:
+        """The proof: the countdown went back up, never "the label changed"."""
+        hwnd = find_anyvpn_window()
+        if hwnd is None:
+            return False
+        _, after = read_keepalive(hwnd)
+        return after is not None and after > args.trigger
+
+    def supervisor_on_round(round_row: Round) -> None:
+        verdict = round_row.verdict
+        detail = round_row.detail
+        if verdict == "hit":
+            print(f"[openeyes] iter {round_row.index}: RENEWED  {detail}",
+                  flush=True)
+        elif verdict == "dry-run":
+            print(f"[openeyes] iter {round_row.index}: [dry-run] would renew  "
+                  f"{detail}", flush=True)
+        elif verdict == "gone":
+            print(f"[openeyes] iter {round_row.index}: session lapsed during "
+                  f"renewal ({detail})", flush=True)
+        elif verdict == "failed":
+            # the action could not be delivered (the app or the control
+            # was gone) - that is a failure, not a missed renewal
+            print(f"[openeyes] iter {round_row.index}: renewal not delivered "
+                  f"({detail})", flush=True)
+        elif verdict == "unknown":
+            print(f"[openeyes] iter {round_row.index}: renewed (no countdown to "
+                  f"verify) {detail}", flush=True)
+        elif round_row.acted and verdict != "failed":
+            print(f"[openeyes] iter {round_row.index}: RENEWAL FAILED  {detail}",
+                  flush=True)
+        if round_row.acted and verdict in ("hit", "dry-run", "unknown"):
+            hwnd = find_anyvpn_window()
+            if hwnd is not None and args.hide:
+                hide_window(hwnd)
+        round_index["i"] = round_row.index + 1
+
+    report = None
+    try:
+        report = supervise(
+            health=supervisor_health,
+            act=supervisor_act,
+            expect=supervisor_expect,
+            interval=args.interval,
+            max_rounds=args.max_iter,
+            dry_run=not args.go,
+            retries=args.retries,
+            timeout=1.2,
+            poll_interval=0.2,
+            preview=supervisor_preview,
+            on_round=supervisor_on_round,
+        )
     except KeyboardInterrupt:
         print("[openeyes] interrupted by user")
 
     elapsed = time.time() - t_start
+    if report is not None:
+        # The supervisor report is the single source of truth for the
+        # counts; the script only adds what it did on its own.
+        stats["rounds"] = report.rounds
+        stats["renewed"] = report.effective
+        stats["missed"] = report.misses
+        stats["failed"] = report.failures
     print(f"[openeyes] summary: rounds={stats['rounds']} renewed={stats['renewed']} "
           f"missed={stats['missed']} unknown={stats['unknown']} "
+          f"failed={stats['failed']} "
           f"reconnects={stats['reconnects']} relaunches={stats['relaunches']} "
           f"elapsed={elapsed:.1f}s")
+    if report is not None:
+        # The trust numbers travel with every run: how often the loop
+        # claimed a success that did not happen, and how often it
+        # disturbed the person sharing the desktop.
+        print(f"[openeyes] trust: false_positive_rate="
+              f"{report.false_positive_rate:.2%} "
+              f"interference_rate={report.interference_rate:.2%} "
+              f"effective={report.effective} misses={report.misses} "
+              f"failures={report.failures}")
     return 0
 
 

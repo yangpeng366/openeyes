@@ -81,13 +81,17 @@ class Round:
     due_in: float | None = None
     detail: str = ""
     error: str | None = None
+    #: the caller's own verdict for the action ("hit", "gone", "unknown",
+    #: ...), when it has one. The supervisor's ``effective`` is the
+    #: generic judgement; this is the domain-specific one.
+    verdict: str = ""
     interference: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "index": self.index, "healthy": self.healthy, "acted": self.acted,
             "effective": self.effective, "due_in": self.due_in,
-            "detail": self.detail, "error": self.error,
+            "detail": self.detail, "error": self.error, "verdict": self.verdict,
             "interference": self.interference,
         }
 
@@ -190,6 +194,7 @@ def supervise(*, health: Callable[[], Health],
               timeout: float = 2.0,
               poll_interval: float = 0.2,
               snapshot: Callable[[], dict[str, Any]] | None = None,
+              preview: Callable[[], Any] | None = None,
               on_round: Callable[[Round], None] | None = None,
               sleep: Callable[[float], None] = time.sleep) -> SupervisionReport:
     """Watch a target, act when it is unhealthy, and prove the act worked.
@@ -213,6 +218,14 @@ def supervise(*, health: Callable[[], Health],
     ``snapshot`` may return the ambient facts the interference accounting
     needs (for example ``{"foreground": hwnd}``); without it the loop
     still runs and reports no interference.
+
+    ``preview`` is a read-only probe used in dry-run mode to report what
+    the action *would* say. The action itself is never called in a dry
+    run - that is the whole promise of the mode.
+
+    ``preview`` is a read-only probe used in dry-run mode to report what
+    the action *would* say. The action itself is never called in a dry
+    run - that is the whole promise of the mode.
     """
     report = SupervisionReport()
     index = 0
@@ -232,18 +245,41 @@ def supervise(*, health: Callable[[], Health],
             report.actions += 1
             round_row.acted = True
             if dry_run:
+                # A dry run must not act, so the action is never called.
+                # A caller that wants to report what the action *would*
+                # say supplies ``preview`` - a read-only probe.
+                if preview is not None:
+                    try:
+                        peek = preview()
+                    except Exception as exc:
+                        peek = None
+                        round_row.error = f"{type(exc).__name__}: {exc}"
+                    if isinstance(peek, dict):
+                        round_row.verdict = str(peek.get("verdict") or "")
+                        if peek.get("ok") is False:
+                            # A preview that reports the action would fail
+                            # is still a failure the operator must see.
+                            report.failures += 1
+                            round_row.verdict = round_row.verdict or "failed"
                 round_row.detail = (round_row.detail + "; dry-run"
                                     if round_row.detail else "dry-run")
-                round_row.error = None
             else:
                 outcome = act_until(act, expect, retries=retries,
                                     timeout=timeout, interval=poll_interval)
                 action_report = outcome["result"] \
                     if isinstance(outcome["result"], dict) else None
                 round_row.effective = bool(outcome["ok"])
+                if isinstance(action_report, dict):
+                    round_row.verdict = str(action_report.get("verdict") or "")
                 if outcome["ok"]:
                     report.effective += 1
-                elif outcome["result"]:
+                elif action_report is not None and not action_report.get("ok"):
+                    # The action itself failed - the target was gone, the
+                    # control had moved. That is a failure to deliver, not a
+                    # delivered action that changed nothing.
+                    report.failures += 1
+                    round_row.verdict = round_row.verdict or "failed"
+                elif outcome["result"] is not None:
                     # the action was delivered but the state did not move
                     report.misses += 1
                 else:

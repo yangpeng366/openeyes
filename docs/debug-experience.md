@@ -178,6 +178,56 @@ act_and_verify(dry_run=false)      -> ok=true, attempts=1, elapsed 2.03s
 
 ---
 
+## 保活改用 supervise + 打包应用的身份（2026-10-28）
+
+### 保活脚本终于用了通用循环
+
+`examples/anyvpn_keepalive.py` 的自写循环是仓里最后一块没用
+`openeyes.core.supervise` 的地方。改写后：读倒计时 → 进续期窗才动 →
+自证倒计时**回跳** → 按剩余时间排下一轮。外围脚手架（重启/重连/隐藏/
+截图）不变。
+
+**每次运行现在都带信任数字**：
+
+```
+[openeyes] summary: rounds=3 renewed=0 missed=0 unknown=0 failed=0 ...
+[openeyes] trust: false_positive_rate=0.00% interference_rate=0.00% ...
+```
+
+### 改写中暴露的三个语义 bug
+
+1. **dry-run 变成了会动作** —— 为拿「动作会报什么 verdict」而调用了
+   `act()`，等于 dry-run 也执行了动作。改为独立的只读 `preview` 钩子，
+   动作永不调用（这条被测试当场抓住）。
+2. **动作失败 ≠ 续期失败** —— 「App 根本不在」原先被记成 missed（像是
+   点了没生效）。实为 delivery failure，应记 failures。
+3. **两套账** —— 脚本自己记一套、supervise 记一套，数字对不上。改为
+   **以 supervise 报告为唯一口径**。
+
+### 打包应用的身份：Any VPN 实测
+
+| 事实 | 值 |
+| --- | --- |
+| 显示名 | Any VPN |
+| 真实进程 | `VpnGui.exe`（在 `WindowsApps\AnywaySoftInc.AnyVPN_...\`） |
+| 窗口宿主 | `ApplicationFrameHost.exe`（类名 `ApplicationFrameWindow`） |
+
+于是：
+
+- 按显示名查进程 → **找不到**（进程叫 VpnGui）
+- 按显示名过滤窗口 → **也找不到**（窗口不属该进程）
+
+**修法**：进程检查识别「进程来自哪个包」（按包目录名匹配，忽略标点与
+版本后缀）；窗口查找以**窗口身份（标题/类名）为主**，属主进程只作次要
+信号，且框架宿主一律放行。
+
+实测：`app_state(title_contains="Any VPN", process_name="Any VPN")` 从
+`not-running` 变为 `running, hwnd=4333408`。
+
+> 这条坑对所有 Store/UWP 应用通用 —— 飞书、钉钉、元宝同理。
+
+---
+
 ## 度量而不是相信：误报率与干扰度（2026-10-27）
 
 保活脚本「日志一片 verified，会话其实在掉」这件事，靠人眼看不出来——

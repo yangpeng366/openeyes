@@ -118,6 +118,23 @@ versioning: [Semantic Versioning](https://semver.org/).
   interference is attributed to the automation rather than to the
   desktop. Templates in `examples/templates/` cover the three common
   shapes.
+- **The AnyVPN keepalive now runs on the generic supervisor.** The
+  hand-written loop was the last piece of the repository that did not use
+  `openeyes.core.supervise`. The renewal loop is now the supervisor: read
+  the countdown, act inside the renewal window, prove the countdown went
+  back up, and schedule the next round from the state that remains. The
+  scaffolding around it (relaunch, reconnect, hide, screenshots) is
+  unchanged. Every run now ends with its trust numbers:
+  `false_positive_rate` and `interference_rate`.
+- **A packaged application's identity is now resolved.** A Store / MSIX
+  app rarely runs under its display name - Any VPN is `VpnGui.exe` inside
+  WindowsApps, and its window belongs to `ApplicationFrameHost.exe`.
+  Two consequences, both found by running against the real app: a
+  name-based process check reported the app as *not running* while its
+  window was on screen, and a window filtered by that process name was
+  never found. The process check now recognises the package a process
+  comes from, and the window's identity (title, class) is the primary
+  signal with the owning process only a secondary one.
 - The decision layer can now run against a **local System One node** (a local
   XERJ node speaks the same wire): `TypesafeJevScorer` names each option by
   the key of `criteria`, as the protocol does, maps the answer back to a

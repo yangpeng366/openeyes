@@ -15,6 +15,7 @@ Three platform facts this module encodes:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -46,6 +47,53 @@ def _win32():
     import win32gui
     import win32process
     return win32gui, win32process
+
+
+def _owner_may_be(wanted: str, pid: int) -> bool:
+    """Whether the window's owning process may belong to ``wanted``.
+
+    A packaged application's window is owned by the framework host, so
+    the owner rarely equals the application name. The check is therefore
+    permissive: it only rejects an owner that is plainly a *different*
+    application with no package relationship.
+    """
+    owner = _process_name_of(pid).lower()
+    if owner.endswith(".exe"):
+        owner = owner[:-4]
+    if not owner:
+        return True
+    # "AnyVPN" and "Any VPN" are the same name written differently.
+    if owner.replace(" ", "") == wanted.replace(" ", ""):
+        return True
+    # A framework host carries no identity of its own; the caller
+    # resolves the real application separately.
+    return owner in ("applicationframehost", "applicationframewindow",
+                     "windows.ui.core.corewindow")
+
+
+def _package_of_window(process_name: str) -> str:
+    """The package directory a process belongs to, if any ("" otherwise).
+
+    A packaged application runs under a framework host
+    (``ApplicationFrameHost``), so the window's owning process says
+    nothing about which application the window belongs to. The
+    application is found through the package that owns the host.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return ""
+    for proc in psutil.process_iter(["name", "exe"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            exe = (proc.info.get("exe") or "").lower()
+        except Exception:
+            continue
+        if name == process_name + ".exe" and exe and "windowsapps" in exe:
+            parts = exe.split("\\")
+            if len(parts) >= 2:
+                return parts[-2]
+    return ""
 
 
 def _process_name_of(pid: int) -> str:
@@ -97,12 +145,14 @@ def find_window(*, title_contains: str | None = None,
             pid = int(win32process.GetWindowThreadProcessId(hwnd)[1])
         except Exception:
             pid = 0
-        if wanted:
-            owner = _process_name_of(pid).lower()
-            if owner.endswith(".exe"):
-                owner = owner[:-4]
-            if owner != wanted:
-                return
+        # A packaged application's window belongs to the framework host
+        # (ApplicationFrameHost), never to the application itself, so the
+        # owning process is often NOT the application. The window identity
+        # (its title and class) is the primary signal; the process is a
+        # secondary one.
+        if (wanted and not _owner_may_be(wanted, pid)
+                and not _package_of_window(_process_name_of(pid).lower())):
+            return
         hits.append(WindowProbe(
             hwnd=int(hwnd), pid=pid, title=title, class_name=cls,
             minimized=bool(win32gui.IsIconic(hwnd)),
@@ -138,11 +188,46 @@ def state_for_window(hwnd: int):
     )
 
 
+def _package_matches(package_dir: str, wanted: str) -> bool:
+    """Whether a package directory belongs to the wanted application.
+
+    "AnywaySoftInc.AnyVPN_1.0.8.0_x64__0qkrc2qacwvfm" against "Any VPN":
+    the punctuation and the case differ, and the version suffix has to
+    go. What survives is the two halves of the package name, either of
+    which may be the part the caller knows.
+    """
+    stem = package_dir.split("_")[0].lower()
+    if not stem:
+        return False
+    parts = [p for p in re.split(r"[^a-z0-9]+", stem) if p]
+    wanted_parts = [p for p in re.split(r"[^a-z0-9]+", wanted.lower()) if p]
+    if not parts or not wanted_parts:
+        return False
+    # "anyvpn" against "anyvpn" (the display name collapsed) or against
+    # "any" + "vpn" (the display name's own words).
+    collapsed = "".join(parts)
+    if collapsed == "".join(wanted_parts):
+        return True
+    if "".join(wanted_parts) in collapsed:
+        return True
+    # The wanted name may be one of the package's words, e.g. "vpn" in
+    # "anyvpn".
+    return all(part in collapsed for part in wanted_parts)
+
+
 def process_alive(process_name: str) -> tuple[bool, str]:
     """Whether a process with this name is running.
 
     ``process_name`` may be given with or without the ``.exe`` suffix.
     Returns ``(alive, detail)``.
+
+    A packaged (Store / MSIX) application rarely runs under its display
+    name: Any VPN shows up as ``VpnGui.exe`` inside WindowsApps, and its
+    window belongs to ``ApplicationFrameHost.exe``. Matching by name
+    alone would therefore report such an application as not running
+    while its window is plainly on screen, so a name that matches no
+    process also looks for a **package** of that name - the package
+    directory carries the real executable.
     """
     wanted = process_name.strip().lower()
     if wanted.endswith(".exe"):
@@ -156,13 +241,25 @@ def process_alive(process_name: str) -> tuple[bool, str]:
         psutil = None  # type: ignore[assignment]
 
     if psutil is not None:
-        for proc in psutil.process_iter(["name"]):
+        for proc in psutil.process_iter(["name", "exe"]):
             try:
                 name = (proc.info.get("name") or "").lower()
+                exe = (proc.info.get("exe") or "").lower()
             except Exception:
                 continue
             if name == wanted + ".exe" or name == wanted:
                 return True, f"process {name} is running (pid {proc.pid})"
+            # A packaged application: the executable lives in a directory
+            # named after the package, e.g.
+            # ...\WindowsApps\AnywaySoftInc.AnyVPN_1.0.8.0_x64__...\
+            # The display name ("Any VPN") and the package name
+            # ("AnywaySoftInc.AnyVPN") differ in punctuation and case, so
+            # the comparison ignores them.
+            if exe and "windowsapps" in exe:
+                package = exe.rsplit("\\", 2)[-2].lower() if "\\" in exe else ""
+                if package and _package_matches(package, wanted):
+                    return True, (f"process {name} is running (pid {proc.pid}) "
+                                  f"from package {package!r}")
         return False, f"no process named {wanted!r} is running"
 
     # Fallback: tasklist is slower but always present on Windows.

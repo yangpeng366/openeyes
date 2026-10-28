@@ -158,6 +158,72 @@ def test_a_round_is_reported_as_it_happens():
     assert seen[0].effective is True
 
 
+# ------------------------------------------------- outcome classification
+def test_an_action_that_reports_failure_is_a_failure_not_a_miss():
+    """The target was gone: the action never landed. Not a missed renewal."""
+    report = supervise(
+        health=lambda: Health(ok=False, due_in=1.0),
+        act=lambda: {"ok": False, "method": "none", "verdict": "failed"},
+        expect=lambda: False,
+        max_rounds=1,
+        retries=1,
+        sleep=_no_sleep,
+    )
+    assert report.misses == 0
+    assert report.failures == 1
+    assert report.false_positive_rate == 0.0
+
+
+def test_the_caller_verdict_travels_with_the_round():
+    report = supervise(
+        health=lambda: Health(ok=False, due_in=1.0),
+        act=lambda: {"ok": True, "method": "invoke", "verdict": "hit"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+    )
+    assert report.timeline[0].verdict == "hit"
+
+
+def test_a_dry_run_still_reports_the_verdict():
+    """A dry run says what it *would* do, so the operator sees the truth.
+
+    The action is never called - a read-only ``preview`` probe supplies
+    the verdict instead.
+    """
+    def boom():
+        raise AssertionError("a dry run must not act")
+
+    report = supervise(
+        health=lambda: Health(ok=False, due_in=1.0),
+        act=boom,
+        preview=lambda: {"ok": False, "method": "none", "verdict": "failed"},
+        expect=lambda: False,
+        max_rounds=1,
+        dry_run=True,
+        sleep=_no_sleep,
+    )
+    assert report.timeline[0].verdict == "failed"
+    assert report.failures == 1
+
+
+def test_a_dry_run_does_not_count_a_working_action_as_a_failure():
+    def boom():
+        raise AssertionError("a dry run must not act")
+
+    report = supervise(
+        health=lambda: Health(ok=False, due_in=1.0),
+        act=boom,
+        preview=lambda: {"ok": True, "method": "invoke", "verdict": "hit"},
+        expect=lambda: True,
+        max_rounds=1,
+        dry_run=True,
+        sleep=_no_sleep,
+    )
+    assert report.failures == 0
+    assert report.effective == 0
+
+
 # -------------------------------------------------------------- interference
 def test_a_user_moving_the_mouse_is_not_charged_to_the_automation():
     """The desktop's own mouse movement is not the loop's doing."""
