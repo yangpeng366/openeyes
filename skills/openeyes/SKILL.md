@@ -65,6 +65,8 @@ names the cause.
    Word, Excel, Explorer.
 2. **CDP** (`openeyes.backends.cdp`) — Chromium browser pages (Edge / Chrome
    / WebView2). Raw websocket-client against Chrome DevTools Protocol.
+   Use **WebDriver BiDi** (`openeyes.backends.bidi`) for Firefox Remote Agent;
+   both return the same structured `Element` schema.
    No LLM vision needed, no model on disk. The DOM probe returns structured
    ``Element[]`` with name, role, viewport-relative bbox, automation_id,
    class, parent chain. Pluggable in-page JS probe filters zero-area and
@@ -135,6 +137,27 @@ interactive element (``a``, ``s``, ``d``, ``f``, ... up to 2-letter,
 3-letter up to 1884 total). An LLM can answer "click element ``s``"
 without describing coordinates — same UX as UIA mode.
 
+### Browser (Firefox WebDriver BiDi)
+
+Firefox Remote Agent is supported with the same scan/click/type verbs. It does
+not need an API key; keep the Remote Agent bound to localhost.
+
+```powershell
+# Firefox must already be running with --remote-debugging-port=9222
+# Direct connection
+eyes browser tabs --protocol bidi
+
+# SSH local forward 19222 -> remote localhost:9222
+# Firefox checks the remote port in the HTTP Host header.
+eyes browser scan --protocol bidi --port 19222 --host-header localhost:9222 --url-contains feishu.cn
+eyes browser click --protocol bidi --port 19222 --host-header localhost:9222 --name-contains "验证码登录" --go
+```
+
+The `--host-header` option is only needed when the local socket port differs
+from Firefox's Remote Agent port, such as an SSH forward. Firefox 159 may
+accept the WebSocket handshake without echoing a subprotocol, so the backend
+uses the BiDi wire directly and closes only the WebDriver session, not Firefox.
+
 ## MCP server
 
 `eyes-mcp` exposes 18 primitives as MCP tools:
@@ -148,13 +171,16 @@ without describing coordinates — same UX as UIA mode.
 - `hotkey` (dry_run=true default; set false to send keys)
 - `type_text` (dry_run=true default; set false to type)
 
-**Browser (CDP):**
+**Browser (CDP or Firefox BiDi):**
 - `browser_launch`  --url / --port / --no-seed / --dry-run=false
-- `browser_tabs`
-- `browser_scan`    --pretty / --control-type / --name-contains
-- `browser_click`   --hint / --idx / --name-contains / --go
-- `browser_type`    --text / --hint / --idx / --enter / --dry-run=false
-- `browser_shot`    --out / --dry-run=false
+- `browser_tabs`    --protocol / --port / --host_header
+- `browser_scan`    --protocol / --url_contains / --host_header
+- `browser_click`   --protocol / --hint / --idx / --name_contains / --go / --host_header
+- `browser_type`    --protocol / --text / --hint / --idx / --press_enter / --host_header
+- `browser_shot`    --protocol / --out / --host_header
+
+For Firefox through a forwarded port, pass `protocol=bidi` and
+`host_header=localhost:9222` to these browser tools.
 
 **Structured-first (read-only, v0.2.0):**
 - `resolve_elements`  --hwnd / --port / --url-contains / --detections_path
@@ -539,6 +565,7 @@ Both commands are read-only. `eyes resolve` never actuates.
 | --- | --- | --- |
 | Any VPN / Edge native shell / VS Code / Feishu / Word / Excel | UIA | Fast, free |
 | Real Chromium browser page (login wall, multi-step form, JS-driven UI) | CDP | Structured, no image cost |
+| Real Firefox browser page / Remote Agent | WebDriver BiDi | Structured, no API key; supports forwarded Host header |
 | WebView2 inside a UWP / Edge legacy URL bar / canvas-only UI | CDP (browser) | UIA only sees the shell |
 | Custom canvas game / image-only button | Vision (parsing-style) | Last resort; the screen is parsed into elements, not clicked blind |
 | Bulk structured extraction, concurrent crawls, unattended batch jobs | CDP (`--backend lightpanda`) | ~123 MB RAM, 10x faster boot than Edge; no persistent profile, no screenshot |

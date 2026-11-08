@@ -21,7 +21,8 @@ from typing import Any
 
 import websocket
 
-from openeyes.core.schema import BBox, Center, Element, ElementState
+from openeyes.backends.dom_probe import control_type_map, dom_js, make_element
+from openeyes.core.schema import BBox, Center, Element
 
 # Connection constants
 CDP_DEFAULT_PORT = 9222
@@ -362,118 +363,18 @@ def launch_edge(*, port: int = CDP_DEFAULT_PORT, url=None, profile_dir=None, see
             continue
         raise CDPError(last_msg)
     raise CDPError(last_msg)
-
-
-
-# JS payload: walk the DOM, return JSON array. Single top-level expression
-# so CDP Runtime.evaluate(returnByValue=True) can serialise it directly.
-_DOM_JS = """(function() {
-  var INTERACTIVE = "a[href],button,input,textarea,select,[contenteditable]," + "[tabindex],[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[role=menuitem],summary,label";
-  function nameOf(el) {
-    var al = el.getAttribute("aria-label");
-    if (al && al.trim()) return al.trim();
-    var ph = el.getAttribute("placeholder");
-    if (ph && ph.trim()) return ph.trim();
-    var tt = el.getAttribute("title");
-    if (tt && tt.trim()) return tt.trim();
-    var al2 = el.getAttribute("alt");
-    if (al2 && al2.trim()) return al2.trim();
-    var txt = (el.innerText || el.textContent || "").trim();
-    if (txt) return txt.replace(/\\s+/g, " ").slice(0, 200);
-    var n = el.getAttribute("name");
-    if (n) return n;
-    return el.id || "";
-  }
-  function roleOf(el) { return el.getAttribute("role") || ""; }
-  function textOf(el) { var t = (el.innerText || el.textContent || "").trim(); return t ? t.replace(/\\s+/g, " ").slice(0, 200) : ""; }
-  function parentTypes(el) { var out = [], p = el; while (p && p !== document.body && out.length < 6) { p = p.parentElement; if (p) out.push(p.tagName.toLowerCase()); } return out.reverse(); }
-  function selectorOf(el) { if (el.id) return "#" + el.id; if (el.getAttribute("data-testid")) return "[data-testid=" + JSON.stringify(el.getAttribute("data-testid")) + "]"; if (el.getAttribute("name")) return el.tagName.toLowerCase() + "[name=" + JSON.stringify(el.getAttribute("name")) + "]"; return el.tagName.toLowerCase(); }
-  var nodes = document.querySelectorAll(INTERACTIVE);
-  var out = [];
-  for (var i = 0; i < nodes.length; i++) {
-    var el = nodes[i];
-    if (!el.isConnected) continue;
-    var r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) continue;
-    var style = window.getComputedStyle(el);
-    if (style.visibility === "hidden" || style.display === "none") continue;
-    var cx = r.left + window.scrollX;
-    var cy = r.top + window.scrollY;
-    out.push({
-      tag: el.tagName.toLowerCase(),
-      role: roleOf(el),
-      type: el.getAttribute("type") || "",
-      name: nameOf(el),
-      text: textOf(el),
-      automation_id: el.id || el.getAttribute("data-testid") || "",
-      class_name: el.className && typeof el.className === "string" ? el.className : "",
-      selector: selectorOf(el),
-      bbox: { x: Math.round(cx), y: Math.round(cy), w: Math.round(r.width), h: Math.round(r.height) },
-      center: { x: Math.round(cx + r.width / 2), y: Math.round(cy + r.height / 2) },
-      parent_chain: parentTypes(el),
-      enabled: !el.disabled && !el.getAttribute("aria-disabled"),
-      visible: true,
-      focused: el === document.activeElement,
-      href: el.getAttribute("href") || "",
-      value: el.value !== undefined ? String(el.value).slice(0, 80) : "",
-    });
-  }
-  return out;
-})()"""
+#: The DOM probe lives in :mod:`openeyes.backends.dom_probe` so the CDP and
+#: BiDi backends agree on what an interactive element is.
+_DOM_JS = dom_js("document")
 
 
 def _make_element(raw: dict) -> Element:
-    bbox = BBox(**raw["bbox"])
-    center = Center(**raw["center"])
-    return Element(
-        backend="cdp",
-        control_type=raw.get("control_type") or raw["tag"].title(),
-        name=raw.get("name", ""),
-        bbox=bbox,
-        center=center,
-        automation_id=raw.get("automation_id", ""),
-        class_name=raw.get("class_name", ""),
-        score=1.0,
-        interactive=True,
-        state=ElementState(
-            enabled=raw.get("enabled", True),
-            visible=raw.get("visible", True),
-            focused=raw.get("focused", False),
-        ),
-        parent_chain=raw.get("parent_chain", []),
-    )
+    return make_element(raw, backend="cdp")
 
 
 def _js_control_type_map(raw: dict) -> str:
     """Same labels as the JS probe - keeps tests independent of JS."""
-    tag = raw.get("tag", "")
-    role = raw.get("role", "")
-    type_ = (raw.get("type") or "").lower()
-    if tag == "a" or role == "link":
-        return "Hyperlink"
-    if tag in ("button", "summary") or role == "button":
-        return "Button"
-    if tag == "select":
-        return "ComboBox"
-    if tag == "textarea":
-        return "Edit"
-    if tag == "input":
-        if type_ in ("submit", "button"):
-            return "Button"
-        if type_ == "checkbox":
-            return "CheckBox"
-        if type_ == "radio":
-            return "RadioButton"
-        return "Edit"
-    if role == "checkbox":
-        return "CheckBox"
-    if role == "radio":
-        return "RadioButton"
-    if role == "tab":
-        return "Tab"
-    if role == "menuitem":
-        return "MenuItem"
-    return raw.get("control_type") or (tag.title() if tag else "Unknown")
+    return control_type_map(raw)
 
 
 def scan_dom(conn, *, filter_url_contains=None, limit: int = 500) -> list:

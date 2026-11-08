@@ -54,6 +54,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from openeyes.backends import browser as browser_api
 from openeyes.backends import cdp as browser_backend
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.capture import capture_screen, capture_window
@@ -67,6 +68,41 @@ server = Server("openeyes")
 
 def _to_json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=2)
+
+
+def _browser_protocol(arguments: dict) -> str:
+    """Read the browser wire protocol without changing the CDP default."""
+    return str(arguments.get("protocol", "cdp")).strip().lower()
+
+
+def _browser_backend(arguments: dict):
+    """Return the selected browser backend.
+
+    Keep the module-level CDP alias for compatibility with existing tests and
+    integrations that monkeypatch it; only an explicit ``protocol=bidi``
+    selects Firefox Remote Agent.
+    """
+    protocol = _browser_protocol(arguments)
+    if protocol == "cdp":
+        return browser_backend
+    return browser_api.backend_for(protocol)
+
+
+def _browser_connection_options(arguments: dict) -> dict[str, str]:
+    """Pass a forwarded Firefox Host header without changing CDP calls."""
+    if _browser_protocol(arguments) == "bidi":
+        host_header = arguments.get("host_header")
+        if host_header:
+            return {"host_header": str(host_header)}
+    return {}
+
+
+def _close_browser_connection(protocol: str, conn: Any) -> None:
+    """End a BiDi session while leaving the user's browser process alive."""
+    if protocol == "bidi" and conn is not None:
+        close = getattr(conn, "close", None)
+        if close:
+            close()
 
 def _load_detections(arguments: dict) -> tuple[Any, str | None]:
     """Read screen-parsing detections from a file path or inline JSON.
@@ -297,21 +333,33 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="browser_tabs",
-            description="List DevTools page targets on the configured port.",
+            description="List browser page targets on the configured port. "
+                        "Use protocol=bidi for Firefox Remote Agent.",
             inputSchema={
                 "type": "object",
-                "properties": {"port": {"type": "integer", "default": 9222}},
+                "properties": {
+                    "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
+                },
             },
         ),
         Tool(
             name="browser_scan",
             description="DOM probe the active page; returns interactive elements "
                         "with Vimium-style letter hints. Each entry carries "
-                        "backend/control_type/name/bbox/center/hint.",
+                        "backend/control_type/name/bbox/center/hint. Use "
+                        "protocol=bidi for Firefox Remote Agent.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
                     "url": {"type": "string",
                             "description": "navigate first (default: skip)"},
                     "url_contains": {"type": "string"},
@@ -330,6 +378,10 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
                     "hint": {"type": "string",
                              "description": "Vimium-style letter (a, s, aa, ..)"},
                     "idx": {"type": "integer"},
@@ -349,6 +401,10 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
                     "text": {"type": "string"},
                     "hint": {"type": "string"},
                     "idx": {"type": "integer"},
@@ -373,6 +429,10 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
                     "out": {"type": "string"},
                     "url_contains": {"type": "string"},
                     "dry_run": {"type": "boolean", "default": True},
@@ -834,25 +894,35 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=_to_json(info))]
 
         if name == "browser_tabs":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
             try:
-                tabs = browser_backend.list_tabs(arguments.get("port", 9222))
+                tabs = backend.list_tabs(
+                    arguments.get("port", 9222),
+                    **_browser_connection_options(arguments),
+                )
             except Exception as e:
-                return [TextContent(type="text", text=_to_json({"error": str(e)}))]
+                return [TextContent(type="text", text=_to_json(
+                    {"error": str(e), "protocol": protocol}))]
             short = [{"id": t.get("id"), "title": t.get("title"),
                       "url": t.get("url"), "type": t.get("type")}
                      for t in tabs]
             return [TextContent(type="text", text=_to_json(short))]
 
         if name == "browser_scan":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
+            conn = None
             try:
-                conn = browser_backend.connect(
+                conn = backend.connect(
                     port=arguments.get("port", 9222),
                     url_contains=arguments.get("url_contains"),
+                    **_browser_connection_options(arguments),
                 )
                 if arguments.get("url"):
                     conn.navigate(arguments["url"])
                     time.sleep(0.6)
-                elems = browser_backend.scan_dom(conn)
+                elems = backend.scan_dom(conn)
                 assign_hints(elems)
                 if arguments.get("name_contains"):
                     elems = [e for e in elems
@@ -866,14 +936,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
                     {"error": str(e), "tool": name}))]
+            finally:
+                _close_browser_connection(protocol, conn)
 
         if name == "browser_click":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
+            conn = None
             try:
-                conn = browser_backend.connect(
+                conn = backend.connect(
                     port=arguments.get("port", 9222),
                     url_contains=arguments.get("url_contains"),
+                    **_browser_connection_options(arguments),
                 )
-                elems = browser_backend.scan_dom(conn)
+                elems = backend.scan_dom(conn)
                 assign_hints(elems)
                 chosen = None
                 if arguments.get("hint"):
@@ -908,7 +984,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         "center": {"x": chosen.center.x, "y": chosen.center.y},
                         "target": chosen.to_dict(),
                     }))]
-                browser_backend.click_center(conn, chosen)
+                backend.click_center(conn, chosen)
                 return [TextContent(type="text", text=_to_json({
                     "clicked": True,
                     "center": {"x": chosen.center.x, "y": chosen.center.y},
@@ -917,8 +993,13 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
                     {"error": str(e), "tool": name}))]
+            finally:
+                _close_browser_connection(protocol, conn)
 
         if name == "browser_type":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
+            conn = None
             try:
                 dry_run = arguments.get("dry_run", True)
                 text = arguments["text"]
@@ -930,9 +1011,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if dry_run and not has_target:
                     target_url = None
                     if url_contains:
-                        conn = browser_backend.connect(
+                        conn = backend.connect(
                             port=arguments.get("port", 9222),
                             url_contains=url_contains,
+                            **_browser_connection_options(arguments),
                         )
                         target_url = conn.current_url()
                     payload = {
@@ -946,14 +1028,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if url_contains:
                         payload["target_url"] = target_url
                     return [TextContent(type="text", text=_to_json(payload))]
-                conn = browser_backend.connect(
+                conn = backend.connect(
                     port=arguments.get("port", 9222),
                     url_contains=url_contains,
+                    **_browser_connection_options(arguments),
                 )
                 target_url = conn.current_url() if url_contains else None
                 chosen = None
                 if has_target:
-                    elems = browser_backend.scan_dom(conn)
+                    elems = backend.scan_dom(conn)
                     assign_hints(elems)
                     if arguments.get("hint"):
                         for e in elems:
@@ -979,7 +1062,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if not dry_run:
                     if chosen is None:
                         focused = next(
-                            (e for e in browser_backend.scan_dom(conn)
+                            (e for e in backend.scan_dom(conn)
                              if e.state.focused),
                             None,
                         )
@@ -988,7 +1071,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     else:
                         validate_text_entry(
                             text, chosen, source_text=source_text)
-                    browser_backend.type_text(
+                    backend.type_text(
                         conn, text, element=chosen, press_enter=press_enter,
                     )
                 return [TextContent(type="text", text=_to_json({
@@ -1004,17 +1087,23 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
                     {"error": str(e), "tool": name}))]
+            finally:
+                _close_browser_connection(protocol, conn)
 
         if name == "browser_shot":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
+            conn = None
             try:
                 out = arguments["out"]
                 url_contains = arguments.get("url_contains")
                 target_url = None
                 if arguments.get("dry_run", True):
                     if url_contains:
-                        conn = browser_backend.connect(
+                        conn = backend.connect(
                             port=arguments.get("port", 9222),
                             url_contains=url_contains,
+                            **_browser_connection_options(arguments),
                         )
                         target_url = conn.current_url()
                     payload = {
@@ -1025,11 +1114,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     if url_contains:
                         payload["target_url"] = target_url
                     return [TextContent(type="text", text=_to_json(payload))]
-                conn = browser_backend.connect(
+                conn = backend.connect(
                     port=arguments.get("port", 9222),
                     url_contains=url_contains,
+                    **_browser_connection_options(arguments),
                 )
-                path = browser_backend.screenshot(conn, out)
+                path = backend.screenshot(conn, out)
                 return [TextContent(type="text", text=_to_json({
                     "captured": True,
                     "dry_run": False,
@@ -1038,6 +1128,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
                     {"error": str(e), "tool": name}))]
+            finally:
+                _close_browser_connection(protocol, conn)
         if name == "vision_detect":
             from openeyes.backends.vision import elements_from_detections
             raw, err = _load_detections(arguments)
