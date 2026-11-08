@@ -299,6 +299,7 @@ class BidiConnection:
         if getattr(self, "_closed", False):
             return
         self._closed = True
+        atexit.unregister(self.close)
         try:
             if self.session_id:
                 self.call("session.end", {}, timeout=5.0)

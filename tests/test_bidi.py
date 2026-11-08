@@ -97,3 +97,36 @@ def test_screenshot_decodes_png_and_returns_absolute_path(tmp_path):
 
     assert path.endswith("shot.png")
     assert (tmp_path / "shot.png").read_bytes() == b"png-data"
+
+
+def test_failed_session_creation_closes_socket_and_preserves_remote_message():
+    fake_ws = MagicMock()
+    fake_ws.recv.return_value = json.dumps({
+        "id": 1,
+        "type": "error",
+        "error": "session not created",
+        "message": "Maximum number of active sessions",
+    })
+    with patch.object(bidi.websocket, "create_connection", return_value=fake_ws):
+        try:
+            bidi.BidiConnection("ws://localhost:9222/session")
+        except bidi.BidiError as exc:
+            assert "Maximum number of active sessions" in str(exc)
+        else:
+            raise AssertionError("expected BidiError")
+
+    fake_ws.close.assert_called_once_with()
+
+
+def test_close_ends_bidi_session_and_socket_once():
+    conn = bidi.BidiConnection.__new__(bidi.BidiConnection)
+    conn.session_id = "session-1"
+    conn._closed = False
+    conn._ws = MagicMock()
+    conn.call = MagicMock(return_value={})
+
+    conn.close()
+    conn.close()
+
+    conn.call.assert_called_once_with("session.end", {}, timeout=5.0)
+    conn._ws.close.assert_called_once_with()
