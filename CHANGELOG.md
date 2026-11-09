@@ -22,6 +22,15 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **The agent's own cursor.** `openeyes.agent.CursorOverlay` draws a small
+  coloured cursor over the desktop, so a cluster of agents is legible: the
+  system pointer can only be one, but the agents can each have a cursor of
+  their own. It is a picture and nothing more - it never drives the pointer
+  and never takes the foreground (the window is layered, click-through and
+  non-activating). The colour follows the identity, so two agents are told
+  apart at a glance; `examples/overlay-check.py` proves it against the real
+  screen (289 pixels of the agent's colour while it is up, none after it is
+  hidden, and the user's foreground window unchanged).
 - **The interaction lease.** `openeyes.agent.InteractionLease` is an exclusive
   claim on the physical input, and it holds across processes - a thread lock
   stops at the process boundary. On Windows it is an exclusive `CreateFileW`

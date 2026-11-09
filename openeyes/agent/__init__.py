@@ -19,6 +19,7 @@ from openeyes.agent.errors import (
 )
 from openeyes.agent.lease import InteractionLease, LeaseTimeout
 from openeyes.agent.ledger import ActionLedger, LedgerEntry, record_action
+from openeyes.agent.overlay import CursorOverlay, render_cursor
 from openeyes.agent.profile import (
     MODE_ACT,
     MODE_OBSERVE,
@@ -31,6 +32,7 @@ from openeyes.agent.profile import (
 __all__ = [
     "ActionLedger",
     "AgentProfile",
+    "CursorOverlay",
     "BACKGROUND_UNAVAILABLE",
     "BUDGET_EXCEEDED",
     "FocusBudget",
@@ -45,4 +47,5 @@ __all__ = [
     "TARGET_CONFLICT",
     "color_for",
     "record_action",
+    "render_cursor",
 ]
