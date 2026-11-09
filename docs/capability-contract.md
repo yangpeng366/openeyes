@@ -179,7 +179,7 @@ never actuate. `app_ensure` is classified **write**: it can restore a window
 and start a process, so it defaults to `dry_run=true` and executes only when
 that is explicitly disabled. Existing clients that enumerate a fixed tool
 list keep working; a client that asserts an exact count must move from 13 to
-16.
+19.
 
 `resolve_elements` and `vision_detect` never actuate. `resolve_elements`
 defaults to `port=9222` for the cdp tier; pass `port=0` to skip it.
@@ -203,7 +203,7 @@ trustworthy. They do not appear in the MCP surface and do not alter it.
 | Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto", budget=None)` | Resolves a live UIA wrapper and walks the delivery ladder `invoke -> message -> pixel`. `method` is `auto` / `invoke` / `message` / `pixel` / `foreground`; `dry_run` defaults to True. With a `budget`, the rungs that reach for the pointer are paid for from it. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed`, `physical_input`, `cursor_moved`, `focus_stolen`, `error` and `error_code`. |
 | Python | `openeyes.agent.AgentProfile(...)` / `openeyes.agent.FocusBudget(per_minute=0)` | Who an agent is and what it may take from the user. The budget counts foreground steals in a sliding minute; zero means the agent may not take the foreground at all, and every attempt is counted either way. |
 | Python | `openeyes.agent.InteractionLease(root=None, timeout_s=5.0)` | An exclusive claim on the physical input, held across processes. On Windows it is an exclusive `CreateFileW` open of a lock file under the user's SID: Windows refuses a second open and closes the handle when the process dies, so a killed agent cannot lock the desk. `acquire()` returns False on timeout (`error_code` = `LEASE_TIMEOUT`); it is also a context manager. Passing one to `click_element` makes the rungs that reach for the pointer wait their turn. |
-| Python | `openeyes.agent.CursorOverlay(agent_id="default", label="", color="")` | The agent's own cursor, drawn over the desktop. It is a picture: it never drives the pointer and never takes the foreground (layered, click-through, non-activating). The colour comes from the identity, so two agents are told apart at a glance. `show(x, y)` / `hide()` / `close()`. `render_cursor()` draws the same shape without a screen. |
+| Python | `openeyes.agent.CursorOverlay(agent_id="default", label="", color="")` | The agent's own cursor, drawn over the desktop. It is a picture: it never drives the pointer and never takes the foreground (an ordinary topmost window cut to the shape of the cursor, click-through and non-activating). The colour comes from the identity, so two agents are told apart at a glance. `show(x, y)` / `hide()` / `close()`. `render_cursor()` draws the same shape without a screen. |
 | Python | `openeyes.agent.ActionLedger(agent_id="default")` | An append-only record of what the agents did: the delivery path, whether the user's pointer was driven, whether the focus was taken, and whether the expected state was observed. `record(**fields)` stores, `entries()` reads a copy, `summary()` counts. It never raises and never intercepts. |
 | Python | `openeyes.supervise(..., ledger=None)` | The supervision loop counts the same way (`physical_inputs`, `focus_thefts`, `foreground_changes`, `methods`, `physical_input_rate`) and writes every round in which it really acted into the ledger. A ledger that raises cannot break the loop: losing a receipt may not cost a renewal. |
 | Python | `openeyes.find_elements(elements, automation_id=...)` | Filters on the stable control id — the visible name of a live control (a countdown, a spinner) is not a stable selector. |
@@ -219,3 +219,26 @@ delivered is not a click that took effect. AnyVPN's keepalive button carries
 a live countdown, so "the label changed" proves nothing — only the countdown
 jumping back up proves the session was renewed. `act_until` is the reusable
 form of that distinction.
+
+## Agent layer (many agents, one desktop)
+
+The agent layer is Python-only, and it is inert: it records, orders and
+concludes, and it never drives the desktop on its own. Actuation stays in
+the backends, and the MCP tool matrix above does not grow. It exists for
+the case the rest of this contract cannot cover - several agents sharing one
+Windows desktop, with one foreground window, one system pointer and one
+human.
+
+| Surface | Entry | Notes |
+| --- | --- | --- |
+| Python | `openeyes.agent.AttentionBudget(per_minute=0)` | How many times an agent may interrupt the human per minute. Working is free; asking is not. Zero is the safe default - the agent may never interrupt, it only reports and waits. Every attempt is counted, the refused ones included: `refused` is the number of interruptions the user did not have to suffer. `take(needs_attention)` spends one only when the caller says there is something to show. |
+| Python | `openeyes.agent.Scheduler()` / `openeyes.agent.Conflict` | Who gets a contested target first. The holder keeps it unless the newcomer has a strictly higher priority - equal priority does not preempt, so two agents of the same rank never take turns stealing from each other. Every clash is recorded, preemption included, as a `Conflict(agent_a, agent_b, target)`; `would_conflict(...)` asks the question before the fact, so an agent can queue instead of colliding. It is not the interaction lease: the lease guards the physical input of a desktop, the scheduler orders the intentions inside one process. |
+| Python | `openeyes.agent.IsolationConfig()` / `openeyes.agent.IsolationVerdict` / `openeyes.agent.evaluate_isolation(...)` | Whether the work should leave the shared desktop, and how far. Three triggers - real parallelism (`concurrent_writers`, with `needs_parallel`), a collapsing semantic path (`semantic_miss_rate`), and a disturbance budget that keeps refusing (`budget_exhausted`) - return a verdict with `escalate`, a `level` of `none` / `session` / `vm` (`ALL_LEVELS`), and `reasons` in words a human can be told. The thresholds are inclusive, and the strongest level that tripped wins. |
+| Python | `openeyes.agent.AgentPresence(overlay, attention)` | The three-part chain. The decision layer's `openeyes.decision.Action.needs_attention` says a human should look; the attention budget says there is attention to spare; only then does the agent's own cursor move. `announce(needs_attention=..., x=..., y=...)` returns False - and hides any visible cursor - when either gate says no, so a refused announcement never leaves a cursor sitting in front of the reader. |
+
+The chain is the point. A cursor on the screen is a claim on the human's
+attention, and the two gates in front of it are what bound the claim: the
+decision layer has to have something to show, and the minute has to have
+room left in it. Neither gate decides anything for the human - the attention
+budget only counts, the scheduler only orders, the isolation verdict only
+concludes, and the presence only draws a picture.

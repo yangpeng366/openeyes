@@ -8,6 +8,12 @@ Behavior contract (parity with ACH FEAT-03):
 - enabled=True + FALLBACK: return Action(BLOCKED, reason="fallback").
 - enabled=True + UNCERTAIN: return Action(BLOCKED, reason="uncertain").
 
+The attention signal: `Action.needs_attention` is True only for the
+FLAG_FOR_REVIEW band — that band is exactly "a human should take a look".
+Every other outcome (ACT, FALLBACK, UNCERTAIN, and the blocked early
+returns) leaves it False, so a consumer spends a human's attention only
+where the decision layer actually asked for it.
+
 Caller is expected to:
   action = decide(elements=..., goal="...", enabled=True, scorer=...)
   if action is None:
@@ -80,9 +86,14 @@ def decide(elements, goal: str, ctx: DecisionContext) -> Action | None:
         return Action(kind=ActionKind.BLOCKED,
                       reason=f"uncertain(conf={score.confidence:.2f}, prob={score.prob:.2f})")
 
+    # Attention budget: only FLAG_FOR_REVIEW means "a human should look".
+    # ACT, FALLBACK, UNCERTAIN and the blocked early returns above are all
+    # machine-handled, so they keep `needs_attention` at its False default.
     if band == DecisionBand.FLAG_FOR_REVIEW:
         return Action(kind=ActionKind.CLICK, target_index=score.target_index,
-                      reason=f"flag_for_review(conf={score.confidence:.2f})")
+                      reason=f"flag_for_review(conf={score.confidence:.2f})",
+                      needs_attention=True)
     # ACT
     return Action(kind=ActionKind.CLICK, target_index=score.target_index,
-                  reason=f"act(conf={score.confidence:.2f}, prob={score.prob:.2f})")
+                  reason=f"act(conf={score.confidence:.2f}, prob={score.prob:.2f})",
+                  needs_attention=False)

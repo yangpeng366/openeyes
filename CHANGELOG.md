@@ -26,11 +26,52 @@ versioning: [Semantic Versioning](https://semver.org/).
   coloured cursor over the desktop, so a cluster of agents is legible: the
   system pointer can only be one, but the agents can each have a cursor of
   their own. It is a picture and nothing more - it never drives the pointer
-  and never takes the foreground (the window is layered, click-through and
+  and never takes the foreground (the window is click-through and
   non-activating). The colour follows the identity, so two agents are told
   apart at a glance; `examples/overlay-check.py` proves it against the real
-  screen (289 pixels of the agent's colour while it is up, none after it is
-  hidden, and the user's foreground window unchanged).
+  screen (245 pixels of the agent's colour while it is up, none after it is
+  hidden, the colour inside the rectangle it was asked for, and the user's
+  foreground window unchanged).
+  The window is an ordinary topmost window whose *region* is cut to the
+  shape of the cursor, not a layered one. On this desktop a layered window
+  never reaches the screen: `ULW_ALPHA` in three call orders,
+  `ULW_COLORKEY` and `SetLayeredWindowAttributes` with either alpha or
+  colour key all landed with zero pixels, while an ordinary window landed
+  with all 6000 of them, and GDI, DXGI and Pillow agreed on it. A shaped
+  window works everywhere, and the mouse goes straight through it
+  (`WM_NCHITTEST` answers `HTTRANSPARENT`).
+- **The attention budget - how often an agent may interrupt the human.**
+  `openeyes.agent.AttentionBudget` counts interruptions, not actions: an
+  agent may work as long as it likes, but it may only ask to be looked at
+  a bounded number of times a minute, and zero means it may never ask - it
+  keeps working and queues instead. The refusals are counted too, because
+  the interruptions that did not happen are what the budget was bought for.
+  Whether there is anything worth looking at is the decision layer's say
+  (`Action.needs_attention`, set only for `FLAG_FOR_REVIEW`); whether the
+  human can spare the attention is the budget's. Both must say yes.
+- **The conflict scheduler - who gets the target first.**
+  `openeyes.agent.Scheduler` orders the agents that want the same window,
+  the same automation or the same button, and keeps the receipts. The
+  holder keeps the target unless the newcomer has a strictly higher
+  priority - equal priority never preempts, so two agents of the same rank
+  do not take turns stealing from each other - and every clash is
+  recorded, a preemption included. It orders the intentions inside one
+  process; `InteractionLease` still guards the physical input across
+  processes.
+- **The isolation verdict - when to leave the shared desktop.**
+  `openeyes.agent.evaluate_isolation` turns "one shared desktop is not
+  enough" into a decision a caller can act on and explain: three symptoms
+  (real parallelism, a semantic path that has largely failed, a
+  disturbance budget that keeps being refused) map to three levels
+  (`none` / `session` / `vm`), and every reason names the condition, the
+  threshold and the measurement that tripped it. It decides; it never
+  moves an agent. `docs/isolation-policy.md` is the ladder and the
+  reasoning behind it.
+- **The agent's presence.** `openeyes.agent.AgentPresence` joins the three
+  parts: the decision signal, the attention budget and the cursor. An
+  agent's cursor appears only when there is something to show *and* the
+  budget allows it, and every refusal is counted - that count is the
+  honest measure of how much of the user's attention was protected.
 - **The interaction lease.** `openeyes.agent.InteractionLease` is an exclusive
   claim on the physical input, and it holds across processes - a thread lock
   stops at the process boundary. On Windows it is an exclusive `CreateFileW`
