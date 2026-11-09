@@ -19,6 +19,11 @@ actually drove the pointer (a pixel click that landed), and counts a focus
 theft only when the automation pulled the focus onto the target from
 somewhere else.
 
+Every round is also written to the shared action ledger
+(``openeyes.agent.ledger``), so the delivery path of each action and the
+share of actions that drove the user's pointer are counted in one place -
+the same place the supervision loop counts them.
+
 This module measures both against a real window, so the claims in the
 skill ("no mouse movement, no focus theft") are numbers rather than
 promises.
@@ -55,6 +60,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from openeyes.agent.ledger import ActionLedger, record_action
 from openeyes.core.actuator import cursor_pos
 from openeyes.core.selector import click_element, detect_elements, find_elements
 from openeyes.core.verify import act_until
@@ -80,6 +86,9 @@ class RunMetrics:
     foreground_changes: int = 0
     #: per-round detail
     detail: list[dict[str, Any]] = field(default_factory=list)
+    #: the same rounds, counted by the shared ledger, so that the numbers
+    #: here and the numbers the supervision loop keeps agree
+    ledger: ActionLedger = field(default_factory=ActionLedger)
 
     @property
     def false_positive_rate(self) -> float:
@@ -112,6 +121,7 @@ class RunMetrics:
             "focus_thefts": self.focus_thefts,
             "foreground_changes": self.foreground_changes,
             "detail": self.detail,
+            "ledger": self.ledger.summary(),
         }
 
 
@@ -227,6 +237,20 @@ def measure(hwnd: int, *, automation_id: str = "", rounds: int = 5,
         if foreground_changed:
             metrics.foreground_changes += 1
 
+        # The same round, counted by the shared ledger: one place decides
+        # what a delivery path means, so both tools report alike.
+        record_action(
+            metrics.ledger,
+            action=str(driven.get("method") or "none"),
+            method=driven.get("method"),
+            physical_input=cursor_moved,
+            focus_stolen=focus_stolen,
+            cursor_moved=cursor_moved,
+            verified=took_effect,
+            ok=delivered,
+            target=after_label or before_label,
+        )
+
         metrics.detail.append({
             "round": index,
             "delivered": delivered,
@@ -314,6 +338,11 @@ def main() -> int:
         print(f"cursor_moves={metrics.cursor_moves} "
               f"focus_thefts={metrics.focus_thefts} "
               f"foreground_changes={metrics.foreground_changes}")
+        summary = metrics.ledger.summary()
+        print(f"ledger: actions={summary['actions']} "
+              f"physical_inputs={summary['physical_inputs']} "
+              f"physical_input_rate={summary['physical_input_rate']:.2%} "
+              f"deliveries={summary['deliveries']}")
         for row in metrics.detail:
             print(f"  round {row['round']}: delivered={row['delivered']} "
                   f"effective={row['effective']} "

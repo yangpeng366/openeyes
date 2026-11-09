@@ -10,6 +10,6 @@ and none of it reaches for the desktop on its own. Actuation stays where
 it already is - in the backends.
 """
 
-from openeyes.agent.ledger import ActionLedger, LedgerEntry
+from openeyes.agent.ledger import ActionLedger, LedgerEntry, record_action
 
-__all__ = ["ActionLedger", "LedgerEntry"]
+__all__ = ["ActionLedger", "LedgerEntry", "record_action"]

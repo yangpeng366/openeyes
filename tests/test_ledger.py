@@ -17,6 +17,7 @@ from openeyes.agent.ledger import (
     DELIVERY_SEMANTIC,
     ActionLedger,
     delivery_for_method,
+    record_action,
 )
 
 
@@ -117,3 +118,21 @@ def test_an_unknown_method_is_delivered_by_no_known_path():
     assert delivery_for_method(None) == DELIVERY_NONE
     assert delivery_for_method("") == DELIVERY_NONE
     assert delivery_for_method("teleport") == DELIVERY_NONE
+
+# ---------------------------------------------------------- the shared helper
+def test_record_action_derives_the_delivery_path():
+    """One place decides what a backend's method means."""
+    ledger = ActionLedger()
+    entry = record_action(ledger, action="pixel", method="pixel",
+                          physical_input=True, verified=True)
+    assert entry.delivery == DELIVERY_PIXEL
+    assert entry.physical_input is True
+    assert entry.verified is True
+    assert ledger.summary()["actions"] == 1
+
+
+def test_record_action_says_none_when_the_method_is_unknown():
+    ledger = ActionLedger()
+    entry = record_action(ledger, action="none", method=None)
+    assert entry.delivery == DELIVERY_NONE
+    assert ledger.summary()["deliveries"][DELIVERY_NONE] == 1

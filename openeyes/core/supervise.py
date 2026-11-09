@@ -249,11 +249,12 @@ def _record_in_ledger(ledger: Any, row: Round,
     with contextlib.suppress(Exception):
         # Imported inside the guard: a missing ledger must not stop the
         # renewal it was only meant to record.
-        from openeyes.agent.ledger import delivery_for_method
+        from openeyes.agent.ledger import record_action
 
-        ledger.record(
+        record_action(
+            ledger,
             action=str(method or "none"),
-            delivery=delivery_for_method(method),
+            method=method,
             physical_input=bool(interference.get("cursor_moved")),
             focus_stolen=bool(interference.get("focus_stolen")),
             cursor_moved=bool(interference.get("cursor_moved")),

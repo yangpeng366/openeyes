@@ -82,3 +82,18 @@ def test_the_script_documents_the_measured_comparison(mi):
     text = SCRIPT.read_text(encoding="utf-8")
     assert "100% false positives" in text
     assert "0% false positives" in text
+
+# ------------------------------------------------------------------- the ledger
+def test_the_metrics_carry_a_ledger_summary(mi):
+    """The tool and the supervision loop count the same way."""
+    metrics = mi.RunMetrics(rounds=2)
+    mi.record_action(metrics.ledger, action="pixel", method="pixel",
+                     physical_input=True)
+    payload = metrics.to_dict()
+    assert payload["ledger"]["actions"] == 1
+    assert payload["ledger"]["physical_inputs"] == 1
+    assert payload["ledger"]["deliveries"] == {"pixel": 1}
+
+
+def test_a_fresh_run_has_an_empty_ledger(mi):
+    assert mi.RunMetrics().to_dict()["ledger"]["actions"] == 0

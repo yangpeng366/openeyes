@@ -66,6 +66,31 @@ def delivery_for_method(method: str | None) -> str:
     return _METHOD_DELIVERY.get(str(method).lower(), DELIVERY_NONE)
 
 
+def record_action(ledger: Any, *, action: str, method: str | None = None,
+                  physical_input: bool = False, focus_stolen: bool = False,
+                  cursor_moved: bool = False, verified: bool = False,
+                  ok: bool = True, target: str = "", detail: str = "",
+                  agent_id: str | None = None) -> LedgerEntry:
+    """Record one action, deriving the delivery path from the method.
+
+    This is the one place where a backend's ``method`` becomes a delivery
+    class, so that every caller - the supervision loop, the measurement
+    tool - counts the same way.
+    """
+    return ledger.record(
+        action=action,
+        delivery=delivery_for_method(method),
+        physical_input=physical_input,
+        focus_stolen=focus_stolen,
+        cursor_moved=cursor_moved,
+        verified=verified,
+        ok=ok,
+        target=target,
+        detail=detail,
+        agent_id=agent_id,
+    )
+
+
 @dataclass
 class LedgerEntry:
     """One recorded action."""
