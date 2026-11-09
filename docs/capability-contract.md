@@ -47,26 +47,53 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 The CLI is not part of the MCP tool matrix, but it speaks the same
 vocabulary, so the promise is written down here too.
 
-| `--method` | Delivery | The user's pointer | Notes |
+The ladder, cheapest first:
+
+| Rung | Delivery | The user's pointer | The window |
 | --- | --- | --- | --- |
-| `auto` (default) | physical click on the resolved target | moved | The behaviour this command has always had. It stays the default so that no existing caller changes behaviour. |
-| `invoke` | the UIA Invoke pattern | never moves | The application performs the click itself. A control that cannot be invoked **fails**: it is never downgraded to a pixel click, which would move the user's mouse behind their back. |
-| `pixel` | physical click on the resolved target | moved | The default behaviour, said out loud. |
+| `invoke` | the UIA Invoke pattern | never moves | need not be in the foreground |
+| `message` | a window message to the control itself | never moves | need not be in the foreground |
+| `pixel` | a synthesized pointer click at the element centre | moved | may come forward |
+| `foreground` | take the window to the front, then click | moved | comes forward on purpose |
+
+| `--method` | Rungs it may use |
+| --- | --- |
+| `auto` (default) | `invoke -> message -> pixel`, first one that works |
+| `invoke` / `message` / `pixel` / `foreground` | that rung only: it, or a failure - never a different one |
+
+The rungs that reach for the user's pointer are paid for from
+`--budget`: how many times this run may take the foreground away from
+you. The default is `0` - never - so a control with no semantic path
+fails with a structured error instead of taking your mouse. `--budget N`
+allows N such clicks; `--method pixel` asks for one explicitly.
 
 Every `eyes click --json` result states what the click cost:
 
 | Field | Meaning |
 | --- | --- |
-| `method` | the delivery path that ran (`invoke` or `pixel`). |
+| `method` | the delivery path that ran (a real click) or the one that was asked for (a dry run). |
 | `physical_input` | the automation drove the user's pointer. |
 | `cursor_moved` | the pointer was moved by the automation. |
 | `focus_stolen` | the focus was pulled onto the target from somewhere else. |
+| `error_code` | the structured code, when the action failed. |
 
-The MCP `method` enum keeps its own meaning: on `click_by_id` and
-`act_and_verify`, `auto` tries Invoke first and falls back to a pixel
-click. The CLI's `auto` keeps the historical physical click until the
-delivery ladder lands; the difference is deliberate, and it is what the
-zero-behaviour-change rule requires.
+The MCP `method` enum is unchanged (`auto` / `invoke` / `pixel`): on
+`click_by_id` and `act_and_verify`, `auto` tries Invoke first and falls
+back to a pixel click. The MCP surface does not grow a budget knob in
+this round - the contract stays as it was.
+
+## Structured error codes
+
+A sentence a human reads is not a contract. These codes are, and an
+agent routes on them rather than on prose.
+
+| Code | Meaning |
+| --- | --- |
+| `BACKGROUND_UNAVAILABLE` | the semantic path could not reach the control, and nothing may take the foreground on the user's behalf. |
+| `BUDGET_EXCEEDED` | the disturbance budget for this minute is used up. |
+| `NO_SEMANTIC_PATH` | the control offers no operation that can be delivered without the pointer. |
+| `LEASE_TIMEOUT` | the physical input lease was not granted within its deadline. |
+| `TARGET_CONFLICT` | another agent is already acting on this target. |
 
 ## dsh stdio mount
 
@@ -173,7 +200,8 @@ trustworthy. They do not appear in the MCP surface and do not alter it.
 | --- | --- | --- |
 | Python | `openeyes.act_until(act, expect, retries=3, timeout=5.0, interval=0.2, on_retry=None)` | Acts, then polls `expect` until the expected state is observed; retries with the caller's next strategy when it did not take. Returns `{ok, attempts, result, elapsed, error}`. `ok` is True only when the state was observed — a delivered action that changed nothing is a miss. |
 | Python | `openeyes.wait_until(condition, timeout=5.0, interval=0.2)` | Polls a condition; a raising condition counts as "not yet". |
-| Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto")` | Resolves a live UIA wrapper and prefers the Invoke pattern over a pixel click. `method` is `auto` / `invoke` / `pixel`; `dry_run` defaults to True. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed`, `physical_input`, `cursor_moved`, `focus_stolen` and `error`. |
+| Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto", budget=None)` | Resolves a live UIA wrapper and walks the delivery ladder `invoke -> message -> pixel`. `method` is `auto` / `invoke` / `message` / `pixel` / `foreground`; `dry_run` defaults to True. With a `budget`, the rungs that reach for the pointer are paid for from it. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed`, `physical_input`, `cursor_moved`, `focus_stolen`, `error` and `error_code`. |
+| Python | `openeyes.agent.AgentProfile(...)` / `openeyes.agent.FocusBudget(per_minute=0)` | Who an agent is and what it may take from the user. The budget counts foreground steals in a sliding minute; zero means the agent may not take the foreground at all, and every attempt is counted either way. |
 | Python | `openeyes.agent.ActionLedger(agent_id="default")` | An append-only record of what the agents did: the delivery path, whether the user's pointer was driven, whether the focus was taken, and whether the expected state was observed. `record(**fields)` stores, `entries()` reads a copy, `summary()` counts. It never raises and never intercepts. |
 | Python | `openeyes.supervise(..., ledger=None)` | The supervision loop counts the same way (`physical_inputs`, `focus_thefts`, `foreground_changes`, `methods`, `physical_input_rate`) and writes every round in which it really acted into the ledger. A ledger that raises cannot break the loop: losing a receipt may not cost a renewal. |
 | Python | `openeyes.find_elements(elements, automation_id=...)` | Filters on the stable control id — the visible name of a live control (a countdown, a spinner) is not a stable selector. |

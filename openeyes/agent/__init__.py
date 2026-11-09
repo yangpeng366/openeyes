@@ -10,6 +10,36 @@ and none of it reaches for the desktop on its own. Actuation stays where
 it already is - in the backends.
 """
 
+from openeyes.agent.errors import (
+    BACKGROUND_UNAVAILABLE,
+    BUDGET_EXCEEDED,
+    LEASE_TIMEOUT,
+    NO_SEMANTIC_PATH,
+    TARGET_CONFLICT,
+)
 from openeyes.agent.ledger import ActionLedger, LedgerEntry, record_action
+from openeyes.agent.profile import (
+    MODE_ACT,
+    MODE_OBSERVE,
+    MODE_SHADOW,
+    AgentProfile,
+    FocusBudget,
+    color_for,
+)
 
-__all__ = ["ActionLedger", "LedgerEntry", "record_action"]
+__all__ = [
+    "ActionLedger",
+    "AgentProfile",
+    "BACKGROUND_UNAVAILABLE",
+    "BUDGET_EXCEEDED",
+    "FocusBudget",
+    "LEASE_TIMEOUT",
+    "LedgerEntry",
+    "MODE_ACT",
+    "MODE_OBSERVE",
+    "MODE_SHADOW",
+    "NO_SEMANTIC_PATH",
+    "TARGET_CONFLICT",
+    "color_for",
+    "record_action",
+]

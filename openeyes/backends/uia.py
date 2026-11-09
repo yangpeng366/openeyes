@@ -166,29 +166,172 @@ def _resolve_wrapper(hwnd: int, *, automation_id: str | None = None,
     return d.window(handle=hwnd).child_window(**kwargs).wrapper_object()
 
 
+#: The delivery rungs, cheapest first. The ladder walks them in order.
+LADDER = ("invoke", "message", "pixel", "foreground")
+
+
+def _ladder_for(method: str) -> tuple[str, ...]:
+    """Which rungs a method may use.
+
+    ``auto`` walks the ladder. The other names pick one rung: a caller
+    that asks for a specific delivery gets that delivery or a failure -
+    never a different one behind its back.
+    """
+    name = (method or "auto").lower()
+    if name == "auto":
+        return ("invoke", "message", "pixel")
+    if name in LADDER:
+        return (name,)
+    return ("invoke", "message", "pixel")
+
+
+def _post_click(wrapper: Any, control_type: str) -> bool:
+    """Ask the control to act through a window message, not the pointer.
+
+    Only a control that owns a window can be asked this way: the message
+    goes to its own HWND and the application handles it in its own
+    message loop, so the pointer never moves and the window need not be
+    in the foreground.
+    """
+    if (control_type or "").lower() != "button":
+        return False
+    try:
+        handle = int(getattr(wrapper.element_info, "handle", 0) or 0)
+    except Exception:
+        return False
+    if not handle:
+        return False
+    try:
+        import win32con
+        import win32gui
+        # Posted, not sent: a hung application must not hang us.
+        win32gui.PostMessage(handle, win32con.BM_CLICK, 0, 0)
+    except Exception:
+        return False
+    return True
+
+
+def _deliver(wrapper: Any, hwnd: int, *, method: str, budget: Any,
+             cx: int | None, cy: int | None, control_type: str,
+             press_ms: int, settle_ms: int, report: dict[str, Any]) -> dict[str, Any]:
+    """Walk the delivery ladder and report what happened.
+
+    The rungs that reach for the user's pointer are paid for from the
+    disturbance budget, because a physical click may take the window to
+    the front. An explicit request (``method="pixel"``) is an
+    authorisation in itself: it is honoured, and it is still counted.
+    """
+    from openeyes.agent.errors import (
+        BACKGROUND_UNAVAILABLE,
+        BUDGET_EXCEEDED,
+        NO_SEMANTIC_PATH,
+    )
+
+    explicit = method in ("pixel", "foreground")
+    for rung in _ladder_for(method):
+        if rung == "invoke":
+            try:
+                wrapper.invoke()
+            except Exception as exc:
+                report["error"] = f"invoke failed: {exc}"
+                continue
+            report["ok"] = True
+            report["method"] = "invoke"
+            return report
+
+        if rung == "message":
+            if _post_click(wrapper, control_type):
+                report["ok"] = True
+                report["method"] = "message"
+                return report
+            report["error"] = ((report["error"] or "")
+                                + " | no window message for this control")
+            continue
+
+        if rung == "pixel":
+            if not explicit and budget is not None and not budget.spend():
+                report["error_code"] = (BUDGET_EXCEEDED if budget.exhausted
+                                        else BACKGROUND_UNAVAILABLE)
+                report["error"] = ((report["error"] or "no semantic path")
+                                   + " | the disturbance budget does not allow "
+                                     "a physical click")
+                return report
+            if cx is None:
+                report["error"] = ((report["error"] or "")
+                                   + " | no rect for pixel click")
+                continue
+            try:
+                from openeyes.actuators.win32 import cursor_pos
+                click_xy(cx, cy, press_ms=press_ms, settle_ms=settle_ms)
+                pos = cursor_pos()
+                report["landed"] = bool(pos is not None
+                                        and abs(pos[0] - cx) <= 1
+                                        and abs(pos[1] - cy) <= 1)
+                report["ok"] = True
+                report["method"] = "pixel"
+                return report
+            except Exception as exc:
+                report["error"] = ((report["error"] or "")
+                                   + f" | pixel click failed: {exc}")
+                continue
+
+        if rung == "foreground":
+            try:
+                from openeyes.actuators.win32 import cursor_pos, focus_window
+                focus_window(hwnd)
+                time.sleep(0.1)
+                click_xy(cx, cy, press_ms=press_ms, settle_ms=settle_ms)
+                pos = cursor_pos()
+                report["landed"] = bool(pos is not None
+                                        and abs(pos[0] - cx) <= 1
+                                        and abs(pos[1] - cy) <= 1)
+                report["ok"] = True
+                report["method"] = "foreground"
+                return report
+            except Exception as exc:
+                report["error"] = ((report["error"] or "")
+                                   + f" | foreground click failed: {exc}")
+                continue
+
+    report["error_code"] = NO_SEMANTIC_PATH
+    return report
+
+
 def click_element(hwnd: int, *, automation_id: str | None = None,
                   name_regex: str | None = None,
                   name_contains: str | None = None,
                   control_type: str | None = None,
                   method: str = "auto", dry_run: bool = True,
-                  press_ms: int = 30, settle_ms: int = 80) -> dict:
-    """Click an element, preferring the UIA Invoke pattern over pixel clicks.
+                  press_ms: int = 30, settle_ms: int = 80,
+                  budget: Any | None = None) -> dict:
+    """Click an element, preferring the cheapest delivery path.
 
-    ``method``:
+    The ladder, cheapest first:
 
-    * ``"auto"``   — try Invoke first, fall back to a pixel click.
-    * ``"invoke"`` — Invoke pattern only.
-    * ``"pixel"``  — mouse click at the element centre only.
+    * ``invoke``   — the UIA Invoke pattern. No pixel maths, no window
+      focus, and the user's cursor is never touched.
+    * ``message``  — a window message to the control itself. The pointer
+      stays where it is and the window need not be in the foreground.
+    * ``pixel``    — a synthesized pointer click at the element centre.
+    * ``foreground`` — take the window to the front, then click.
 
-    The Invoke pattern needs no pixel maths, no window focus and never
-    touches the user's cursor, which makes it both more accurate and less
-    intrusive than moving the mouse onto the element.
+    ``method`` picks how far up the ladder the caller is willing to go:
+
+    * ``"auto"``      — walk ``invoke -> message -> pixel``.
+    * ``"invoke"`` / ``"message"`` / ``"pixel"`` / ``"foreground"`` — one
+      rung only: that delivery, or a failure. Never a different one.
+
+    ``budget`` is an ``openeyes.agent.profile.FocusBudget``. When one is
+    given, the rungs that reach for the user's pointer are paid for from
+    it: with no budget left the action fails with a structured error
+    instead of taking the pointer. Without a budget nothing is gated -
+    that is the caller's explicit choice.
 
     Returns a report dict: ``ok``, ``method``, ``name``, ``automation_id``,
     ``control_type``, ``center``, ``landed`` (pixel clicks: did the cursor
     arrive?), ``physical_input`` (did the user's pointer get driven?),
     ``cursor_moved``, ``focus_stolen`` (did the focus come to the target?),
-    ``error``.
+    ``error``, ``error_code`` (a structured code, when one applies).
 
     The last three are what the click cost the human sharing the desktop.
     A delivered action is not a successful one, and a semantic action is
@@ -198,7 +341,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
         "ok": False, "method": None, "name": "", "automation_id": "",
         "control_type": "", "center": None, "landed": None,
         "physical_input": False, "cursor_moved": False,
-        "focus_stolen": False, "error": None,
+        "focus_stolen": False, "error": None, "error_code": None,
     }
     from openeyes.core.windows import foreground_window
 
@@ -213,7 +356,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
         """
         done["focus_stolen"] = bool(hwnd) and foreground_before != hwnd \
             and foreground_window() == hwnd
-        done["physical_input"] = bool(done.get("method") == "pixel"
+        done["physical_input"] = bool(done.get("method") in ("pixel", "foreground")
                                       and done.get("landed"))
         done["cursor_moved"] = done["physical_input"]
         return done
@@ -243,32 +386,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
         report["method"] = "dry-run"
         return finish(report)
 
-    if method in ("auto", "invoke"):
-        try:
-            wrapper.invoke()
-            report["ok"] = True
-            report["method"] = "invoke"
-            return finish(report)
-        except Exception as e:
-            report["error"] = f"invoke failed: {e}"
-            if method == "invoke":
-                return finish(report)
-
-    if cx is None:
-        report["error"] = (report["error"] or "") + " | no rect for pixel click"
-        return finish(report)
-    try:
-        from openeyes.actuators.win32 import cursor_pos, focus_window
-        focus_window(hwnd)
-        time.sleep(0.1)
-        click_xy(cx, cy, press_ms=press_ms, settle_ms=settle_ms)
-        pos = cursor_pos()
-        report["landed"] = bool(pos is not None
-                                and abs(pos[0] - cx) <= 1
-                                and abs(pos[1] - cy) <= 1)
-        report["ok"] = True
-        report["method"] = "pixel"
-        return finish(report)
-    except Exception as e:
-        report["error"] = (report["error"] or "") + f" | pixel click failed: {e}"
-        return finish(report)
+    return finish(_deliver(wrapper, hwnd, method=method, budget=budget,
+                           cx=cx, cy=cy, control_type=report["control_type"],
+                           press_ms=press_ms, settle_ms=settle_ms,
+                           report=report))

@@ -6,6 +6,21 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **`eyes click` now walks a delivery ladder instead of always grabbing the
+  pointer.** The rungs, cheapest first: the UIA Invoke pattern, a window
+  message to the control itself, a synthesized pointer click, and - only on
+  an explicit request - taking the window to the front. `--method` names one
+  rung (`invoke` / `message` / `pixel` / `foreground`) or lets the ladder
+  choose (`auto`, the default).
+  **This is a deliberate change of the default.** A control with no semantic
+  path used to be clicked physically, silently taking the user's mouse; it
+  now fails with the structured code `BACKGROUND_UNAVAILABLE`. `--budget N`
+  allows N such physical clicks per run, and `--method pixel` asks for one
+  explicitly.
+  Measured on this machine: 100 clicks on a control that supports Invoke
+  produced 100 semantic deliveries and 0 physical inputs.
+
 ### Added
 - **The action ledger - what a run cost the user.** `openeyes.agent.ledger.ActionLedger`
   records every action an agent took: the delivery path (`semantic` / `message` /

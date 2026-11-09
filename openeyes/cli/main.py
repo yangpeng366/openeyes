@@ -8,7 +8,7 @@ Usage:
     eyes click  --window <hwnd> [--name-contains <str>] [--control-type <str>]
                 [--regex <re>] [--x N --y N] [--dry-run|--go]
                 [--button left|right|middle] [--double] [--return-to-origin]
-                [--method auto|invoke|pixel]
+                [--method auto|invoke|message|pixel|foreground] [--budget N]
     eyes grid   --window <hwnd> --row R --col C [--rows N --cols N] [--dry-run|--go]
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
@@ -17,7 +17,8 @@ Usage:
 
 Default click behavior is **dry-run**. Pass --go to actually click.
 The JSON output says what the click cost: method, physical_input,
-focus_stolen, cursor_moved.
+focus_stolen, cursor_moved. The rungs that reach for your pointer are
+paid for from --budget (0 = never, the default).
 """
 from __future__ import annotations
 
@@ -228,53 +229,54 @@ def status(window: int, restore: bool, max: int, as_json: bool) -> None:
 
 # ----- click ----------------------------------------------------------------
 
-def _click_by_invoke(window: int, target: Element | None, desc: str,
-                     button: str, double: bool, as_json: bool) -> None:
-    """Deliver the click through the application instead of the pointer.
+def _click_by_ladder(window: int, target: Element | None, desc: str,
+                     method: str, budget: int, as_json: bool) -> None:
+    """Deliver the click through the application, not the pointer.
 
-    The point of the semantic path is that it costs the user nothing: the
-    pointer stays where it is. A target that cannot be invoked is a
-    failure, never a quiet downgrade to a physical click - that would
-    move the user's mouse behind their back.
+    The ladder walks ``invoke -> message -> pixel``. The rungs that reach
+    for the user's pointer are paid for from the disturbance budget: with
+    no budget the action fails with a structured error instead of taking
+    the mouse. A target that cannot be reached at all is a failure, never
+    a quiet downgrade to something else.
     """
+    from openeyes.agent.profile import FocusBudget
     from openeyes.core.selector import click_element
 
     if target is None:
         raise click.UsageError(
-            "--method invoke needs a selector target: --name-contains / "
+            f"--method {method} needs a selector target: --name-contains / "
             "--control-type / --regex")
-    if button != "left" or double:
-        raise click.UsageError(
-            "--method invoke is a semantic click: --button and --double do "
-            "not apply to it")
     if not (target.automation_id or target.name):
         raise click.UsageError(
-            "--method invoke cannot address this target: it has neither a "
+            f"--method {method} cannot address this target: it has neither a "
             "name nor an automation id")
     try:
         report = click_element(window,
                                automation_id=target.automation_id or None,
                                name_contains=target.name or None,
                                control_type=target.control_type or None,
-                               method="invoke", dry_run=False)
+                               method=method, dry_run=False,
+                               budget=FocusBudget(budget))
     except Exception as exc:
-        emit_error(f"could not invoke {desc}: {exc}", code=4, hwnd=window)
+        emit_error(f"could not act on {desc}: {exc}", code=4, hwnd=window)
         return
     if not report.get("ok"):
-        emit_error(f"invoke failed for {desc}: "
-                   f"{report.get('error') or 'the control refused'}",
-                   code=3, hwnd=window)
+        code = report.get("error_code")
+        emit_error(f"{report.get('error') or 'the action was refused'}"
+                   + (f" [{code}]" if code else ""),
+                   code=3, hwnd=window, error_code=code,
+                   method=report.get("method"))
         return
     if as_json or wants_json():
         emit_json({"ok": True, "clicked": True, "dry_run": False,
                    "center": {"x": target.center.x, "y": target.center.y},
                    "description": desc, "target": target.to_dict(),
-                   "method": report.get("method") or "invoke",
+                   "method": report.get("method"),
                    "physical_input": bool(report.get("physical_input")),
                    "focus_stolen": bool(report.get("focus_stolen")),
                    "cursor_moved": bool(report.get("cursor_moved"))})
         return
-    click.echo(f"clicked {desc} (invoke)")
+    click.echo(f"clicked {desc} ({report.get('method')})")
 
 
 @cli.command("click")
@@ -290,19 +292,28 @@ def _click_by_invoke(window: int, target: Element | None, desc: str,
 @click.option("--focus-titlebar", "focus_titlebar", is_flag=True,
               help="click title bar first to ensure window focus (UWP-safe). "
                    "Only applies to a physical click.")
-@click.option("--method", "method", type=click.Choice(["auto", "invoke", "pixel"]),
+@click.option("--method", "method",
+              type=click.Choice(["auto", "invoke", "message", "pixel",
+                                 "foreground"]),
               default="auto", show_default=True,
-              help="how the click is delivered: auto (the default) is the "
-                   "physical click this command has always made; invoke asks "
-                   "the application to act, so the pointer never moves; "
-                   "pixel says that physical click out loud")
+              help="how the click is delivered: auto (the default) walks the "
+                   "ladder invoke -> message -> pixel and stops at the first "
+                   "rung that works; invoke / message ask the application to "
+                   "act, so the pointer never moves; pixel says the physical "
+                   "click out loud; foreground takes the window to the front "
+                   "first")
+@click.option("--budget", "budget", type=int, default=0, show_default=True,
+              help="how many times this run may take the foreground away from "
+                   "you (0 = never, the default). The rungs that reach for "
+                   "your pointer are paid for from it.")
 @click.option("--go", "go", is_flag=True,
               help="actually click. Default is dry-run.")
 @json_option
 def tap(window: int, x: int | None, y: int | None,
           name_contains: str | None, control_type: str | None, regex: str | None,
           button: str, double: bool, return_to_origin: bool,
-          focus_titlebar: bool, method: str, go: bool, as_json: bool) -> None:
+          focus_titlebar: bool, method: str, budget: int, go: bool,
+          as_json: bool) -> None:
     """Click by coordinates OR by element selector.
 
     By default the click is dry-run — only the resolved target is printed.
@@ -310,19 +321,26 @@ def tap(window: int, x: int | None, y: int | None,
 
     ``--method`` says how the click reaches the application:
 
-    * ``auto`` (default) - a physical click, which is what this command has
-      always done. The JSON says so: ``physical_input`` is true.
+    * ``auto`` (default) - walk the ladder ``invoke -> message -> pixel``
+      and stop at the first rung that works.
     * ``invoke`` - the application performs the click itself. The pointer
-      never moves and the window need not be in the foreground. A target
-      that cannot be invoked is reported as a failure, never quietly
-      downgraded to a physical click.
-    * ``pixel`` - the physical click, said out loud.
+      never moves and the window need not be in the foreground.
+    * ``message`` - a window message to the control. The pointer stays
+      where it is.
+    * ``pixel`` - a physical click at the element centre.
+    * ``foreground`` - take the window to the front, then click.
+
+    The rungs that reach for the user's pointer are paid for from
+    ``--budget``: how many times this run may take the foreground away
+    from you. The default is 0 - never - so a control with no semantic
+    path fails with a structured error instead of taking your mouse. Pass
+    ``--budget N`` to allow N such clicks, or ``--method pixel`` to ask
+    for one explicitly.
 
     The JSON output always states what the click cost: ``method``,
     ``physical_input`` (the user's pointer was driven), ``cursor_moved``
     and ``focus_stolen`` (the focus was pulled onto the target).
     """
-    delivery = "invoke" if method == "invoke" else "pixel"
     target = None
     if x is not None and y is not None:
         cx, cy = x, y
@@ -359,14 +377,25 @@ def tap(window: int, x: int | None, y: int | None,
             emit_json({"ok": True, "clicked": False, "dry_run": True,
                        "center": {"x": cx, "y": cy}, "description": desc,
                        "target": target.to_dict() if target else None,
-                       "method": delivery, "physical_input": False,
+                       "method": method, "physical_input": False,
                        "focus_stolen": False, "cursor_moved": False})
             return
-        click.echo(f"[dry-run] would click {desc} ({delivery})")
+        click.echo(f"[dry-run] would click {desc} ({method})")
         return
 
-    if delivery == "invoke":
-        _click_by_invoke(window, target, desc, button, double, as_json)
+    # A right click or a double click is a physical gesture: no semantic
+    # path delivers one.
+    semantic = method in ("invoke", "message", "foreground")
+    if semantic and target is None:
+        raise click.UsageError(
+            f"--method {method} needs a selector target: --name-contains / "
+            "--control-type / --regex")
+    if semantic and (button != "left" or double):
+        raise click.UsageError(
+            f"--method {method} cannot deliver a {button} "
+            f"{'double ' if double else ''}click")
+    if target is not None and method != "pixel":
+        _click_by_ladder(window, target, desc, method, budget, as_json)
         return
 
     if focus_titlebar and window:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from openeyes.core.schema import Element
 
@@ -73,18 +74,23 @@ def click_element(hwnd: int, *, name_contains: str | None = None,
                   name_regex: str | None = None,
                   control_type: str | None = None,
                   automation_id: str | None = None,
-                  method: str = "auto", dry_run: bool = True) -> dict:
+                  method: str = "auto", dry_run: bool = True,
+                  budget: Any | None = None) -> dict:
     """Click an element through the platform backend.
 
     Unlike :func:`click_by_selector` this asks the accessibility tree to
     perform the click (Invoke pattern) whenever the control supports it,
     which needs no pixel maths, no window focus and never moves the user's
     mouse. See ``openeyes.backends.uia.click_element`` for the report
-    fields.
+    fields and for the delivery ladder.
+
+    ``budget`` is an ``openeyes.agent.profile.FocusBudget``. When one is
+    given, the rungs that reach for the user's pointer are paid for from
+    it; without one, nothing is gated.
     """
     from openeyes.backends import uia as backend
     return backend.click_element(
         hwnd, automation_id=automation_id, name_regex=name_regex,
         name_contains=name_contains, control_type=control_type,
-        method=method, dry_run=dry_run,
+        method=method, dry_run=dry_run, budget=budget,
     )
