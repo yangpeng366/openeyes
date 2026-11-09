@@ -185,6 +185,7 @@ What the forward teaches:
 - A snap Firefox may only use a profile under `$HOME`; `firefox --version` prints harmless snapd mount warnings.
 - The window stays visible; `DISPLAY=:0` is the logged-in seat, not the SSH session.
 - Both ends bind `127.0.0.1`: a debug port is a privileged interface into a logged-in session.
+- The transport is interchangeable - a Tailscale address, an office LAN address or an SSH jump host all work; only the far end of `ssh` matters.
 - A login page may keep two steps in the DOM at once - `document.elementFromPoint(x, y)` says which one is on top before you click.
 
 Runbook: `docs/remote-firefox-bidi.md`. Helper: `openeyes.core.tunnel.SshTunnel`.

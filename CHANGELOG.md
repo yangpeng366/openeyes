@@ -12,6 +12,8 @@ versioning: [Semantic Versioning](https://semver.org/).
   until the local port really accepts traffic, and fails with the cause instead
   of leaving a dead port behind. Both ends bind `127.0.0.1` - a debug port is a
   privileged interface into a logged-in browser session.
+  The route to the box is interchangeable: a Tailscale address, an office LAN
+  address or an SSH jump host all serve the same hop.
 - **`examples/remote_firefox_bidi.py`** drives a Firefox on another machine
   (an Ubuntu helper box) in one command: tunnel, list tabs, scan the DOM,
   click or type - dry-run until `--go`, like every other state-changing verb.

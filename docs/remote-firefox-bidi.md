@@ -18,6 +18,15 @@ machine and the Remote Agent binds `127.0.0.1` on the remote box. A debug
 port is a privileged interface into a logged-in browser session, so it is
 never exposed on a routable address.
 
+## Reaching the box
+
+The forward rides on whatever reaches the box: a Tailscale address (`100.x`),
+an office LAN address, or an SSH jump host. Tailscale is one transport
+among others - the usual way in from outside the office, because it gives
+the box a stable address without opening a port on the office router.
+Whatever the route, the far end of the hop is the same `ssh` command and
+everything above it stays unchanged.
+
 ---
 
 ## The three steps
