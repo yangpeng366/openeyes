@@ -124,6 +124,34 @@ launch-anyvpn-keepalive.ps1 -Help
 ## feishu_first_test.py
 
 
+## remote_firefox_bidi.py - a Firefox on another machine, over SSH
+
+Opens an SSH local forward to a remote Ubuntu Firefox (Remote Agent on 9222),
+then lists tabs / scans / clicks / types through WebDriver BiDi. Click and type
+are dry-run until `--go`.
+
+```powershell
+# list the remote tabs through the tunnel
+python examples/remote_firefox_bidi.py --ssh-host yp-x240
+
+# enumerate the interactive elements of the remote page
+python examples/remote_firefox_bidi.py --ssh-host yp-x240 --scan
+
+# dry-run first, then act
+python examples/remote_firefox_bidi.py --ssh-host yp-x240 --click "Resend code" --go
+python examples/remote_firefox_bidi.py --ssh-host yp-x240 --type 123456 --go
+```
+
+The remote side needs a Firefox started with the Remote Agent; the shipped
+launcher does that with a visible window and a dedicated profile:
+
+```bash
+# on the Ubuntu box
+bash examples/remote_firefox_launch.sh --port 9222 https://tenant.example/login
+```
+
+Runbook: `docs/remote-firefox-bidi.md`.
+
 ## dsh openeyes mount
 
 ### dsh-preflight.ps1

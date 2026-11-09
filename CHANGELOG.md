@@ -7,6 +7,22 @@ versioning: [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Remote browser over SSH.** `openeyes.core.tunnel.SshTunnel` owns an SSH
+  local forward: it starts `ssh -N -L` with `ExitOnForwardFailure=yes`, waits
+  until the local port really accepts traffic, and fails with the cause instead
+  of leaving a dead port behind. Both ends bind `127.0.0.1` - a debug port is a
+  privileged interface into a logged-in browser session.
+- **`examples/remote_firefox_bidi.py`** drives a Firefox on another machine
+  (an Ubuntu helper box) in one command: tunnel, list tabs, scan the DOM,
+  click or type - dry-run until `--go`, like every other state-changing verb.
+- **`examples/remote_firefox_launch.sh`** starts the remote Firefox with the
+  Remote Agent enabled, a dedicated profile and a visible window (a headless
+  instance is refused). It also knows that a snap Firefox may only use a
+  profile under `$HOME`.
+- **`docs/remote-firefox-bidi.md`** - the runbook: the three steps, the
+  Host-header rule behind a forward, and the facts that cost time (Firefox
+  129+ has no CDP endpoints, a login page can keep two steps in the DOM at
+  once, read the field values back before submitting).
 - **Quality gate.** `examples/quality-gate.ps1` runs lint, tests, the encoding
   sweep and the MCP stdio contract in one command, and `.github/workflows/ci.yml`
   runs the same four steps on every push to `main`. A push is ready when that

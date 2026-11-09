@@ -39,6 +39,7 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **结构化优先**：`uia -> cdp -> vision` 降级链，能走无障碍树 / DOM 就不看像素，截图只作最后手段
 - **解析式 vision backend**：OmniParser v2 兼容，屏幕先被解析成结构化元素再决策，不让模型对着像素点坐标
 - **跨平台**：Windows（首发）/ macOS / Linux，统一抽象
+- **远程浏览器**：经 SSH 转发驱动另一台机器上的 Firefox（WebDriver BiDi），隧道与 Host 头一并处理
 
 ### 设计文档
 
@@ -74,6 +75,7 @@ OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform
 - **Structured first** — a `uia -> cdp -> vision` degradation chain: prefer the accessibility tree or the DOM, treat pixels as the last resort
 - **Parsing-style vision backend** — OmniParser v2 compatible; the screen is parsed into structured elements before anything decides, never raw coordinate clicking
 - **Cross-platform** — Windows (first), macOS, Linux, with one unified abstraction
+- **Remote browser** — drive a Firefox on another machine through an SSH forward (WebDriver BiDi); the tunnel and the Host header are handled for you
 
 ---
 
@@ -317,6 +319,7 @@ openeyes/
 │   │   ├── schema.py      # Element / WindowInfo dataclasses
 │   │   ├── selector.py    # element find / filter
 │   │   ├── actuator.py    # mouse / hotkey / type_text façade
+│   │   ├── tunnel.py      # SSH local forward to a remote browser
 │   │   └── hints.py       # Vimium-style letter hint overlay
 │   ├── backends/
 │   │   ├── uia.py         # Windows UIA backend (pywinauto)
@@ -339,9 +342,11 @@ openeyes/
 │   ├── architecture.md
 │   ├── RECORD_DESIGN.md        # Record & Replay design rationale
 │   ├── capability-contract.md   # 19-tool MCP contract (read / write / high-risk)
+│   ├── remote-firefox-bidi.md   # remote Firefox over SSH runbook
 │   └── dsh-web-acceptance.md    # manual acceptance guide for dsh web
 ├── examples/
 │   ├── feishu_first_test.py
+│   ├── remote_firefox_bidi.py    # tunnel + scan/click/type on a remote Firefox
 │   ├── record_demo_mock.py      # Record: fake elements, all exports
 │   ├── record_demo_prompt.py    # Record: LLM generates trajectory
 │   ├── record_demo_real.py      # Record: real Edge window

@@ -158,6 +158,37 @@ from Firefox's Remote Agent port, such as an SSH forward. Firefox 159 may
 accept the WebSocket handshake without echoing a subprotocol, so the backend
 uses the BiDi wire directly and closes only the WebDriver session, not Firefox.
 
+### Remote Firefox (Ubuntu over SSH)
+
+A browser on another machine needs an SSH local forward, and Firefox's
+Remote Agent checks the Host header of the forwarded request - so the
+forward is part of the contract, not plumbing.
+
+```powershell
+# 1. on the remote box: Firefox with the Remote Agent, visible window
+bash examples/remote_firefox_launch.sh --port 9222 https://tenant.example/login
+
+# 2. on the control machine: tunnel + drive in one command
+python examples/remote_firefox_bidi.py --ssh-host yp-x240 --scan
+python examples/remote_firefox_bidi.py --ssh-host yp-x240 --click "Resend code" --go
+
+# or own the forward and use the plain verbs
+python -c "from openeyes.core.tunnel import SshTunnel"
+eyes browser scan --protocol bidi --port 19222 --host-header localhost:9222 --pretty
+```
+
+What the forward teaches:
+
+- `ExitOnForwardFailure=yes` - without it ssh survives a refused bind and the real cause scrolls past in the log.
+- `--host-header localhost:9222` names the **remote** port, not the local one.
+- Firefox 129+ has no CDP HTTP endpoints (`/json/version` -> 404); Firefox is BiDi only.
+- A snap Firefox may only use a profile under `$HOME`; `firefox --version` prints harmless snapd mount warnings.
+- The window stays visible; `DISPLAY=:0` is the logged-in seat, not the SSH session.
+- Both ends bind `127.0.0.1`: a debug port is a privileged interface into a logged-in session.
+- A login page may keep two steps in the DOM at once - `document.elementFromPoint(x, y)` says which one is on top before you click.
+
+Runbook: `docs/remote-firefox-bidi.md`. Helper: `openeyes.core.tunnel.SshTunnel`.
+
 ## MCP server
 
 `eyes-mcp` exposes 18 primitives as MCP tools:
@@ -605,6 +636,16 @@ Both commands are read-only. `eyes resolve` never actuates.
 - Edge ``User Data`` is locked when live Edge runs; ``launch_edge`` seeds
   the temp userDataDir from just the session slices (Preferences /
   Cookies / Local Storage / Network / IndexedDB).
+- Firefox 129+ dropped CDP: ``/json/version`` answers 404. Firefox is BiDi
+  only - the websocket lives at ``ws://host:port/session``.
+- Firefox's Remote Agent checks the ``Host`` header: behind an SSH forward
+  pass ``--host-header localhost:9222`` - the remote port, not the local one.
+- A remote Ubuntu Firefox needs ``--remote-debugging-port`` at launch, plus
+  ``--remote-allow-hosts localhost``; a snap Firefox may only use a profile
+  under ``$HOME``.
+- A login page can keep two steps in the DOM at once; ``document.elementFromPoint(x, y)``
+  tells which one is on top before a click, and the field values are read back
+  before a submit.
 - 先判断是否有 API/CLI/DOM 可走：能走就不要开浏览器自动化。
 
 ## Python API
