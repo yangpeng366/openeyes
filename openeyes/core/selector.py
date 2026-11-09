@@ -75,7 +75,8 @@ def click_element(hwnd: int, *, name_contains: str | None = None,
                   control_type: str | None = None,
                   automation_id: str | None = None,
                   method: str = "auto", dry_run: bool = True,
-                  budget: Any | None = None) -> dict:
+                  budget: Any | None = None,
+                  lease: Any | None = None) -> dict:
     """Click an element through the platform backend.
 
     Unlike :func:`click_by_selector` this asks the accessibility tree to
@@ -92,5 +93,5 @@ def click_element(hwnd: int, *, name_contains: str | None = None,
     return backend.click_element(
         hwnd, automation_id=automation_id, name_regex=name_regex,
         name_contains=name_contains, control_type=control_type,
-        method=method, dry_run=dry_run, budget=budget,
+        method=method, dry_run=dry_run, budget=budget, lease=lease,
     )

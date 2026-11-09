@@ -22,6 +22,14 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **The interaction lease.** `openeyes.agent.InteractionLease` is an exclusive
+  claim on the physical input, and it holds across processes - a thread lock
+  stops at the process boundary. On Windows it is an exclusive `CreateFileW`
+  open of a lock file under the user's SID: Windows refuses the second open
+  while the first is held, and closes the handle when the process dies, so a
+  killed agent leaves no dead lock behind. Waiting is bounded and reports
+  `LEASE_TIMEOUT`. Passing a lease to `click_element` makes the rungs that
+  reach for the user's pointer take turns instead of fighting over the mouse.
 - **The action ledger - what a run cost the user.** `openeyes.agent.ledger.ActionLedger`
   records every action an agent took: the delivery path (`semantic` / `message` /
   `pixel` / `foreground`), whether the user's pointer was driven, whether the focus

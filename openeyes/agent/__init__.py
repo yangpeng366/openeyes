@@ -17,6 +17,7 @@ from openeyes.agent.errors import (
     NO_SEMANTIC_PATH,
     TARGET_CONFLICT,
 )
+from openeyes.agent.lease import InteractionLease, LeaseTimeout
 from openeyes.agent.ledger import ActionLedger, LedgerEntry, record_action
 from openeyes.agent.profile import (
     MODE_ACT,
@@ -33,7 +34,9 @@ __all__ = [
     "BACKGROUND_UNAVAILABLE",
     "BUDGET_EXCEEDED",
     "FocusBudget",
+    "InteractionLease",
     "LEASE_TIMEOUT",
+    "LeaseTimeout",
     "LedgerEntry",
     "MODE_ACT",
     "MODE_OBSERVE",

@@ -212,7 +212,7 @@ def _post_click(wrapper: Any, control_type: str) -> bool:
 
 
 def _deliver(wrapper: Any, hwnd: int, *, method: str, budget: Any,
-             cx: int | None, cy: int | None, control_type: str,
+             lease: Any, cx: int | None, cy: int | None, control_type: str,
              press_ms: int, settle_ms: int, report: dict[str, Any]) -> dict[str, Any]:
     """Walk the delivery ladder and report what happened.
 
@@ -224,6 +224,7 @@ def _deliver(wrapper: Any, hwnd: int, *, method: str, budget: Any,
     from openeyes.agent.errors import (
         BACKGROUND_UNAVAILABLE,
         BUDGET_EXCEEDED,
+        LEASE_TIMEOUT,
         NO_SEMANTIC_PATH,
     )
 
@@ -260,6 +261,11 @@ def _deliver(wrapper: Any, hwnd: int, *, method: str, budget: Any,
                 report["error"] = ((report["error"] or "")
                                    + " | no rect for pixel click")
                 continue
+            if lease is not None and not lease.acquire():
+                report["error_code"] = LEASE_TIMEOUT
+                report["error"] = ((report["error"] or "")
+                                   + " | another agent holds the input lease")
+                return report
             try:
                 from openeyes.actuators.win32 import cursor_pos
                 click_xy(cx, cy, press_ms=press_ms, settle_ms=settle_ms)
@@ -274,6 +280,9 @@ def _deliver(wrapper: Any, hwnd: int, *, method: str, budget: Any,
                 report["error"] = ((report["error"] or "")
                                    + f" | pixel click failed: {exc}")
                 continue
+            finally:
+                if lease is not None:
+                    lease.release()
 
         if rung == "foreground":
             try:
@@ -303,7 +312,8 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
                   control_type: str | None = None,
                   method: str = "auto", dry_run: bool = True,
                   press_ms: int = 30, settle_ms: int = 80,
-                  budget: Any | None = None) -> dict:
+                  budget: Any | None = None,
+                  lease: Any | None = None) -> dict:
     """Click an element, preferring the cheapest delivery path.
 
     The ladder, cheapest first:
@@ -326,6 +336,10 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
     it: with no budget left the action fails with a structured error
     instead of taking the pointer. Without a budget nothing is gated -
     that is the caller's explicit choice.
+
+    ``lease`` is an ``openeyes.agent.lease.InteractionLease``. When one is
+    given, the rungs that reach for the pointer wait for it first, so two
+    agents on one desktop take turns instead of fighting over the mouse.
 
     Returns a report dict: ``ok``, ``method``, ``name``, ``automation_id``,
     ``control_type``, ``center``, ``landed`` (pixel clicks: did the cursor
@@ -387,6 +401,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
         return finish(report)
 
     return finish(_deliver(wrapper, hwnd, method=method, budget=budget,
-                           cx=cx, cy=cy, control_type=report["control_type"],
+                           lease=lease, cx=cx, cy=cy,
+                           control_type=report["control_type"],
                            press_ms=press_ms, settle_ms=settle_ms,
                            report=report))

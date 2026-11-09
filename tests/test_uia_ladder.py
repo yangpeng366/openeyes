@@ -39,7 +39,7 @@ def _report():
 
 
 def _deliver(wrapper, **kwargs):
-    options = {"method": "auto", "budget": None, "cx": 5, "cy": 5,
+    options = {"method": "auto", "budget": None, "lease": None, "cx": 5, "cy": 5,
                "control_type": "Button", "press_ms": 0, "settle_ms": 0}
     options.update(kwargs)
     report = _report()
@@ -150,3 +150,37 @@ def test_the_foreground_rung_takes_the_window_to_the_front(monkeypatch):
     assert report["method"] == "foreground"
     assert focused == [42]
     assert clicked == [(5, 5)]
+
+# ------------------------------------------------------------------- the lease
+def test_the_physical_rung_waits_for_the_lease(monkeypatch):
+    """Two agents, one pointer: the second one waits its turn."""
+    class _Busy:
+        def acquire(self):
+            return False
+
+        def release(self):
+            raise AssertionError("nothing was acquired, nothing to release")
+
+    _no_pointer(monkeypatch)
+    report = _deliver(_Wrapper(invoke_ok=False, handle=0), lease=_Busy())
+    assert report["ok"] is False
+    assert report["error_code"] == "LEASE_TIMEOUT"
+
+
+def test_the_lease_is_released_after_the_click(monkeypatch):
+    released = []
+
+    class _Lease:
+        def acquire(self):
+            return True
+
+        def release(self):
+            released.append(True)
+
+    monkeypatch.setattr("openeyes.backends.uia.click_xy",
+                        lambda x, y, **kwargs: None)
+    monkeypatch.setattr("openeyes.actuators.win32.cursor_pos", lambda: (5, 5))
+    report = _deliver(_Wrapper(invoke_ok=False, handle=0), method="pixel",
+                      lease=_Lease())
+    assert report["ok"] is True
+    assert released == [True]
