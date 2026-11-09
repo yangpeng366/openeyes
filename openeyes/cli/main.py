@@ -8,6 +8,7 @@ Usage:
     eyes click  --window <hwnd> [--name-contains <str>] [--control-type <str>]
                 [--regex <re>] [--x N --y N] [--dry-run|--go]
                 [--button left|right|middle] [--double] [--return-to-origin]
+                [--method auto|invoke|pixel]
     eyes grid   --window <hwnd> --row R --col C [--rows N --cols N] [--dry-run|--go]
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
@@ -15,12 +16,15 @@ Usage:
     eyes version
 
 Default click behavior is **dry-run**. Pass --go to actually click.
+The JSON output says what the click cost: method, physical_input,
+focus_stolen, cursor_moved.
 """
 from __future__ import annotations
 
 import json
 import sys
 import time
+from typing import TYPE_CHECKING
 
 import click
 
@@ -29,7 +33,10 @@ from openeyes.cli.output import emit_error, emit_json, render_table, wants_json
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.capture import capture_screen, capture_window
 from openeyes.core.selector import detect_elements, find_elements
-from openeyes.core.windows import find_window
+from openeyes.core.windows import find_window, foreground_window
+
+if TYPE_CHECKING:
+    from openeyes.core.schema import Element
 
 
 def json_option(f):
@@ -221,6 +228,55 @@ def status(window: int, restore: bool, max: int, as_json: bool) -> None:
 
 # ----- click ----------------------------------------------------------------
 
+def _click_by_invoke(window: int, target: Element | None, desc: str,
+                     button: str, double: bool, as_json: bool) -> None:
+    """Deliver the click through the application instead of the pointer.
+
+    The point of the semantic path is that it costs the user nothing: the
+    pointer stays where it is. A target that cannot be invoked is a
+    failure, never a quiet downgrade to a physical click - that would
+    move the user's mouse behind their back.
+    """
+    from openeyes.core.selector import click_element
+
+    if target is None:
+        raise click.UsageError(
+            "--method invoke needs a selector target: --name-contains / "
+            "--control-type / --regex")
+    if button != "left" or double:
+        raise click.UsageError(
+            "--method invoke is a semantic click: --button and --double do "
+            "not apply to it")
+    if not (target.automation_id or target.name):
+        raise click.UsageError(
+            "--method invoke cannot address this target: it has neither a "
+            "name nor an automation id")
+    try:
+        report = click_element(window,
+                               automation_id=target.automation_id or None,
+                               name_contains=target.name or None,
+                               control_type=target.control_type or None,
+                               method="invoke", dry_run=False)
+    except Exception as exc:
+        emit_error(f"could not invoke {desc}: {exc}", code=4, hwnd=window)
+        return
+    if not report.get("ok"):
+        emit_error(f"invoke failed for {desc}: "
+                   f"{report.get('error') or 'the control refused'}",
+                   code=3, hwnd=window)
+        return
+    if as_json or wants_json():
+        emit_json({"ok": True, "clicked": True, "dry_run": False,
+                   "center": {"x": target.center.x, "y": target.center.y},
+                   "description": desc, "target": target.to_dict(),
+                   "method": report.get("method") or "invoke",
+                   "physical_input": bool(report.get("physical_input")),
+                   "focus_stolen": bool(report.get("focus_stolen")),
+                   "cursor_moved": bool(report.get("cursor_moved"))})
+        return
+    click.echo(f"clicked {desc} (invoke)")
+
+
 @cli.command("click")
 @click.option("--window", type=int, default=0)
 @click.option("--x", type=int)
@@ -232,19 +288,41 @@ def status(window: int, restore: bool, max: int, as_json: bool) -> None:
 @click.option("--double", is_flag=True)
 @click.option("--return-to-origin", is_flag=True)
 @click.option("--focus-titlebar", "focus_titlebar", is_flag=True,
-              help="click title bar first to ensure window focus (UWP-safe)")
+              help="click title bar first to ensure window focus (UWP-safe). "
+                   "Only applies to a physical click.")
+@click.option("--method", "method", type=click.Choice(["auto", "invoke", "pixel"]),
+              default="auto", show_default=True,
+              help="how the click is delivered: auto (the default) is the "
+                   "physical click this command has always made; invoke asks "
+                   "the application to act, so the pointer never moves; "
+                   "pixel says that physical click out loud")
 @click.option("--go", "go", is_flag=True,
               help="actually click. Default is dry-run.")
 @json_option
 def tap(window: int, x: int | None, y: int | None,
           name_contains: str | None, control_type: str | None, regex: str | None,
           button: str, double: bool, return_to_origin: bool,
-          focus_titlebar: bool, go: bool, as_json: bool) -> None:
+          focus_titlebar: bool, method: str, go: bool, as_json: bool) -> None:
     """Click by coordinates OR by element selector.
 
     By default the click is dry-run — only the resolved target is printed.
     Pass --go to actually click.
+
+    ``--method`` says how the click reaches the application:
+
+    * ``auto`` (default) - a physical click, which is what this command has
+      always done. The JSON says so: ``physical_input`` is true.
+    * ``invoke`` - the application performs the click itself. The pointer
+      never moves and the window need not be in the foreground. A target
+      that cannot be invoked is reported as a failure, never quietly
+      downgraded to a physical click.
+    * ``pixel`` - the physical click, said out loud.
+
+    The JSON output always states what the click cost: ``method``,
+    ``physical_input`` (the user's pointer was driven), ``cursor_moved``
+    and ``focus_stolen`` (the focus was pulled onto the target).
     """
+    delivery = "invoke" if method == "invoke" else "pixel"
     target = None
     if x is not None and y is not None:
         cx, cy = x, y
@@ -280,9 +358,15 @@ def tap(window: int, x: int | None, y: int | None,
         if as_json or wants_json():
             emit_json({"ok": True, "clicked": False, "dry_run": True,
                        "center": {"x": cx, "y": cy}, "description": desc,
-                       "target": target.to_dict() if target else None})
+                       "target": target.to_dict() if target else None,
+                       "method": delivery, "physical_input": False,
+                       "focus_stolen": False, "cursor_moved": False})
             return
-        click.echo(f"[dry-run] would click {desc}")
+        click.echo(f"[dry-run] would click {desc} ({delivery})")
+        return
+
+    if delivery == "invoke":
+        _click_by_invoke(window, target, desc, button, double, as_json)
         return
 
     if focus_titlebar and window:
@@ -296,13 +380,19 @@ def tap(window: int, x: int | None, y: int | None,
     if return_to_origin:
         import win32api
         ox, oy = win32api.GetCursorPos()
+    foreground_before = foreground_window()
     click_xy(cx, cy, button=button, double=double)
     if return_to_origin:
         win32api.SetCursorPos((ox, oy))
+    # The focus was stolen when it came onto the target from somewhere else.
+    focus_stolen = bool(window) and foreground_before != window \
+        and foreground_window() == window
     if as_json or wants_json():
         emit_json({"ok": True, "clicked": True, "dry_run": False,
                    "center": {"x": cx, "y": cy}, "description": desc,
-                   "target": target.to_dict() if target else None})
+                   "target": target.to_dict() if target else None,
+                   "method": "pixel", "physical_input": True,
+                   "focus_stolen": focus_stolen, "cursor_moved": True})
         return
     click.echo(f"clicked {desc}")
 

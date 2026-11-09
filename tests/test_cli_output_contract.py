@@ -173,3 +173,124 @@ def test_render_table_prints_headers_and_rows(capsys):
 def test_render_table_says_none_when_there_is_nothing(capsys):
     render_table(["a"], [])
     assert "none" in capsys.readouterr().out
+
+# ------------------------------------------------------- the delivery path
+def _save_element():
+    from openeyes.core.schema import BBox, Center, Element
+
+    return Element(backend="uia", control_type="Button", name="Save",
+                   bbox=BBox(0, 0, 10, 10), center=Center(5, 5),
+                   automation_id="SaveButton")
+
+
+def test_a_dry_run_reports_the_delivery_path_it_would_use(monkeypatch):
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    result = _run("--json", "click", "--window", "42",
+                  "--name-contains", "Save", "--method", "invoke")
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["method"] == "invoke"
+    assert payload["physical_input"] is False
+    assert payload["focus_stolen"] is False
+    assert payload["cursor_moved"] is False
+
+
+def test_the_default_delivery_path_is_unchanged(monkeypatch):
+    """The default stays what it always was: a physical click on the target.
+
+    Zero behaviour change is the rule here - the semantic path is opt-in
+    until the delivery ladder lands.
+    """
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    result = _run("--json", "click", "--window", "42", "--name-contains", "Save")
+    payload = json.loads(result.stdout)
+    assert payload["method"] == "pixel"
+    assert payload["physical_input"] is False
+
+
+def test_an_invoke_click_leaves_the_pointer_alone(monkeypatch):
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    seen = {}
+
+    def fake_click_element(hwnd, **kwargs):
+        seen.update(kwargs)
+        return {"ok": True, "method": "invoke", "name": "Save",
+                "physical_input": False, "cursor_moved": False,
+                "focus_stolen": False}
+
+    monkeypatch.setattr("openeyes.core.selector.click_element",
+                        fake_click_element)
+
+    def fail(*a, **k):
+        raise AssertionError("an invoke must not move the mouse")
+
+    monkeypatch.setattr("openeyes.cli.main.click_xy", fail)
+
+    result = _run("--json", "click", "--window", "42", "--name-contains", "Save",
+                  "--method", "invoke", "--go")
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert seen["method"] == "invoke"
+    assert payload["method"] == "invoke"
+    assert payload["physical_input"] is False
+    assert payload["cursor_moved"] is False
+
+
+def test_an_invoke_never_downgrades_to_a_physical_click(monkeypatch):
+    """A control that cannot be invoked is a failure, not a mouse move."""
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    monkeypatch.setattr(
+        "openeyes.core.selector.click_element",
+        lambda *a, **k: {"ok": False, "method": None,
+                         "error": "invoke failed: no pattern"})
+
+    def fail(*a, **k):
+        raise AssertionError("a failed invoke must not move the mouse")
+
+    monkeypatch.setattr("openeyes.cli.main.click_xy", fail)
+
+    result = _run("--json", "click", "--window", "42", "--name-contains", "Save",
+                  "--method", "invoke", "--go")
+    assert result.exit_code != 0
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "invoke failed" in payload["error"]
+
+
+def test_an_invoke_needs_a_selector_target():
+    """Coordinates are pixels; there is nothing to invoke."""
+    result = _run("--json", "click", "--window", "42", "--x", "5", "--y", "6",
+                  "--method", "invoke", "--go")
+    assert result.exit_code != 0
+    assert "invoke" in result.stderr
+
+
+def test_a_physical_click_says_it_moved_the_pointer(monkeypatch):
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
+    monkeypatch.setattr("openeyes.cli.main.foreground_window", lambda: 42)
+    result = _run("--json", "click", "--window", "42",
+                  "--name-contains", "Save", "--go")
+    payload = json.loads(result.stdout)
+    assert payload["method"] == "pixel"
+    assert payload["physical_input"] is True
+    assert payload["cursor_moved"] is True
+
+
+def test_a_physical_click_reports_the_focus_it_took(monkeypatch):
+    """The focus came onto the target: a cost, and it is reported."""
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
+    reads = iter([7, 42])
+    monkeypatch.setattr("openeyes.cli.main.foreground_window",
+                        lambda: next(reads))
+    result = _run("--json", "click", "--window", "42",
+                  "--name-contains", "Save", "--go")
+    payload = json.loads(result.stdout)
+    assert payload["focus_stolen"] is True

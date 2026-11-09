@@ -42,6 +42,32 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 
 `browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent, even when no element selector is supplied. A matched call also reports the resolved page as `target_url`, including when an element selector is supplied. `browser_shot` dry-run resolves a matching page URL but returns the requested output path without creating it.
 
+## CLI delivery path (`eyes click --method`)
+
+The CLI is not part of the MCP tool matrix, but it speaks the same
+vocabulary, so the promise is written down here too.
+
+| `--method` | Delivery | The user's pointer | Notes |
+| --- | --- | --- | --- |
+| `auto` (default) | physical click on the resolved target | moved | The behaviour this command has always had. It stays the default so that no existing caller changes behaviour. |
+| `invoke` | the UIA Invoke pattern | never moves | The application performs the click itself. A control that cannot be invoked **fails**: it is never downgraded to a pixel click, which would move the user's mouse behind their back. |
+| `pixel` | physical click on the resolved target | moved | The default behaviour, said out loud. |
+
+Every `eyes click --json` result states what the click cost:
+
+| Field | Meaning |
+| --- | --- |
+| `method` | the delivery path that ran (`invoke` or `pixel`). |
+| `physical_input` | the automation drove the user's pointer. |
+| `cursor_moved` | the pointer was moved by the automation. |
+| `focus_stolen` | the focus was pulled onto the target from somewhere else. |
+
+The MCP `method` enum keeps its own meaning: on `click_by_id` and
+`act_and_verify`, `auto` tries Invoke first and falls back to a pixel
+click. The CLI's `auto` keeps the historical physical click until the
+delivery ladder lands; the difference is deliberate, and it is what the
+zero-behaviour-change rule requires.
+
 ## dsh stdio mount
 
 Use [`examples/dsh-openeyes-mcp.yml`](../examples/dsh-openeyes-mcp.yml) as a patch fragment. It starts the server from this repository without relying on a user-specific `eyes-mcp.exe` path:
@@ -147,7 +173,9 @@ trustworthy. They do not appear in the MCP surface and do not alter it.
 | --- | --- | --- |
 | Python | `openeyes.act_until(act, expect, retries=3, timeout=5.0, interval=0.2, on_retry=None)` | Acts, then polls `expect` until the expected state is observed; retries with the caller's next strategy when it did not take. Returns `{ok, attempts, result, elapsed, error}`. `ok` is True only when the state was observed — a delivered action that changed nothing is a miss. |
 | Python | `openeyes.wait_until(condition, timeout=5.0, interval=0.2)` | Polls a condition; a raising condition counts as "not yet". |
-| Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto")` | Resolves a live UIA wrapper and prefers the Invoke pattern over a pixel click. `method` is `auto` / `invoke` / `pixel`; `dry_run` defaults to True. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed` and `error`. |
+| Python | `openeyes.click_element(hwnd, automation_id=..., name_regex=..., control_type=..., method="auto")` | Resolves a live UIA wrapper and prefers the Invoke pattern over a pixel click. `method` is `auto` / `invoke` / `pixel`; `dry_run` defaults to True. Returns a report with `ok`, `method`, `name`, `automation_id`, `center`, `landed`, `physical_input`, `cursor_moved`, `focus_stolen` and `error`. |
+| Python | `openeyes.agent.ActionLedger(agent_id="default")` | An append-only record of what the agents did: the delivery path, whether the user's pointer was driven, whether the focus was taken, and whether the expected state was observed. `record(**fields)` stores, `entries()` reads a copy, `summary()` counts. It never raises and never intercepts. |
+| Python | `openeyes.supervise(..., ledger=None)` | The supervision loop counts the same way (`physical_inputs`, `focus_thefts`, `foreground_changes`, `methods`, `physical_input_rate`) and writes every round in which it really acted into the ledger. A ledger that raises cannot break the loop: losing a receipt may not cost a renewal. |
 | Python | `openeyes.find_elements(elements, automation_id=...)` | Filters on the stable control id — the visible name of a live control (a countdown, a spinner) is not a stable selector. |
 | Python | `openeyes.ensure_dpi_awareness()` / `openeyes.current_dpi_awareness()` | Per-monitor-v2 awareness, applied once and never downgraded from what the host process already set. Every reported coordinate is then a real screen pixel. |
 | Python | `openeyes.move_to(x, y, settle_ms=60, steps=2)` / `openeyes.cursor_pos()` | Moves the cursor in steps and settles before the press; a single `SetCursorPos` followed by a click can be delivered at the *previous* cursor position. |

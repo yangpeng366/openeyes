@@ -186,12 +186,38 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
 
     Returns a report dict: ``ok``, ``method``, ``name``, ``automation_id``,
     ``control_type``, ``center``, ``landed`` (pixel clicks: did the cursor
-    arrive?), ``error``.
+    arrive?), ``physical_input`` (did the user's pointer get driven?),
+    ``cursor_moved``, ``focus_stolen`` (did the focus come to the target?),
+    ``error``.
+
+    The last three are what the click cost the human sharing the desktop.
+    A delivered action is not a successful one, and a semantic action is
+    not a physical one: the report keeps the two apart.
     """
     report: dict[str, Any] = {
         "ok": False, "method": None, "name": "", "automation_id": "",
-        "control_type": "", "center": None, "landed": None, "error": None,
+        "control_type": "", "center": None, "landed": None,
+        "physical_input": False, "cursor_moved": False,
+        "focus_stolen": False, "error": None,
     }
+    from openeyes.core.windows import foreground_window
+
+    foreground_before = foreground_window()
+
+    def finish(done: dict[str, Any]) -> dict[str, Any]:
+        """Close the report with what the action cost the user.
+
+        The focus was stolen when it came onto the target from somewhere
+        else; the pointer was driven only by a pixel click that actually
+        landed. An Invoke never touches either.
+        """
+        done["focus_stolen"] = bool(hwnd) and foreground_before != hwnd \
+            and foreground_window() == hwnd
+        done["physical_input"] = bool(done.get("method") == "pixel"
+                                      and done.get("landed"))
+        done["cursor_moved"] = done["physical_input"]
+        return done
+
     try:
         wrapper = _resolve_wrapper(hwnd, automation_id=automation_id,
                                    name_regex=name_regex,
@@ -199,7 +225,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
                                    control_type=control_type)
     except Exception as e:
         report["error"] = f"resolve failed: {e}"
-        return report
+        return finish(report)
 
     info = wrapper.element_info
     report["name"] = info.name or ""
@@ -215,22 +241,22 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
     if dry_run:
         report["ok"] = True
         report["method"] = "dry-run"
-        return report
+        return finish(report)
 
     if method in ("auto", "invoke"):
         try:
             wrapper.invoke()
             report["ok"] = True
             report["method"] = "invoke"
-            return report
+            return finish(report)
         except Exception as e:
             report["error"] = f"invoke failed: {e}"
             if method == "invoke":
-                return report
+                return finish(report)
 
     if cx is None:
         report["error"] = (report["error"] or "") + " | no rect for pixel click"
-        return report
+        return finish(report)
     try:
         from openeyes.actuators.win32 import cursor_pos, focus_window
         focus_window(hwnd)
@@ -242,7 +268,7 @@ def click_element(hwnd: int, *, automation_id: str | None = None,
                                 and abs(pos[1] - cy) <= 1)
         report["ok"] = True
         report["method"] = "pixel"
-        return report
+        return finish(report)
     except Exception as e:
         report["error"] = (report["error"] or "") + f" | pixel click failed: {e}"
-        return report
+        return finish(report)

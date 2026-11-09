@@ -590,3 +590,16 @@ def test_resolve_elements_never_actuates(monkeypatch):
     monkeypatch.setattr(mcp_server, "send_hotkey", fail)
     result = _call("resolve_elements", {"hwnd": 0, "port": 0})
     assert result["used_backend"] is None
+
+def test_the_method_enum_is_part_of_the_mcp_contract():
+    """auto / invoke / pixel is a promise to the agent: do not narrow it.
+
+    The CLI grew its own ``--method``; the MCP surface keeps the enum it
+    has always had, and this test is what says so.
+    """
+    tools = asyncio.run(mcp_server.list_tools())
+    by_name = {tool.name: tool for tool in tools}
+    for name in ("click_by_id", "act_and_verify"):
+        method = by_name[name].inputSchema["properties"]["method"]
+        assert method["enum"] == ["auto", "invoke", "pixel"]
+        assert method["default"] == "auto"

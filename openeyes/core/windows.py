@@ -30,6 +30,21 @@ def find_window(*, title_contains: str | None = None,
     return out
 
 
+def foreground_window() -> int:
+    """The hwnd that currently holds the foreground, or 0 when unknown.
+
+    Read-only: it observes the desktop, it never takes the focus. The
+    accounting for "did the automation steal the focus" needs the focus
+    before and after an action, and both readings have to come from one
+    place - otherwise two tools count the same disturbance differently.
+    """
+    try:
+        import win32gui
+        return int(win32gui.GetForegroundWindow())
+    except Exception:
+        return 0
+
+
 def _platform_backend():
     """Lazy import to avoid pulling platform deps on every import."""
     if sys.platform.startswith("win"):
