@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from openeyes.agent.ledger import ActionLedger
 from openeyes.core.supervise import Health, supervise
 
 
@@ -312,5 +313,150 @@ def test_the_report_serialises_every_number():
     payload = report.to_dict()
     for key in ("rounds", "healthy", "actions", "effective", "misses",
                 "failures", "false_positive_rate", "interference_rate",
-                "timeline"):
+                "physical_inputs", "focus_thefts", "foreground_changes",
+                "physical_input_rate", "methods", "timeline"):
         assert key in payload
+
+# ------------------------------------------------------- what it cost the user
+def _snapshotter(*states):
+    """A snapshot callable that walks through ``states`` in order."""
+    left = list(states)
+
+    def snap():
+        if len(left) > 1:
+            return left.pop(0)
+        return left[0] if left else {}
+
+    return snap
+
+
+def test_a_pixel_click_counts_as_a_physical_input():
+    """The pointer went under the user's hand - that is a cost, not a detail."""
+    report = supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "pixel", "landed": True, "name": "Save"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+        snapshot=_snapshotter(
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 111, "cursor": (9, 9), "target": 222},
+        ),
+    )
+    assert report.actions == 1
+    assert report.physical_inputs == 1
+    assert report.methods["pixel"] == 1
+    assert report.physical_input_rate == 1.0
+
+
+def test_an_invoke_costs_the_user_nothing():
+    """Invoke reaches the app without ever touching the user's cursor."""
+    report = supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "invoke", "name": "Save"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+        snapshot=_snapshotter(
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+        ),
+    )
+    assert report.physical_inputs == 0
+    assert report.physical_input_rate == 0.0
+    assert report.methods["invoke"] == 1
+
+
+def test_a_focus_theft_is_counted_when_we_acted():
+    report = supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "invoke"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+        snapshot=_snapshotter(
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 222, "cursor": (1, 1), "target": 222},
+        ),
+    )
+    assert report.focus_thefts == 1
+    assert report.foreground_changes == 1
+
+
+def test_a_healthy_round_cannot_steal_the_focus():
+    """We sat this round out, so the focus moved on its own - not on us."""
+    report = supervise(
+        health=lambda: Health(ok=True, due_in=1.0),
+        act=lambda: {"ok": True, "method": "invoke"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+        snapshot=_snapshotter(
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 222, "cursor": (1, 1), "target": 222},
+        ),
+    )
+    assert report.actions == 0
+    assert report.focus_thefts == 0
+    assert report.foreground_changes == 1
+
+
+# ------------------------------------------------------------------ the ledger
+def test_the_ledger_receives_one_entry_per_action():
+    ledger = ActionLedger(agent_id="worker-a")
+    supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "pixel", "landed": True, "name": "Save"},
+        expect=lambda: True,
+        max_rounds=2,
+        sleep=_no_sleep,
+        snapshot=_snapshotter(
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 111, "cursor": (9, 9), "target": 222},
+            {"foreground": 111, "cursor": (1, 1), "target": 222},
+            {"foreground": 111, "cursor": (9, 9), "target": 222},
+        ),
+        ledger=ledger,
+    )
+    entries = ledger.entries()
+    assert len(entries) == 2
+    assert entries[0].agent_id == "worker-a"
+    assert entries[0].delivery == "pixel"
+    assert entries[0].physical_input is True
+    assert entries[0].verified is True
+    assert entries[0].target == "Save"
+    assert ledger.summary()["physical_inputs"] == 2
+
+
+def test_a_dry_run_leaves_no_receipt():
+    """Nothing was delivered, so there is nothing to receipt."""
+    ledger = ActionLedger()
+    supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "pixel"},
+        expect=lambda: True,
+        max_rounds=1,
+        dry_run=True,
+        sleep=_no_sleep,
+        ledger=ledger,
+    )
+    assert ledger.entries() == []
+
+
+def test_a_broken_ledger_cannot_break_the_loop():
+    """A lost receipt may not cost a renewal."""
+
+    class _Broken:
+        def record(self, **fields):
+            raise RuntimeError("no ledger today")
+
+    report = supervise(
+        health=lambda: Health(ok=False),
+        act=lambda: {"ok": True, "method": "invoke"},
+        expect=lambda: True,
+        max_rounds=1,
+        sleep=_no_sleep,
+        ledger=_Broken(),
+    )
+    assert report.actions == 1
+    assert report.effective == 1

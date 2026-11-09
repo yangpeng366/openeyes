@@ -38,6 +38,7 @@ Two rules make the numbers trustworthy:
 """
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -113,6 +114,15 @@ class SupervisionReport:
     failures: int = 0
     #: rounds where the target was already healthy
     skipped: int = 0
+    #: rounds where the automation drove the user's pointer
+    physical_inputs: int = 0
+    #: rounds where the automation pulled the focus onto the target
+    focus_thefts: int = 0
+    #: rounds where the foreground window changed at all - an ambient fact,
+    #: not an accusation, because the user moves their own windows too
+    foreground_changes: int = 0
+    #: how many actions took each path ("invoke" / "pixel" / ...)
+    methods: dict[str, int] = field(default_factory=dict)
     timeline: list[Round] = field(default_factory=list)
 
     @property
@@ -132,6 +142,18 @@ class SupervisionReport:
                         if r.interference.get("disturbed"))
         return disturbed / self.rounds
 
+    @property
+    def physical_input_rate(self) -> float:
+        """Share of *actions* that drove the user's pointer.
+
+        ``interference_rate`` counts rounds; this counts actions, so it
+        answers the question a caller actually asks: of the things we
+        did, how many of them moved the mouse under the user's hand?
+        """
+        if not self.actions:
+            return 0.0
+        return self.physical_inputs / self.actions
+
     def to_dict(self) -> dict:
         return {
             "rounds": self.rounds,
@@ -143,6 +165,11 @@ class SupervisionReport:
             "skipped": self.skipped,
             "false_positive_rate": round(self.false_positive_rate, 4),
             "interference_rate": round(self.interference_rate, 4),
+            "physical_inputs": self.physical_inputs,
+            "focus_thefts": self.focus_thefts,
+            "foreground_changes": self.foreground_changes,
+            "physical_input_rate": round(self.physical_input_rate, 4),
+            "methods": dict(self.methods),
             "timeline": [r.to_dict() for r in self.timeline],
         }
 
@@ -176,12 +203,65 @@ def _interference(before: dict[str, Any], after: dict[str, Any],
     focus_stolen = bool(target) and focus_before != target \
         and focus_after == target
     cursor_moved = automation_drove_pointer
+    # An ambient fact, not an accusation: the focus moved somewhere during
+    # the round. It may have been the user, not us.
+    foreground_changed = bool(focus_before or focus_after) \
+        and focus_before != focus_after
     return {
         "cursor_moved": cursor_moved,
         "focus_stolen": focus_stolen,
+        "foreground_changed": foreground_changed,
         "method": method,
         "disturbed": bool(cursor_moved or focus_stolen),
     }
+
+
+def _count_interference(report: SupervisionReport, row: Round,
+                        attempted: bool) -> None:
+    """Fold one round's disturbance facts into the run's totals.
+
+    ``attempted`` says the automation really tried to act in this round.
+    A round we sat out cannot have had its focus stolen by us, however
+    the focus moved: the user moves their own windows too.
+    """
+    interference = row.interference or {}
+    if interference.get("cursor_moved"):
+        report.physical_inputs += 1
+    if attempted and interference.get("focus_stolen"):
+        report.focus_thefts += 1
+    if interference.get("foreground_changed"):
+        report.foreground_changes += 1
+    method = interference.get("method")
+    if method:
+        report.methods[str(method)] = report.methods.get(str(method), 0) + 1
+
+
+def _record_in_ledger(ledger: Any, row: Round,
+                       action_report: ActionReport | None) -> None:
+    """Write one round to a ledger, without letting the ledger break the loop.
+
+    A receipt is a diagnostic, not a duty: if the ledger refuses the
+    entry, the round still counts and the run still finishes.
+    """
+    report = action_report or {}
+    method = report.get("method")
+    interference = row.interference or {}
+    with contextlib.suppress(Exception):
+        # Imported inside the guard: a missing ledger must not stop the
+        # renewal it was only meant to record.
+        from openeyes.agent.ledger import delivery_for_method
+
+        ledger.record(
+            action=str(method or "none"),
+            delivery=delivery_for_method(method),
+            physical_input=bool(interference.get("cursor_moved")),
+            focus_stolen=bool(interference.get("focus_stolen")),
+            cursor_moved=bool(interference.get("cursor_moved")),
+            verified=bool(row.effective),
+            ok=bool(report.get("ok", True)),
+            target=str(report.get("name") or report.get("automation_id") or ""),
+            detail=str(row.detail or row.error or ""),
+        )
 
 
 def supervise(*, health: Callable[[], Health],
@@ -196,6 +276,7 @@ def supervise(*, health: Callable[[], Health],
               snapshot: Callable[[], dict[str, Any]] | None = None,
               preview: Callable[[], Any] | None = None,
               on_round: Callable[[Round], None] | None = None,
+              ledger: Any | None = None,
               sleep: Callable[[float], None] = time.sleep) -> SupervisionReport:
     """Watch a target, act when it is unhealthy, and prove the act worked.
 
@@ -223,9 +304,11 @@ def supervise(*, health: Callable[[], Health],
     the action *would* say. The action itself is never called in a dry
     run - that is the whole promise of the mode.
 
-    ``preview`` is a read-only probe used in dry-run mode to report what
-    the action *would* say. The action itself is never called in a dry
-    run - that is the whole promise of the mode.
+    ``ledger`` is anything with a ``record(**fields)`` method - see
+    ``openeyes.agent.ledger.ActionLedger``. When given, every round in
+    which the automation really acted is written to it. The ledger must
+    never break the loop: a failed receipt is swallowed, because losing
+    a receipt may not cost a renewal.
     """
     report = SupervisionReport()
     index = 0
@@ -234,6 +317,7 @@ def supervise(*, health: Callable[[], Health],
         before = snapshot() if snapshot else {}
         state = health()
         action_report: ActionReport | None = None
+        attempted = False
         round_row = Round(index=index, healthy=state.ok, acted=False,
                           effective=False, due_in=state.due_in,
                           detail=state.detail)
@@ -264,6 +348,7 @@ def supervise(*, health: Callable[[], Health],
                 round_row.detail = (round_row.detail + "; dry-run"
                                     if round_row.detail else "dry-run")
             else:
+                attempted = True
                 outcome = act_until(act, expect, retries=retries,
                                     timeout=timeout, interval=poll_interval)
                 action_report = outcome["result"] \
@@ -291,6 +376,9 @@ def supervise(*, health: Callable[[], Health],
 
         after = snapshot() if snapshot else {}
         round_row.interference = _interference(before, after, action_report)
+        _count_interference(report, round_row, attempted)
+        if ledger is not None and attempted:
+            _record_in_ledger(ledger, round_row, action_report)
         report.timeline.append(round_row)
         if on_round is not None:
             on_round(round_row)
