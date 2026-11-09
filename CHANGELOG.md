@@ -7,6 +7,19 @@ versioning: [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **The action ledger - what a run cost the user.** `openeyes.agent.ledger.ActionLedger`
+  records every action an agent took: the delivery path (`semantic` / `message` /
+  `pixel` / `foreground`), whether the user's pointer was driven, whether the focus
+  was taken, and whether the expected state was observed afterwards. A delivered
+  action is not a successful one, and a semantic action is not a physical one -
+  the ledger keeps the two apart.
+  The supervision loop counts the same way (`physical_inputs`, `focus_thefts`,
+  `foreground_changes`, `methods`, `physical_input_rate`) and can write every
+  acting round into a ledger. The ledger never raises: losing a receipt may not
+  cost a renewal.
+  Measured on this machine (Notepad's View menu, 3 rounds, the same outcome on
+  both paths): Invoke-first moved the user's pointer 0 times, the pixel path 3
+  times - same menu, same result, different cost to the human.
 - **Remote browser over SSH.** `openeyes.core.tunnel.SshTunnel` owns an SSH
   local forward: it starts `ssh -N -L` with `ExitOnForwardFailure=yes`, waits
   until the local port really accepts traffic, and fails with the cause instead
