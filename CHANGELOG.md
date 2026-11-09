@@ -37,7 +37,9 @@ versioning: [Semantic Versioning](https://semver.org/).
 - **`docs/remote-firefox-bidi.md`** - the runbook: the three steps, the
   Host-header rule behind a forward, and the facts that cost time (Firefox
   129+ has no CDP endpoints, a login page can keep two steps in the DOM at
-  once, read the field values back before submitting).
+  once, an overlay can swallow every click, the resend cooldown is the proof a
+  code went out, Marionette as the second control channel, read the field values
+  back before submitting).
 - **Quality gate.** `examples/quality-gate.ps1` runs lint, tests, the encoding
   sweep and the MCP stdio contract in one command, and `.github/workflows/ci.yml`
   runs the same four steps on every push to `main`. A push is ready when that

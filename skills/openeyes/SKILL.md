@@ -190,6 +190,18 @@ What the forward teaches:
 
 Runbook: `docs/remote-firefox-bidi.md`. Helper: `openeyes.core.tunnel.SshTunnel`.
 
+Login walls, measured on a real Feishu login:
+
+- A full-screen "Notice" overlay can swallow every click on the form below.
+  `document.elementFromPoint(x, y)` at the target's coordinates says who would
+  really get the click.
+- Two steps of the form can be in the DOM at once; the inactive one intercepts
+  clicks on the active one ("element click intercepted").
+- The resend cooldown ("Resend in 39s") is the proof that a code went out - not
+  the click, and not a patched fetch/XHR recorder (`sendBeacon` bypasses both).
+- Firefox caps active BiDi sessions and a crashed probe never releases its
+  session: restart the browser, or drive the page over Marionette (port 2828).
+
 ## MCP server
 
 `eyes-mcp` exposes 18 primitives as MCP tools:

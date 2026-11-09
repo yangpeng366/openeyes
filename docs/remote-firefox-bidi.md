@@ -128,6 +128,48 @@ Do not stop at "the click went through". The proof is the destination:
 
 ---
 
+## Traps when driving a login page
+
+A login wall is where "delivered is not effective" bites hardest. Each of
+the following was measured on a real Feishu login (a tenant page with a phone
+number plus a six-box SMS code).
+
+| Trap | How it looks | How to see it |
+|---|---|---|
+| A full-screen "Notice" overlay swallows every click | The click is delivered, the page never reacts, no request goes out | `document.elementFromPoint(x, y)` at the target's coordinates returns the overlay (`div.base-modal-container`, `position: fixed`, `z-index: 1000`) instead of the target |
+| Two steps of the form live in the DOM at once | The inactive stage intercepts clicks on the active one | `element click intercepted ... overlayingElement <div class="ud__modal__header">` - dismiss or unstack the inactive step first |
+| The terms checkbox is a precondition | "Next" is a no-op: no request, no stage change | Read `input[type=checkbox].checked` before clicking; the Agree/Cancel dialog sets it |
+| The send request may not be visible to the network | A patched `fetch`/`XHR` recorder shows only telemetry | `navigator.sendBeacon` bypasses both. Trust the UI's own state instead |
+| The code was really sent | - | The resend cooldown ("Resend in 39s") is the proof, not the click |
+
+Reading the page state before every state-changing click is what turns a
+"stuck" login into a known state. The probe that paid off:
+
+```javascript
+const top = document.elementFromPoint(x, y);   // who would really get the click
+const stage = document.querySelectorAll('.step-box');  // which steps are in the DOM
+const agreed = document.querySelector('input[type=checkbox]').checked;
+const cooldown = /Resend in \d+s/.test(document.body.innerText);  // the code really went out
+```
+
+### When the Remote Agent refuses a second session
+
+Firefox caps the number of active BiDi sessions, and a session is not released
+when the socket dies - a crashed probe leaves one behind, and the next
+`session.new` answers "Maximum number of active sessions". Two ways out:
+
+- restart the browser on the remote box (a new process starts with an empty session table),
+- drive the same page over **Marionette** instead. Starting Firefox with
+  `--marionette` opens a second control channel on `127.0.0.1:2828` (Marionette
+  protocol 3: `WebDriver:NewSession`, `WebDriver:ExecuteScript`,\</text>
+  `WebDriver:FindElement`, `WebDriver:ElementClick`). It has its own quirks:
+  the script is a function *body* (wrap expressions in `return (...)`), the
+  answer is wrapped in `{"value": ...}`, and `WebDriver:ElementClick` reports
+  "element click intercepted" together with the element that obscures the
+  target - which is the single most useful error on this whole page.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
