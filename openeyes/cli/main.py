@@ -466,22 +466,30 @@ def grid(window: int, row: int, col: int, rows: int, cols: int, dry_run: bool) -
 
 @cli.command()
 @click.option("--combo", required=True, help="e.g. ctrl+a, alt+F4")
-def hotkey(combo: str) -> None:
+@json_option
+def hotkey(combo: str, as_json: bool) -> None:
     """Press a hotkey chord, e.g. eyes hotkey --combo ctrl+a."""
     keys = [k.strip() for k in combo.split("+") if k.strip()]
     send_hotkey(*keys)
+    if as_json:
+        emit_json({"ok": True, "combo": combo})
+        return
     click.echo(f"sent hotkey {combo}")
 
 
 @cli.command()
 @click.option("--text", required=True)
 @click.option("--interval", type=float, default=0.0)
-def type(text: str, interval: float) -> None:
+@json_option
+def type(text: str, interval: float, as_json: bool) -> None:
     """Type a literal string."""
     try:
         type_text(text, interval=interval)
     except ValueError as exc:
         emit_error(str(exc), code=4, hint="use clipboard paste for non-ASCII text")
+        return
+    if as_json:
+        emit_json({"ok": True, "typed_chars": len(text)})
         return
     click.echo(f"typed {len(text)} chars")
 
