@@ -22,6 +22,13 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **Session recovery inside one budget.** `openeyes.core.recover.recover_session()`
+  chases a dropped session through the same four steps a person would:
+  detect it, start the owning process, reconnect, then wait for the state to
+  settle. Every stage draws from a single deadline (20 s by default), the
+  report carries `recovery_seconds` so a caller can assert on the promise, and
+  a dry run reports the plan without touching anything. `recover_session`,
+  `RecoveryReport` and `RecoveryStage` are exported from the package root.
 - **The agent's own cursor.** `openeyes.agent.CursorOverlay` draws a small
   coloured cursor over the desktop, so a cluster of agents is legible: the
   system pointer can only be one, but the agents can each have a cursor of

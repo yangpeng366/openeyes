@@ -112,3 +112,114 @@ def test_find_elements_combines_automation_id_and_control_type():
     elems = [_mk("KeepFreeAliveButton", "KeepFreeAliveButton", ct="Text")]
     assert find_elements(elems, automation_id="KeepFreeAliveButton",
                          control_type="Button") == []
+
+
+# --------------------------------------------------- the recovery chain ---
+def test_the_recovery_budget_is_twenty_seconds(kv):
+    """The acceptance number: a dropped session is back within 20s."""
+    assert kv.RECOVERY_DEADLINE == 20.0
+    assert kv.RECOVERY_SETTLE == 2.0
+
+
+def test_the_health_verdict_is_a_pure_read(kv):
+    """The verdict comes from the state alone - the probe cannot act.
+
+    The old probe relaunched the app and clicked "Secure my connection"
+    while it was reading, so a dry run really launched Any VPN.
+    """
+    down = kv.decide_health(kv.SessionState(app_up=False),
+                             trigger=10, interval=20.0)
+    assert down.ok is False
+    assert down.due_in == 0.0
+
+    session_down = kv.decide_health(
+        kv.SessionState(app_up=True, hwnd=7, session_up=False),
+        trigger=10, interval=20.0)
+    assert session_down.ok is False
+
+    healthy = kv.decide_health(
+        kv.SessionState(app_up=True, hwnd=7, session_up=True, countdown=19),
+        trigger=10, interval=20.0)
+    assert healthy.ok is True
+    assert healthy.due_in == 9.0
+
+    due = kv.decide_health(
+        kv.SessionState(app_up=True, hwnd=7, session_up=True, countdown=9),
+        trigger=10, interval=20.0)
+    assert due.ok is False
+    assert due.due_in == 0.0
+
+
+def test_the_recovery_runs_launch_then_reconnect(kv, monkeypatch):
+    """A dropped session comes back in the order the chain names."""
+    state = {"app": False, "up": False}
+    order = []
+
+    def fake_state():
+        return kv.SessionState(app_up=state["app"],
+                                hwnd=4242 if state["app"] else None,
+                                session_up=state["up"],
+                                countdown=15 if state["up"] else None,
+                                detail="")
+
+    def fake_relaunch(**_kwargs):
+        order.append("launch")
+        state["app"] = True
+        return True
+
+    def fake_connect(_hwnd, *, dry_run):
+        order.append("reconnect")
+        state["up"] = True
+        return True, "clicked"
+
+    monkeypatch.setattr(kv, "read_session_state", fake_state)
+    monkeypatch.setattr(kv, "find_anyvpn_window", lambda: 4242)
+    monkeypatch.setattr(kv, "relaunch_app", fake_relaunch)
+    monkeypatch.setattr(kv, "connect", fake_connect)
+
+    report = kv.recover_anyvpn(dry_run=False, deadline=5.0, interval=0.01,
+                               settle=0.0)
+
+    assert order == ["launch", "reconnect"]
+    assert report.ok is True
+    assert report.recovery_seconds <= 5.0
+
+
+def test_a_recovery_that_brings_nothing_back_is_not_a_recovery(kv, monkeypatch):
+    """Delivered is not effective - the rule the whole repo runs on."""
+    monkeypatch.setattr(kv, "read_session_state",
+                        lambda: kv.SessionState(app_up=False))
+    monkeypatch.setattr(kv, "find_anyvpn_window", lambda: None)
+    monkeypatch.setattr(kv, "relaunch_app", lambda **_kwargs: True)
+
+    report = kv.recover_anyvpn(dry_run=False, deadline=0.2, interval=0.01,
+                               settle=0.0)
+
+    assert report.ok is False
+    assert report.recovered is False
+    assert report.error is not None
+
+
+def test_a_dry_run_never_launches_the_app(kv, monkeypatch):
+    """The red line: a dry run touches nothing.
+
+    The health probe used to relaunch Any VPN, so a dry run really
+    launched the app. The probe is a read now; the recovery is the
+    action, and a dry run never calls the action.
+    """
+    acted = []
+
+    def boom(*args, **kwargs):
+        acted.append(args)
+        raise AssertionError("a dry run must not act")
+
+    monkeypatch.setattr(kv, "relaunch_app", boom)
+    monkeypatch.setattr(kv, "connect", boom)
+    monkeypatch.setattr(kv, "find_anyvpn_window", lambda: None)
+    monkeypatch.setattr(kv, "read_session_state",
+                        lambda: kv.SessionState(app_up=False))
+    monkeypatch.setattr(sys, "argv", ["anyvpn_keepalive.py", "--bootstrap",
+                                      "--max-iter", "1"])
+
+    assert kv.main() == 0
+    assert acted == []

@@ -28,6 +28,7 @@ from openeyes.core.lifecycle import (
     launch_app,
     restore_window,
 )
+from openeyes.core.recover import RecoveryReport, RecoveryStage, recover_session
 from openeyes.core.resolve import Attempt, ResolveResult, resolve_elements
 from openeyes.core.schema import BBox, Center, Element, ElementState, WindowInfo
 from openeyes.core.selector import click_by_selector, click_element, detect_elements, find_elements
@@ -51,6 +52,7 @@ __all__ = [
     "act_until", "wait_until",
     "app_state", "ensure_app", "launch_app", "restore_window",
     "supervise", "Health", "Round", "SupervisionReport",
+    "recover_session", "RecoveryReport", "RecoveryStage",
     "AppState", "EnsureResult",
     "STATE_RUNNING", "STATE_WINDOW_GONE", "STATE_NOT_RUNNING", "STATE_UNKNOWN",
     "resolve_elements", "ResolveResult", "Attempt",

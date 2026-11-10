@@ -40,6 +40,7 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **解析式 vision backend**：OmniParser v2 兼容，屏幕先被解析成结构化元素再决策，不让模型对着像素点坐标
 - **跨平台**：Windows（首发）/ macOS / Linux，统一抽象
 - **远程浏览器**：经 SSH 转发驱动另一台机器上的 Firefox（WebDriver BiDi），隧道与 Host 头一并处理
+- **会话恢复**：`recover_session` 把「掉线 → 拉起进程 → 重连 → 状态稳定」收进一个预算（默认 20 秒），报告带实际耗时，可断言、可 dry-run
 
 ### 设计文档
 
@@ -76,6 +77,7 @@ OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform
 - **Parsing-style vision backend** — OmniParser v2 compatible; the screen is parsed into structured elements before anything decides, never raw coordinate clicking
 - **Cross-platform** — Windows (first), macOS, Linux, with one unified abstraction
 - **Remote browser** — drive a Firefox on another machine through an SSH forward (WebDriver BiDi); the tunnel and the Host header are handled for you
+- **Session recovery** — `recover_session` chases a dropped session (detect -> start the process -> reconnect -> settle) inside one budget (20 s by default) and reports the seconds it took, so the promise can be asserted instead of hoped for
 
 ---
 
