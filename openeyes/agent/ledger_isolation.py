@@ -56,13 +56,35 @@ Where each number comes from, and where it stops being true:
   ``delivery == "none"``, ``ok == false`` and ``verified == false``
   (nothing was delivered, nothing succeeded, nothing was observed), and a
   ledger that says otherwise is inconsistent - this module raises rather
-  than counting it. *Limit*: the ledger carries timestamps but no
-  window. ``budget_exhausted`` is a count over the whole ledger handed
-  in, while the threshold in ``IsolationConfig`` is documented as "per
-  minute". Slicing the ledger to the window the caller means (for
-  example the last minute) is the caller's job; this module will not
-  invent a window from ``ts``, because a silently truncated window would
-  make two runs incomparable.
+  than counting it. *Limit*: the ledger has no notion of a window of its
+  own, so the caller has to name one (``window_seconds``, below).
+
+  *Window*: the threshold in ``IsolationConfig`` is documented as "3 per
+  minute" (``docs/isolation-policy.md`` §2.4), while the ledger is a
+  whole run. ``window_seconds=N`` supplies the window: a refusal is
+  counted only when its ``ts`` lies in ``[latest_ts - N, latest_ts]``,
+  inclusive at the start like every threshold in ``evaluate_isolation``,
+  where ``latest_ts`` is the newest ``ts`` in the ledger handed in - the
+  anchor is the data, never the wall clock, so the same file measured
+  tomorrow gives the same answer. ``window_seconds=0`` keeps the old
+  behaviour: the whole ledger.
+
+  Only the refusals are sliced, never ``entries``. ``semantic_miss_rate``
+  is documented as "语义失败次数 ÷ 总尝试次数" - a share of one run, with
+  no time unit (``docs/isolation-policy.md`` §2.4) - so cutting its
+  denominator on a *budget* option would move two verdicts with one
+  switch, and a quiet minute would inflate the rate by shrinking the
+  denominator instead of by any change in the work. The two numbers have
+  different units (a count per window, a share per ledger), and each is
+  compared against the threshold written for it. To keep the window from
+  hiding what it dropped, the evidence reports ``refusals`` (in the
+  window) *and* ``refusals_total`` (the whole ledger).
+
+  A window needs every counted record's ``ts`` to be a finite number: the
+  anchor is only unambiguous if every record can be placed on the same
+  timeline, so a ``ts`` that is missing or not a number is reported by
+  record index and field instead of being dropped. Without a window,
+  ``ts`` is a label nobody reads and is not validated.
 
 * **``needs_parallel`` / ``concurrent_writers``** - never derived here.
   The ledger cannot tell "two agents are awake" from "two agents must act
@@ -78,6 +100,7 @@ path is healthy. Zero evidence is not evidence of zero.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -100,11 +123,15 @@ DELIVERY_NONE = "none"
 #: reject the same files.
 FLAGS = ("physical_input", "focus_stolen", "verified")
 
+#: The window that means "the whole ledger" - the behaviour before
+#: ``window_seconds`` existed, and still the default.
+WINDOW_WHOLE_LEDGER = 0.0
+
 #: Where each ``evaluate_isolation`` parameter comes from - repeated in the
 #: JSON output so a reviewer does not have to read this module to check it.
 MAPPING = {
     "semantic_miss_rate": "physical_inputs / entries",
-    "budget_exhausted": "refusals",
+    "budget_exhausted": "refusals within window_seconds (0 = the whole ledger)",
     "needs_parallel": "caller (never the ledger)",
     "concurrent_writers": "caller (never the ledger)",
 }
@@ -142,8 +169,11 @@ class LedgerEvidence:
     entries: int = 0
     #: Records that drove the user's pointer.
     physical_inputs: int = 0
-    #: Records an attention or focus budget refused.
+    #: Records an attention or focus budget refused, inside the window.
     refusals: int = 0
+    #: The same count over the whole ledger, so a window cannot hide what
+    #: it dropped. Equal to ``refusals`` when no window was asked for.
+    refusals_total: int = 0
     #: Passed through from the caller, never inferred from the ledger.
     needs_parallel: bool = False
     #: Passed through from the caller, never inferred from the ledger.
@@ -153,6 +183,14 @@ class LedgerEvidence:
     #: Summary claims seen and skipped: they describe the run, they are not
     #: actions and must not enter the denominator.
     claims_ignored: int = 0
+    #: The window the refusals were counted in; 0 means the whole ledger.
+    window_seconds: float = WINDOW_WHOLE_LEDGER
+    #: Newest ``ts`` in the ledger, the anchor the window is measured back
+    #: from. ``None`` when the ledger has nothing counted in it.
+    window_end: float | None = None
+    #: ``window_end - window_seconds``; refusals at exactly this ``ts`` are
+    #: inside the window (the start is inclusive, like the thresholds).
+    window_start: float | None = None
 
     @property
     def semantic_miss_rate(self) -> float:
@@ -188,6 +226,15 @@ class LedgerEvidence:
             "entries": self.entries,
             "physical_inputs": self.physical_inputs,
             "refusals": self.refusals,
+            "refusals_total": self.refusals_total,
+            "window_seconds": self.window_seconds,
+            # The same number under the name the tool's JSON contract uses.
+            # ``window_seconds`` keeps this document snake_case like every
+            # other key; both are written from one field, so they cannot
+            # drift.
+            "windowSeconds": self.window_seconds,
+            "window_start": self.window_start,
+            "window_end": self.window_end,
             "semantic_miss_rate": self.semantic_miss_rate,
             "budget_exhausted": self.budget_exhausted,
             "needs_parallel": self.needs_parallel,
@@ -227,8 +274,35 @@ def _problem(index: int, problem: str, field_name: str = "",
     return row
 
 
+def _timestamp(record: Any, index: int,
+               problems: list[dict[str, Any]]) -> float | None:
+    """A counted record's ``ts`` as seconds, or ``None`` after naming why not.
+
+    Only asked for when a window is wanted: without one, ``ts`` is a label
+    on a record that nothing reads, and a label must not reject a ledger.
+    A record that cannot be placed on the timeline is reported - record
+    index and field - rather than dropped, for the same reason a record
+    without an ``agent_id`` is: a silently skipped record shrinks a count
+    nobody can see shrinking.
+    """
+    value = _field(record, "ts", None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        problems.append(_problem(
+            index, "the record has no numeric ts, so the window cannot place "
+                   "it on the timeline", "ts", value))
+        return None
+    number = float(value)
+    if not math.isfinite(number):
+        problems.append(_problem(
+            index, "ts is not a finite number, so the window cannot place it "
+                   "on the timeline", "ts", value))
+        return None
+    return number
+
+
 def ledger_evidence(entries: Any, *, needs_parallel: bool = False,
-                    concurrent_writers: int = 1) -> LedgerEvidence:
+                    concurrent_writers: int = 1,
+                    window_seconds: float = WINDOW_WHOLE_LEDGER) -> LedgerEvidence:
     """Count the ledger into the numbers the isolation verdict reads.
 
     ``entries`` is a list of records (dicts, as the exports write them) or
@@ -236,19 +310,35 @@ def ledger_evidence(entries: Any, *, needs_parallel: bool = False,
     the caller's own knowledge about the work, not something this function
     can find in a ledger of past actions.
 
+    ``window_seconds`` slices the *refusals* to the last N seconds of the
+    ledger, anchored on the newest ``ts`` in it (see the module docstring
+    for why ``entries`` is not sliced with them). ``0`` counts the whole
+    ledger, which is what this function did before the window existed.
+
     Raises ``LedgerIsolationError`` when a record cannot be counted - a
-    missing ``agent_id``, a flag that is not a boolean, or a refusal that
-    claims a delivery. Refusals are checked by the same rules as
+    missing ``agent_id``, a flag that is not a boolean, a refusal that
+    claims a delivery, or (with a window) a ``ts`` that is not a finite
+    number. Refusals are checked by the same rules as
     ``examples/interference-report.py``, so both tools agree on which
     ledgers are readable.
     """
+    window = float(window_seconds)
+    if not math.isfinite(window) or window < 0:
+        raise ValueError("window_seconds must be a finite number >= 0; "
+                         "0 means the whole ledger")
+    windowed = window > 0
+
     records = _records_of(entries)
     problems: list[dict[str, Any]] = []
     counted = 0
     physical = 0
-    refusals = 0
     claims = 0
     agents: dict[str, dict[str, int]] = {}
+    #: One ``(ts, agent)`` per refusal, so the window can be applied once
+    #: the anchor is known instead of twice inside the loop.
+    refusals: list[tuple[float, str]] = []
+    #: Every counted record's ``ts``; the newest of them anchors the window.
+    timestamps: list[float] = []
 
     for index, record in enumerate(records):
         kind = _field(record, "kind", KIND_ENTRY)
@@ -266,13 +356,22 @@ def ledger_evidence(entries: Any, *, needs_parallel: bool = False,
                                      "agent_id", agent))
             continue
         counts = agents.setdefault(
-            agent, {"entries": 0, "physical_inputs": 0, "refusals": 0})
+            agent, {"entries": 0, "physical_inputs": 0, "refusals": 0,
+                    "refusals_total": 0})
+
+        if windowed:
+            ts = _timestamp(record, index, problems)
+            if ts is None:
+                continue
+            timestamps.append(ts)
+        else:
+            ts = 0.0
 
         if kind == KIND_REFUSAL:
             counted += 1
-            refusals += 1
             counts["entries"] += 1
-            counts["refusals"] += 1
+            counts["refusals_total"] += 1
+            refusals.append((ts, agent))
             continue
 
         flags: dict[str, bool] = {}
@@ -307,8 +406,8 @@ def ledger_evidence(entries: Any, *, needs_parallel: bool = False,
                         index, "a refused entry must not claim a delivery or "
                                "a result", "refused", ", ".join(wrong)))
                     continue
-                refusals += 1
-                counts["refusals"] += 1
+                refusals.append((ts, agent))
+                counts["refusals_total"] += 1
 
             counted += 1
             counts["entries"] += 1
@@ -319,15 +418,37 @@ def ledger_evidence(entries: Any, *, needs_parallel: bool = False,
     if problems:
         raise LedgerIsolationError(problems)
 
+    window_start = window_end = None
+    if windowed and timestamps:
+        window_end = max(timestamps)
+        window_start = window_end - window
+
+    if windowed:
+        # No anchor means nothing was counted, so nothing can be inside a
+        # window either. The start is inclusive: a refusal whose ts is
+        # exactly ``latest_ts - N`` is in, the same inclusive edge every
+        # threshold in ``evaluate_isolation`` uses.
+        kept = [] if window_start is None else [
+            mark for mark in refusals if mark[0] >= window_start]
+    else:
+        kept = refusals
+    for _ts, agent in kept:
+        agents[agent]["refusals"] += 1
+
     return LedgerEvidence(entries=counted, physical_inputs=physical,
-                          refusals=refusals,
+                          refusals=len(kept),
+                          refusals_total=len(refusals),
                           needs_parallel=bool(needs_parallel),
                           concurrent_writers=int(concurrent_writers),
-                          agents=agents, claims_ignored=claims)
+                          agents=agents, claims_ignored=claims,
+                          window_seconds=window,
+                          window_end=window_end,
+                          window_start=window_start)
 
 
 def isolation_verdict(entries: Any, *, needs_parallel: bool = False,
                       concurrent_writers: int = 1,
+                      window_seconds: float = WINDOW_WHOLE_LEDGER,
                       config: IsolationConfig | None = None) -> IsolationVerdict:
     """The verdict for this ledger: stay on the shared desktop, or leave it.
 
@@ -337,12 +458,14 @@ def isolation_verdict(entries: Any, *, needs_parallel: bool = False,
     its business and are not re-implemented here.
     """
     evidence = ledger_evidence(entries, needs_parallel=needs_parallel,
-                               concurrent_writers=concurrent_writers)
+                               concurrent_writers=concurrent_writers,
+                               window_seconds=window_seconds)
     return evaluate_isolation(config=config, **evidence.as_evaluate_kwargs())
 
 
 def isolation_report(entries: Any, *, needs_parallel: bool = False,
                      concurrent_writers: int = 1,
+                     window_seconds: float = WINDOW_WHOLE_LEDGER,
                      config: IsolationConfig | None = None,
                      ledger: str = "") -> dict[str, Any]:
     """Verdict plus evidence, as one JSON-able document for human review.
@@ -350,10 +473,12 @@ def isolation_report(entries: Any, *, needs_parallel: bool = False,
     The point of shipping the evidence alongside the verdict is that a
     reader can check the numbers instead of trusting the sentence they
     produced: every count in ``evidence`` can be recounted from the same
-    ledger with ``examples/interference-report.py``.
+    ledger with ``examples/interference-report.py`` - the whole-ledger ones
+    always, the windowed refusals over the window the evidence names.
     """
     evidence = ledger_evidence(entries, needs_parallel=needs_parallel,
-                               concurrent_writers=concurrent_writers)
+                               concurrent_writers=concurrent_writers,
+                               window_seconds=window_seconds)
     verdict = evaluate_isolation(config=config, **evidence.as_evaluate_kwargs())
     return {
         "ledger": ledger,

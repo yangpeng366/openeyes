@@ -12,6 +12,14 @@ Plan (``docs/TEST-PLAN.md`` §1):
 The two rules the tests bend over backwards to pin: ``0/0`` stays ``none``
 (no evidence is not evidence of a clean desktop), and a rate that sits
 exactly on the threshold escalates (the policy is inclusive, §2).
+
+One more edge belongs to the policy and not to the mapping: the budget
+threshold is written as "3 次/分钟" (§2.4), while a ledger is a whole run.
+The window tests pin what ``window_seconds`` does - the anchor is the newest
+``ts`` in the file, the start is inclusive, a ``ts`` that cannot be read is
+an error rather than a dropped record, and the denominator stays whole - and
+what it does *not* do: ``window_seconds=0`` is byte-for-byte the answer this
+module gave before the window existed.
 """
 from __future__ import annotations
 
@@ -189,6 +197,161 @@ def test_a_standalone_refusal_counts_like_a_refused_entry():
     assert ledger_evidence(from_records).refusals == 3
     assert ledger_evidence(from_records).entries == 3
     assert isolation_verdict(from_records).level == LEVEL_SESSION
+
+
+# -------------------------------------------------------------- the window
+def _refusal_at(ts: float, agent: str = "worker-a") -> dict:
+    """A refused entry stamped at ``ts``, in the shape the exports write."""
+    return _entry(agent, refused=True, ok=False, verified=False, ts=ts)
+
+
+def test_a_refusal_outside_the_window_is_not_counted():
+    """Last 60s of a ledger whose newest ts is 100.0: [40.0, 100.0]."""
+    records = [_entry(ts=10.0),                # fills the ledger, no refusal
+               _refusal_at(10.0),              # 90s back: outside
+               _refusal_at(90.0),              # 10s back: inside
+               _entry(ts=100.0)]               # the anchor
+    evidence = ledger_evidence(records, window_seconds=60)
+    assert evidence.window_start == 40.0
+    assert evidence.window_end == 100.0
+    assert evidence.refusals == 1
+    assert evidence.refusals_total == 2
+    assert evidence.budget_exhausted == 1
+    assert isolation_verdict(records, window_seconds=60).level == LEVEL_NONE
+    # The same ledger unwindowed counts both: the window is what moved the
+    # number, and it moved only that number.
+    whole = ledger_evidence(records)
+    assert whole.refusals == whole.refusals_total == 2
+    assert whole.window_seconds == 0.0 and whole.window_start is None
+
+
+def test_a_refusal_exactly_at_the_window_start_is_counted():
+    """The start is inclusive, like every threshold in the policy."""
+    inside = [_refusal_at(40.0), _entry(ts=100.0)]
+    outside = [_refusal_at(39.999), _entry(ts=100.0)]
+    assert ledger_evidence(inside, window_seconds=60).refusals == 1
+    assert ledger_evidence(outside, window_seconds=60).refusals == 0
+
+
+def test_a_window_can_change_the_verdict_on_its_own():
+    """Five refusals in the run, one of them in the last minute."""
+    records = [_refusal_at(float(moment))
+               for moment in (0.0, 10.0, 20.0, 30.0, 100.0)] \
+        + [_entry(ts=100.0)]
+    assert isolation_verdict(records).level == LEVEL_SESSION
+    windowed = isolation_verdict(records, window_seconds=60)
+    assert windowed.level == LEVEL_NONE
+    assert isolation_verdict(records, window_seconds=60,
+                             config=IsolationConfig(
+                                 budget_exhausted_threshold=1)).level \
+        == LEVEL_SESSION
+
+
+def test_the_window_slices_refusals_and_leaves_the_rate_alone():
+    """One switch moves one number: ``entries`` and the rate stay whole.
+
+    The denominator is the ledger, not the window, because
+    ``semantic_miss_rate`` is a share of a run with no time unit (§2.4).
+    The proof is that the windowed and unwindowed evidence agree on every
+    field except the refusal counts and the window itself.
+    """
+    records = [_entry(physical_input=True, delivery="pixel", ts=1.0),
+               _entry(ts=2.0),
+               _entry(ts=3.0),
+               _refusal_at(3.0),
+               _refusal_at(50.0)]
+    whole = ledger_evidence(records)
+    windowed = ledger_evidence(records, window_seconds=10)
+
+    assert windowed.entries == whole.entries == 5
+    assert windowed.physical_inputs == whole.physical_inputs == 1
+    assert windowed.semantic_miss_rate == whole.semantic_miss_rate
+    assert windowed.refusals_total == whole.refusals_total == 2
+    assert windowed.refusals == 1
+    assert windowed.agents["worker-a"]["entries"] \
+        == whole.agents["worker-a"]["entries"]
+    assert windowed.agents["worker-a"]["refusals"] == 1
+    assert windowed.agents["worker-a"]["refusals_total"] == 2
+
+
+def test_a_window_only_sees_the_refusals_of_its_own_agents():
+    """Per-agent counts are windowed the same way the total is."""
+    records = [_refusal_at(10.0, "worker-a"), _refusal_at(90.0, "worker-b"),
+               _entry(ts=100.0, agent="worker-b")]
+    evidence = ledger_evidence(records, window_seconds=60)
+    assert evidence.refusals == 1
+    assert evidence.agents["worker-a"]["refusals"] == 0
+    assert evidence.agents["worker-a"]["refusals_total"] == 1
+    assert evidence.agents["worker-b"]["refusals"] == 1
+
+
+def test_a_ledger_without_ts_cannot_be_windowed():
+    """A record that cannot be placed on the timeline is named, not dropped."""
+    missing = _entry(ts=50.0)
+    del missing["ts"]
+    with pytest.raises(LedgerIsolationError) as excinfo:
+        ledger_evidence([_entry(ts=100.0), missing], window_seconds=60)
+    problem = excinfo.value.problems[0]
+    assert problem["record"] == 1
+    assert problem["field"] == "ts"
+    assert "ts" in str(excinfo.value)
+
+
+def test_a_ts_that_is_not_a_number_cannot_be_windowed():
+    with pytest.raises(LedgerIsolationError) as excinfo:
+        ledger_evidence([_refusal_at(1.0), _entry(ts="2026-11-10T00:00:00")],
+                        window_seconds=60)
+    assert excinfo.value.problems[0]["field"] == "ts"
+    with pytest.raises(LedgerIsolationError):
+        ledger_evidence([_entry(ts=float("nan"))], window_seconds=60)
+    # Without a window, ts is a label nothing reads, so it is not checked.
+    assert ledger_evidence([_entry(ts="later")]).entries == 1
+
+
+def test_a_negative_window_is_refused():
+    with pytest.raises(ValueError):
+        ledger_evidence([_entry()], window_seconds=-1)
+
+
+def test_no_window_is_the_old_answer_byte_for_byte():
+    """``window_seconds=0`` and "no option" must be the same bytes.
+
+    Not just the same counts: the same JSON document, so nothing on the
+    default path changed when the option was added - apart from the window
+    fields, which now report "the whole ledger".
+    """
+    records = [_entry(physical_input=True, delivery="pixel", ts=1.0),
+               _entry(ts=2.0),
+               _refusal_at(3.0),
+               _refusal_at(4.0),
+               _refusal_at(5.0),
+               {"kind": "summary", "entries": 5, "physical_input": 1,
+                "focus_stolen": 0, "refused": 3, "verified": 2}]
+    default = json.dumps(isolation_report(records, ledger="ledger.jsonl"),
+                         ensure_ascii=False).encode("utf-8")
+    explicit = json.dumps(isolation_report(records, window_seconds=0,
+                                           ledger="ledger.jsonl"),
+                          ensure_ascii=False).encode("utf-8")
+    assert default == explicit
+
+    payload = json.loads(default)
+    assert payload["evidence"]["refusals"] == 3
+    assert payload["evidence"]["refusals_total"] == 3
+    assert payload["evidence"]["window_seconds"] == 0.0
+    assert payload["evidence"]["window_start"] is None
+    assert payload["verdict"]["level"] == LEVEL_SESSION
+
+
+def test_the_json_names_the_window_and_both_refusal_counts():
+    records = [_refusal_at(10.0), _refusal_at(90.0), _entry(ts=100.0)]
+    report = isolation_report(records, window_seconds=60, ledger="l.jsonl")
+    evidence = json.loads(json.dumps(report, ensure_ascii=False))["evidence"]
+    assert evidence["windowSeconds"] == evidence["window_seconds"] == 60.0
+    assert evidence["window_start"] == 40.0
+    assert evidence["window_end"] == 100.0
+    assert evidence["refusals"] == 1
+    assert evidence["refusals_total"] == 2
+    assert evidence["budget_exhausted"] == 1
 
 
 # --------------------------------------------------------------- parallelism
@@ -390,6 +553,54 @@ def test_the_command_rejects_an_unreadable_ledger(verdict_script, tmp_path,
     code = verdict_script.main(["--ledger", str(path)])
     assert code == 2
     assert "cannot read" in capsys.readouterr().out
+
+
+def test_the_command_takes_a_window(verdict_script, tmp_path, capsys):
+    """Four refusals in the file, one of them in the last 60 seconds."""
+    path = _write_jsonl(tmp_path / "ledger.jsonl",
+                        [_refusal_at(0.0), _refusal_at(10.0),
+                         _refusal_at(20.0), _refusal_at(100.0),
+                         _entry(ts=100.0)])
+    code = verdict_script.main(["--ledger", str(path), "--json",
+                                "--window-seconds", "60"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["evidence"]["windowSeconds"] == 60.0
+    assert payload["evidence"]["refusals"] == 1
+    assert payload["evidence"]["refusals_total"] == 4
+    assert payload["verdict"]["level"] == LEVEL_NONE
+
+
+def test_the_command_prints_the_window_in_words(verdict_script, tmp_path, capsys):
+    path = _write_jsonl(tmp_path / "ledger.jsonl",
+                        [_refusal_at(0.0), _refusal_at(100.0),
+                         _entry(ts=100.0)])
+    code = verdict_script.main(["--ledger", str(path),
+                                "--window-seconds", "60"])
+    printed = capsys.readouterr().out
+    assert code == 0
+    assert "window: last 60s" in printed
+    assert "1 refusals inside, 2 in the whole ledger" in printed
+
+
+def test_the_command_rejects_a_negative_window(verdict_script, tmp_path):
+    path = _write_jsonl(tmp_path / "ledger.jsonl", [_entry()])
+    with pytest.raises(SystemExit) as excinfo:
+        verdict_script.main(["--ledger", str(path), "--window-seconds", "-5"])
+    assert excinfo.value.code == 2
+
+
+def test_the_command_rejects_a_windowed_ledger_without_ts(verdict_script,
+                                                          tmp_path, capsys):
+    record = _entry()
+    del record["ts"]
+    path = _write_jsonl(tmp_path / "ledger.jsonl", [record])
+    code = verdict_script.main(["--ledger", str(path), "--json",
+                                "--window-seconds", "60"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 2
+    assert payload["ok"] is False
+    assert payload["errors"][0]["field"] == "ts"
 
 
 def test_the_command_rejects_a_ledger_it_cannot_count(verdict_script, tmp_path,

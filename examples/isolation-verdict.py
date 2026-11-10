@@ -13,6 +13,19 @@ The parser is not copied. ``load_records`` comes from
 file that report can read, and the refusal rules that decide
 ``budget_exhausted`` are the ones that report already enforces.
 
+``--window-seconds`` reads the ledger the way the threshold is written down.
+``docs/isolation-policy.md`` §2.4 says "3 次/分钟", but a ledger is a whole
+run; with ``N > 0`` only refusals whose ``ts`` falls in the last ``N`` seconds
+of the ledger are counted (anchored on the newest ``ts`` in the file, not on
+the clock, so the same file always gives the same answer). ``entries`` and
+therefore ``semantic_miss_rate`` stay over the whole ledger: that threshold is
+a share of one run with no time unit, and cutting its denominator on a budget
+option would let one switch move two verdicts. The default is ``0`` - the
+whole ledger - which is what this tool did before the option existed. The
+JSON shows ``window_seconds`` (also as ``windowSeconds``), ``window_start``,
+``window_end``, the in-window ``refusals`` and ``refusals_total``, so the
+window can be checked instead of trusted.
+
 Two of the four inputs are not in the ledger at all:
 
 * ``--needs-parallel`` - whether the work genuinely requires two agents acting
@@ -30,10 +43,12 @@ Run it:
     python examples\\isolation-verdict.py --ledger examples\\out\\mouse-cluster-ledger.jsonl
     python examples\\isolation-verdict.py --ledger export.json --json
     python examples\\isolation-verdict.py --ledger export.jsonl --needs-parallel --concurrent-writers 2
+    python examples\\isolation-verdict.py --ledger export.jsonl --window-seconds 60
 
-Exit codes: 0 a verdict was produced; 2 the ledger cannot be read or cannot be
+Exit codes: 0 a verdict was produced; 2 the ledger cannot be read, cannot be
 counted (a missing ``agent_id``, a flag that is not a boolean, a refusal that
-claims a delivery).
+claims a delivery, a ``ts`` that is not a number when a window was asked for),
+or the arguments do not make sense.
 """
 from __future__ import annotations
 
@@ -94,6 +109,19 @@ def render(report: dict, config: IsolationConfig) -> str:
              f"refusals={evidence['refusals']} "
              f"claims_ignored={evidence['claims_ignored']}"]
 
+    if evidence["window_seconds"]:
+        # Only when a window was asked for: a default run prints exactly
+        # what it printed before the option existed.
+        start = evidence["window_start"]
+        end = evidence["window_end"]
+        span = ("no ts in the ledger" if start is None
+                else f"ts {start:.3f} .. {end:.3f}")
+        lines.append(
+            f"window: last {evidence['window_seconds']:g}s ({span}) "
+            f"- {evidence['refusals']} refusals inside, "
+            f"{evidence['refusals_total']} in the whole ledger "
+            f"(entries are not windowed)")
+
     if evidence["agents"]:
         lines.append("agents:")
         width = max(len(agent) for agent in evidence["agents"])
@@ -136,9 +164,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--concurrent-writers", type=int, default=1,
                         help="how many agents want to act at the same time "
                              "(default 1)")
+    parser.add_argument("--window-seconds", type=float, default=0.0,
+                        help="count only refusals whose ts falls within this "
+                             "many seconds of the ledger's newest ts; 0 (the "
+                             "default) counts the whole ledger")
     parser.add_argument("--json", action="store_true",
                         help="print the verdict and its evidence as JSON")
     args = parser.parse_args(argv)
+    if args.window_seconds < 0:
+        parser.error("--window-seconds may not be negative; 0 means the "
+                     "whole ledger")
 
     try:
         records = report_module().load_records(args.ledger)
@@ -154,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = isolation_report(records, needs_parallel=args.needs_parallel,
                                   concurrent_writers=args.concurrent_writers,
+                                  window_seconds=args.window_seconds,
                                   config=config, ledger=args.ledger)
     except LedgerIsolationError as exc:
         if args.json:
