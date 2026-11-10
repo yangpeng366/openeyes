@@ -55,6 +55,26 @@ def json_option(f):
     )(f)
 
 
+def _safe_echo(message: str, err: bool = False) -> None:
+    """Print without aborting on characters the console cannot encode.
+
+    Windows consoles often run under a GBK code page while trajectories carry
+    characters such as U+200B. Replace what the stream cannot represent instead
+    of turning a report into a UnicodeEncodeError traceback.
+    """
+    try:
+        click.echo(message, err=err)
+    except UnicodeEncodeError:
+        stream = sys.stderr if err else sys.stdout
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        click.echo(
+            message.encode(encoding, errors="replace").decode(
+                encoding, errors="replace"
+            ),
+            err=err,
+        )
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="eyes")
 @click.option("--json", "as_json", is_flag=True,
@@ -582,34 +602,34 @@ def record_replay(trajectory_path: str, live: bool, as_json: bool) -> None:
     counts = report.counts()
 
     if as_json:
-        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        _safe_echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     elif not live:
         # Unchanged dry-run rendering: a plan, no claims about effect.
-        click.echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
+        _safe_echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
         for item in report.actions:
             plan = item["plan"]
             detail = plan.get("selector") or plan.get("combo") or plan.get("text") or ""
-            click.echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
-        click.echo(
+            _safe_echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
+        _safe_echo(
             f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
             f"{len(report.errors)} errors"
         )
     else:
-        click.echo(f"[live] trajectory {trajectory.name} ({trajectory.id[:8]})")
+        _safe_echo(f"[live] trajectory {trajectory.name} ({trajectory.id[:8]})")
         for item in report.actions:
-            click.echo(
+            _safe_echo(
                 f"{item['index']}: {item['status']} {item.get('reason') or ''}".rstrip()
             )
         for item in report.skipped:
-            click.echo(f"{item['index']}: skipped {item.get('reason') or ''}".rstrip())
-        click.echo(
+            _safe_echo(f"{item['index']}: skipped {item.get('reason') or ''}".rstrip())
+        _safe_echo(
             f"{counts['verified']} verified / {counts['unverified']} unverified / "
             f"{counts[STATUS_FAILED]} failed"
         )
 
     if counts[STATUS_FAILED]:
         # Loud on stderr, parseable JSON still only on stdout.
-        click.echo(
+        _safe_echo(
             f"error: {counts[STATUS_FAILED]} of {len(report.actions)} steps failed",
             err=True,
         )
