@@ -13,6 +13,7 @@ Usage:
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
     eyes record replay <trajectory.jsonl> [--json]
+    eyes record export <trajectory.jsonl> --skill-dir <dir> [--description TEXT] [--force] [--json]
     eyes version
 
 Default click behavior is **dry-run**. Pass --go to actually click.
@@ -498,7 +499,7 @@ def type(text: str, interval: float, as_json: bool) -> None:
 
 @cli.group()
 def record() -> None:
-    """Inspect recorded trajectories."""
+    """Inspect, replay and export recorded trajectories."""
 
 
 @record.command("replay")
@@ -524,6 +525,45 @@ def record_replay(trajectory_path: str, as_json: bool) -> None:
         f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
         f"{len(report.errors)} errors"
     )
+
+
+@record.command("export")
+@click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--skill-dir", "skill_dir", required=True, type=click.Path(file_okay=False),
+              help="directory that receives SKILL.md and trajectory.jsonl")
+@click.option("--description", default="",
+              help="one-line description for the skill front-matter")
+@click.option("--force", is_flag=True,
+              help="overwrite SKILL.md and trajectory.jsonl in a non-empty directory")
+@json_option
+def record_export(trajectory_path: str, skill_dir: str, description: str,
+                  force: bool, as_json: bool) -> None:
+    """Package a recording as a loadable skill directory.
+
+    Writes <skill_dir>/SKILL.md (from to_codex_skill) and copies the source
+    trajectory byte-for-byte to <skill_dir>/trajectory.jsonl. Replay of the
+    exported folder is a dry-run: `eyes record replay ... --json` plans the
+    steps and never sends input.
+    """
+    from openeyes.record.export.skill_package import SkillExportError, export_skill_dir
+
+    try:
+        export = export_skill_dir(
+            trajectory_path, skill_dir, description=description, force=force,
+        )
+    except SkillExportError as exc:
+        emit_error(str(exc), code=2,
+                   hint="pass --force to overwrite the two exported files")
+        return
+
+    if as_json:
+        emit_json(export.to_dict())
+        return
+
+    click.echo(f"skill {export.name} -> {export.skill_md}")
+    click.echo(f"trajectory {export.trajectory} ({export.steps} steps)")
+    click.echo(f'[dry-run] eyes record replay "{export.trajectory}" --json')
+
 
 @cli.group()
 def browser() -> None:

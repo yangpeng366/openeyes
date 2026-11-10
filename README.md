@@ -209,6 +209,18 @@ report = Replayer(dry_run=True).replay(traj)
 eyes record replay trajectory.jsonl --json
 ```
 
+### Export a loadable skill
+
+```powershell
+eyes record export trajectory.jsonl --skill-dir .skills\rotate-vpn
+```
+
+Writes `SKILL.md` (front-matter + step table + a **Run it** section) and copies the
+source `trajectory.jsonl` byte-for-byte, so the folder replays itself:
+`eyes record replay .skills\rotate-vpn\trajectory.jsonl --json` prints a dry-run plan.
+`--json` reports `skill_dir / skill_md / trajectory / steps / name`; a non-empty
+target directory is refused unless `--force` is passed.
+
 ### Export formats
 
 | Format | Use case |
