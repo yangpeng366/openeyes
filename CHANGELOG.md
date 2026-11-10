@@ -7,6 +7,16 @@ versioning: [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **The MCP surface pays for the pointer out of the same budget as the CLI.**
+  `click` with a selector now goes through the shared ladder (`invoke` ->
+  `message` -> `pixel`) instead of aiming at the element centre, so the
+  resolver is the backend's and the mouse is only touched as a last resort.
+  `click`, `click_by_id` and `act_and_verify` accept `method` and `budget`
+  (`budget` defaults to 0). With `budget=0` a control that has no semantic
+  path fails with `BACKGROUND_UNAVAILABLE`, and `act_and_verify` retries
+  alternate `invoke`/`message` instead of escalating to a pixel click.
+  Coordinate clicks are unchanged: naming a pixel is an explicit physical
+  request, so there is nothing silent to gate.
 - **`eyes click` now walks a delivery ladder instead of always grabbing the
   pointer.** The rungs, cheapest first: the UIA Invoke pattern, a window
   message to the control itself, a synthesized pointer click, and - only on

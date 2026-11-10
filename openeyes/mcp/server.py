@@ -1,14 +1,14 @@
 """
 OpenEyes MCP server — exposes core primitives as MCP tools.
 
-Tools (15 = 7 native + 6 browser + 2 structured-first):
+Tools (19):
     list_windows()             -> [{hwnd, title, ...}, ...]
     capture_window(hwnd, out?, dry_run?) -> {path, size, captured}
     detect_elements(hwnd, restore?, depth?, name_contains?, control_type?, regex?)
                                 -> [{backend, control_type, name, bbox, center, ...}, ...]
     click(hwnd?, x?, y?, name_contains?, control_type?, regex?,
-          button?, double?, dry_run?)
-                                -> {clicked: bool, center: {x,y}, target: Element}
+          button?, double?, method?, budget?, dry_run?)
+                                -> {clicked, center, target, method, error_code}
     grid(hwnd, row, col, rows?, cols?, dry_run?) -> {center: {x,y}}
     hotkey(combo, dry_run?)     -> {sent: bool, combo: str}
     type_text(text, interval?, dry_run?) -> {sent_chars: int}
@@ -20,9 +20,10 @@ Tools (15 = 7 native + 6 browser + 2 structured-first):
     browser_type(--text, --hint|--idx|--name-contains?, dry_run?)
                                 -> {sent_chars: int, into: str, press_enter: bool}
     browser_shot(--out, dry_run?) -> {path: str, captured: bool}
-    click_by_id(hwnd, automation_id, method?, dry_run?)
+    click_by_id(hwnd, automation_id, method?, budget?, dry_run?)
                                 -> {ok, method, name, center, landed, error}
-    act_and_verify(hwnd, automation_id, expect, method?, retries?, timeout?)
+    act_and_verify(hwnd, automation_id, expect, method?, budget?, retries?,
+                   timeout?)
                                 -> {ok, attempts, observed, elapsed, error}
     native_surfaces(app, cli_names?, schemes?, exe_names?)
                                 -> {found, surfaces: [{kind, target, command}], ...}
@@ -142,6 +143,22 @@ def _match_elements(hwnd: int, selector: dict) -> list:
         control_type=selector.get("control_type"),
         regex=selector.get("regex"),
     )
+
+
+def _focus_budget(arguments: dict) -> Any:
+    """The disturbance budget for one tool call.
+
+    ``budget`` counts how many times this call may drive the user's
+    pointer. It defaults to zero, so a host that says nothing about the
+    desktop gets the semantic rungs only: a click that needs the pointer
+    fails with a structured error instead of taking it quietly.
+    """
+    from openeyes.agent.profile import FocusBudget
+
+    try:
+        return FocusBudget(int(arguments.get("budget", 0)))
+    except (TypeError, ValueError):
+        return FocusBudget(0)
 
 
 def _observe(hwnd: int, expect: dict) -> dict:
@@ -266,6 +283,21 @@ async def list_tools() -> list[Tool]:
                     "button": {"type": "string", "enum": ["left", "right", "middle"],
                                "default": "left"},
                     "double": {"type": "boolean", "default": False},
+                    "method": {"type": "string",
+                               "enum": ["auto", "invoke", "message", "pixel",
+                                        "foreground"],
+                               "default": "auto",
+                               "description": "how the click is delivered: "
+                                              "auto walks invoke -> message -> "
+                                              "pixel and stops at the first rung "
+                                              "that works; pixel/foreground ask "
+                                              "for the pointer out loud"},
+                    "budget": {"type": "integer", "default": 0,
+                               "description": "how many times this call may "
+                                              "drive the user's pointer (0 = "
+                                              "never, the default). Semantic "
+                                              "rungs are free; only the pixel "
+                                              "rung is paid for"},
                     "dry_run": {"type": "boolean", "default": True},
                 },
             },
@@ -520,10 +552,17 @@ async def list_tools() -> list[Tool]:
                     "hwnd": {"type": "integer"},
                     "automation_id": {"type": "string"},
                     "control_type": {"type": "string"},
-                    "method": {"type": "string", "enum": ["auto", "invoke", "pixel"],
+                    "method": {"type": "string",
+                               "enum": ["auto", "invoke", "message", "pixel",
+                                        "foreground"],
                                "default": "auto",
-                               "description": "auto tries Invoke first and falls "
-                                              "back to a pixel click"},
+                               "description": "auto tries Invoke first, then a "
+                                              "window message, then a pixel "
+                                              "click paid for from budget"},
+                    "budget": {"type": "integer", "default": 0,
+                               "description": "how many times this call may "
+                                              "drive the user's pointer (0 = "
+                                              "never, the default)"},
                     "dry_run": {"type": "boolean", "default": True},
                 },
                 "required": ["hwnd", "automation_id"],
@@ -584,6 +623,12 @@ async def list_tools() -> list[Tool]:
                             },
                         },
                     },
+                    "budget": {"type": "integer", "default": 0,
+                               "description": "how many times a retry may "
+                                              "drive the user's pointer (0 = "
+                                              "never, the default). Retries "
+                                              "stay on the semantic rungs "
+                                              "unless this allows more"},
                     "retries": {"type": "integer", "default": 3},
                     "timeout": {"type": "number", "default": 5.0},
                     "interval": {"type": "number", "default": 0.2},
@@ -665,51 +710,70 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 [e.to_dict() for e in elems]))]
 
         if name == "click":
+            from openeyes.core.selector import click_element
+
             dry_run = arguments.get("dry_run", True)
-            target = None
-            cx = cy = None
+            budget = _focus_budget(arguments)
             if arguments.get("x") is not None and arguments.get("y") is not None:
+                # Coordinates are an explicit physical request: the caller
+                # named the pixel, so there is no silent escalation to gate.
                 cx, cy = arguments["x"], arguments["y"]
-            else:
-                hwnd = arguments.get("hwnd")
-                if not hwnd:
-                    return [TextContent(type="text", text=_to_json(
-                        {"error": "need x/y or hwnd"}))]
-                if not any(arguments.get(key) for key in
-                           ("name_contains", "control_type", "regex")):
-                    # No selector used to mean "the first element", which is
-                    # a click nobody asked for. Fail closed instead.
-                    return [TextContent(type="text", text=_to_json({
-                        "error": ("need x/y, or hwnd plus a selector "
-                                  "(name_contains / control_type / regex)"),
-                        "tool": name,
-                    }))]
-                elems = detect_elements(hwnd, restore=True)
-                matches = find_elements(
-                    elems,
-                    name_contains=arguments.get("name_contains"),
-                    control_type=arguments.get("control_type"),
-                    regex=arguments.get("regex"),
-                )
-                if not matches:
-                    return [TextContent(type="text", text=_to_json(
-                        {"error": "no matching element", "hwnd": hwnd}))]
-                target = matches[0]
-                cx, cy = target.center.x, target.center.y
-            if not dry_run:
-                guard_hwnd = arguments.get("hwnd")
-                if guard_hwnd and not is_foreground_window(guard_hwnd):
-                    return [TextContent(type="text", text=_to_json({
-                        "error": "focus guard: target window is not foreground",
-                        "hwnd": guard_hwnd,
-                        "tool": name,
-                    }))]
-                click_xy(cx, cy, button=arguments.get("button", "left"),
-                         double=arguments.get("double", False))
+                if not dry_run:
+                    guard_hwnd = arguments.get("hwnd")
+                    if guard_hwnd and not is_foreground_window(guard_hwnd):
+                        return [TextContent(type="text", text=_to_json({
+                            "error": "focus guard: target window is not foreground",
+                            "hwnd": guard_hwnd,
+                            "tool": name,
+                        }))]
+                    click_xy(cx, cy, button=arguments.get("button", "left"),
+                             double=arguments.get("double", False))
+                return [TextContent(type="text", text=_to_json({
+                    "clicked": not dry_run,
+                    "center": {"x": cx, "y": cy},
+                    "target": None,
+                }))]
+
+            hwnd = arguments.get("hwnd")
+            if not hwnd:
+                return [TextContent(type="text", text=_to_json(
+                    {"error": "need x/y or hwnd"}))]
+            if not any(arguments.get(key) for key in
+                       ("name_contains", "control_type", "regex")):
+                # No selector used to mean "the first element", which is
+                # a click nobody asked for. Fail closed instead.
+                return [TextContent(type="text", text=_to_json({
+                    "error": ("need x/y, or hwnd plus a selector "
+                              "(name_contains / control_type / regex)"),
+                    "tool": name,
+                }))]
+
+            # A selector goes through the same ladder as click_by_id:
+            # invoke first, then message, then a pixel click paid for from
+            # the budget. The hit test is left to the backend so there is
+            # one resolver, not two.
+            report = click_element(
+                hwnd,
+                name_contains=arguments.get("name_contains"),
+                control_type=arguments.get("control_type"),
+                name_regex=arguments.get("regex"),
+                method=arguments.get("method", "auto"),
+                dry_run=dry_run,
+                budget=budget,
+            )
             return [TextContent(type="text", text=_to_json({
-                "clicked": not dry_run,
-                "center": {"x": cx, "y": cy},
-                "target": target.to_dict() if target else None,
+                "clicked": bool(report.get("ok")) and not dry_run,
+                "center": report.get("center"),
+                "target": {
+                    "name": report.get("name"),
+                    "automation_id": report.get("automation_id"),
+                    "control_type": report.get("control_type"),
+                },
+                "method": report.get("method"),
+                "physical_input": report.get("physical_input"),
+                "focus_stolen": report.get("focus_stolen"),
+                "error": report.get("error"),
+                "error_code": report.get("error_code"),
             }))]
 
         if name == "native_surfaces":
@@ -739,6 +803,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 control_type=arguments.get("control_type"),
                 method=arguments.get("method", "auto"),
                 dry_run=arguments.get("dry_run", True),
+                budget=_focus_budget(arguments),
             )
             return [TextContent(type="text", text=_to_json(report))]
 
@@ -771,7 +836,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "detail": "would act, then verify the expected state",
                 }))]
 
-            state = {"method": method}
+            state = {"method": method, "budget": _focus_budget(arguments)}
 
             def act():
                 report = click_element(
@@ -781,6 +846,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     control_type=control_type,
                     method=state["method"],
                     dry_run=False,
+                    budget=state["budget"],
                 )
                 if not report.get("ok") and name_regex:
                     report = click_element(
@@ -789,6 +855,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         control_type=control_type,
                         method=state["method"],
                         dry_run=False,
+                        budget=state["budget"],
                     )
                 return report
 
@@ -796,9 +863,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 return _observe(hwnd, expect)["satisfied"]
 
             def on_retry(attempt, _result):
-                # switch strategy: the pixel fallback is the last resort
-                state["method"] = ("pixel" if state["method"] != "pixel"
-                                   else "invoke")
+                # The pixel rung drives the user's pointer. Retries climb to
+                # it only when the disturbance budget pays for it; otherwise
+                # they alternate the semantic rungs and never take the
+                # desktop away from the person using it.
+                if state["method"] != "pixel" and state["budget"].allows():
+                    state["method"] = "pixel"
+                else:
+                    state["method"] = ("message" if state["method"] != "message"
+                                       else "invoke")
 
             outcome = act_until(act, observe,
                                 retries=int(arguments.get("retries", 3)),

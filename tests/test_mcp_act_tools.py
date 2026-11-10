@@ -297,3 +297,103 @@ def test_browser_click_with_a_stale_hint_refuses_to_click_the_first_element(
 
     assert "error" in result
     assert fake.clicked == []
+
+
+# ------------------------------------------------- the ladder and its budget
+def test_click_selector_uses_the_ladder_and_never_aims_the_pointer(monkeypatch):
+    """A selector click asks the control to act; the mouse stays put."""
+    _stub_elements(monkeypatch, [_mk("Submit")])
+    monkeypatch.setattr(
+        "openeyes.mcp.server.click_xy",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("aimed the user's pointer")),
+    )
+    seen = {}
+
+    def fake_click(hwnd, **kwargs):
+        seen.update(kwargs)
+        return {"ok": True, "method": "invoke", "name": "Submit",
+                "automation_id": "", "control_type": "Button",
+                "center": (50, 15), "physical_input": False,
+                "focus_stolen": False, "error": None, "error_code": None}
+
+    monkeypatch.setattr("openeyes.core.selector.click_element", fake_click)
+
+    result = _call("click", {"hwnd": 42, "name_contains": "Submit"})
+
+    assert result["method"] == "invoke"
+    assert seen["method"] == "auto"
+    # the default budget is zero: the pixel rung is not paid for
+    assert seen["budget"].per_minute == 0
+    assert seen["budget"].allows() is False
+
+
+def test_click_reports_the_budget_refusal_instead_of_clicking(monkeypatch):
+    _stub_elements(monkeypatch, [_mk("Spin", "Spin")])
+    monkeypatch.setattr("openeyes.core.selector.click_element", lambda hwnd, **kw: {
+        "ok": False, "method": None, "name": "Spin", "automation_id": "Spin",
+        "control_type": "Button", "center": (50, 15), "physical_input": False,
+        "focus_stolen": False,
+        "error": "the disturbance budget does not allow a pixel click",
+        "error_code": "BACKGROUND_UNAVAILABLE",
+    })
+
+    result = _call("click", {
+        "hwnd": 42, "name_contains": "Spin", "dry_run": False,
+    })
+
+    assert result["clicked"] is False
+    assert result["error_code"] == "BACKGROUND_UNAVAILABLE"
+
+
+def _retry_probe(monkeypatch):
+    """Drive act_and_verify through one retry and record the methods used."""
+    _stub_elements(monkeypatch, [_mk("Keep", "Keep")])
+    methods = []
+
+    def fake_click(hwnd, **kwargs):
+        methods.append(kwargs["method"])
+        return {"ok": False, "method": kwargs["method"], "name": "Keep",
+                "automation_id": "Keep", "control_type": "Button",
+                "center": (50, 15), "landed": None, "error": "not delivered"}
+
+    monkeypatch.setattr("openeyes.core.selector.click_element", fake_click)
+
+    def fake_act_until(act, observe, **kwargs):
+        act()
+        kwargs["on_retry"](1, None)
+        act()
+        return {"ok": False, "attempts": 2, "result": None, "elapsed": 0.1,
+                "error": "miss"}
+
+    monkeypatch.setattr("openeyes.core.verify.act_until", fake_act_until)
+    return methods
+
+
+def test_act_and_verify_retries_stay_semantic_without_a_budget(monkeypatch):
+    """budget=0: a retry alternates semantic rungs, never the pointer."""
+    methods = _retry_probe(monkeypatch)
+
+    _call("act_and_verify", {
+        "hwnd": 42,
+        "automation_id": "Keep",
+        "expect": {"element_appears": {"automation_id": "ConnectButton"}},
+        "dry_run": False,
+    })
+
+    assert "pixel" not in methods
+    assert methods == ["auto", "message"]
+
+
+def test_act_and_verify_retries_may_reach_pixel_when_budget_allows(monkeypatch):
+    methods = _retry_probe(monkeypatch)
+
+    _call("act_and_verify", {
+        "hwnd": 42,
+        "automation_id": "Keep",
+        "expect": {"element_appears": {"automation_id": "ConnectButton"}},
+        "budget": 1,
+        "dry_run": False,
+    })
+
+    assert methods == ["auto", "pixel"]

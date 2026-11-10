@@ -594,12 +594,12 @@ def test_resolve_elements_never_actuates(monkeypatch):
 def test_the_method_enum_is_part_of_the_mcp_contract():
     """auto / invoke / pixel is a promise to the agent: do not narrow it.
 
-    The CLI grew its own ``--method``; the MCP surface keeps the enum it
-    has always had, and this test is what says so.
+    The enum may grow (``message`` and ``foreground`` are the rungs the CLI
+    already exposes), but the three original values must keep working.
     """
     tools = asyncio.run(mcp_server.list_tools())
     by_name = {tool.name: tool for tool in tools}
     for name in ("click_by_id", "act_and_verify"):
         method = by_name[name].inputSchema["properties"]["method"]
-        assert method["enum"] == ["auto", "invoke", "pixel"]
+        assert {"auto", "invoke", "pixel"} <= set(method["enum"])
         assert method["default"] == "auto"
