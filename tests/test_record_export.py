@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 
-import yaml
 from click.testing import CliRunner
 
 from openeyes.cli.main import cli
@@ -70,10 +69,15 @@ def _write_source(tmp_path, name: str = "trajectory.jsonl"):
 
 
 def _front_matter(text: str) -> tuple[dict, str]:
-    """Split a SKILL.md into (parsed front-matter, body)."""
+    """Split a SKILL.md into (front-matter map, body); no YAML dependency."""
     assert text.startswith("---\n"), text[:40]
     _, raw, body = text.split("---\n", 2)
-    return yaml.safe_load(raw), body
+    fields = {}
+    for line in raw.splitlines():
+        key, sep, value = line.partition(":")
+        assert sep, line
+        fields[key.strip()] = value.strip().strip('"')
+    return fields, body
 
 
 def _export(source, skill_dir, *extra: str):
