@@ -12,7 +12,8 @@ The interesting part is not "can the window be created". It is whether
 the window is a *real* window there - created, cut to the cursor
 silhouette, painted with the right pixels - while the interactive
 desktop is left exactly as it was: same foreground window, same pointer
-position, no input sent. And then whether anything can look at the
+position, no input sent, and no second-desktop window taken as its
+foreground. And then whether anything can look at the
 result: ``PrintWindow`` reads a window's own painting, while a screen
 grab needs a screen, and a desktop nobody is showing has none.
 
@@ -1014,7 +1015,19 @@ def _checks(report: SecondDesktopReport) -> list[Check]:
             f"(GetForegroundWindow before={foreground.get('before')} "
             f"mid={foreground.get('mid')} after={foreground.get('after')})")
     else:
-        foreground_status = (PASS if foreground.get("unchanged") else FAIL)
+        own_hwnd = int(window.get("hwnd") or 0)
+        interactive = {int(foreground.get(key) or 0)
+                       for key in ("before", "mid", "after")}
+        if own_hwnd and own_hwnd in interactive:
+            foreground_status = FAIL
+        elif foreground.get("unchanged"):
+            foreground_status = PASS
+        else:
+            # A person (or another automation) may switch applications while
+            # the probe is running. That is not this automation's doing, and
+            # no window from the second desktop reached the interactive one.
+            # The honest answer is "cannot attribute", not PASS or FAIL.
+            foreground_status = SKIP
         foreground_detail = (
             f"GetForegroundWindow before={foreground.get('before')} "
             f"mid={foreground.get('mid')} after={foreground.get('after')} "

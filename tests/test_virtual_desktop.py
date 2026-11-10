@@ -183,6 +183,41 @@ def test_a_refused_desktop_skips_every_check_instead_of_guessing():
     assert report.status("foreground_unchanged") == SKIP
 
 
+def _measured_report(foreground: dict) -> SecondDesktopReport:
+    return SecondDesktopReport(
+        desktop_name="probe", created=True,
+        window={
+            "hwnd": 9001, "size": [22, 22], "visible": True,
+            "region_complexity": 3, "painted_outside": 0,
+            "blank_inside": 0,
+        },
+        capture={
+            "painted_pixels": 152, "window_dc_matched": 152,
+            "printwindow_ok": True, "printwindow_matched": 152,
+            "screen_changed_pixels": 0,
+        },
+        foreground=foreground,
+        cursor={"before": [1, 2], "mid": [1, 2], "after": [1, 2],
+                "unchanged": True},
+    )
+
+
+def test_an_external_focus_change_is_not_attributed_to_the_probe():
+    report = _measured_report({
+        "before": 111, "mid": 222, "after": 333,
+        "inside_desktop": 0, "unchanged": False,
+    })
+    assert probe._checks(report)[6].status == SKIP
+
+
+def test_the_second_desktops_window_reaching_the_interactive_desktop_fails():
+    report = _measured_report({
+        "before": 111, "mid": 9001, "after": 333,
+        "inside_desktop": 9001, "unchanged": False,
+    })
+    assert probe._checks(report)[6].status == FAIL
+
+
 # ----------------------------------------------------- the real machine
 @WINDOWS
 def test_the_topology_is_the_machine_it_runs_on():
@@ -200,7 +235,7 @@ def test_the_topology_is_the_machine_it_runs_on():
 
 @WINDOWS
 def test_a_second_desktop_holds_a_cursor_window_without_touching_this_one():
-    """The window there, the foreground window and pointer here, unchanged."""
+    """The window is painted there; the pointer and foreground stay here."""
     before = set(_desktop_names())
     report = probe_second_desktop(position=(300, 300), label="", hold=0.4)
     if not report.created:
