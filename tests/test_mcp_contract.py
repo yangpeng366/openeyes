@@ -37,6 +37,7 @@ def test_mcp_exposes_stable_tool_set():
         "click_by_id",
         "act_and_verify",
         "native_surfaces",
+        "record_replay",
     ]
 
 

@@ -38,6 +38,7 @@ EXPECTED_TOOLS = [
     "click_by_id",
     "act_and_verify",
     "native_surfaces",
+    "record_replay",
 ]
 
 PROBE_TEXT = "acceptance"
