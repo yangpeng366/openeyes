@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openeyes"
 version = "0.2.0"
-description = "OpenEyes — AI-friendly computer-use primitives for Windows/macOS/Linux"
+description = "OpenEyes - AI-friendly computer-use primitives for Windows desktops"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -29,13 +29,9 @@ requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Win32 (MS Windows)",
-    "Environment :: MacOS X",
-    "Environment :: POSIX :: Linux",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: Microsoft :: Windows",
-    "Operating System :: MacOS",
-    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -53,9 +49,6 @@ dependencies = [
 windows = [
     "pywinauto>=0.6.8",
     "pywin32>=306",
-]
-macos = [
-    "pyobjc-framework-Cocoa>=10.0",
 ]
 mcp = [
     "mcp>=1.0",
@@ -92,3 +85,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+[tool.setuptools.package-data]
+"openeyes.decision" = ["*.json"]
+

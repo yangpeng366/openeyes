@@ -1,11 +1,11 @@
 # OpenEyes（开源点睛）
 
-> **AI-friendly computer-use primitives for Windows / macOS / Linux.**
+> **AI-friendly computer-use primitives for Windows desktops.**
 > Capture. Detect. Click. Let any LLM agent drive any desktop GUI.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Windows / macOS / Linux](https://img.shields.io/badge/platform-win%20%7C%20macos%20%7C%20linux-lightgrey)](https://github.com/yangpeng366/openeyes)
+[![Windows](https://img.shields.io/badge/platform-windows-lightgrey)](https://github.com/yangpeng366/openeyes)
 [![M8ven Score](https://m8ven.ai/badge/mcp/yangpeng366-openeyes-181btc)](https://m8ven.ai/mcp/yangpeng366-openeyes-181btc)
 
 GitHub: <https://github.com/yangpeng366/openeyes> · 中文 · [English](#english) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [License](#license)
@@ -38,7 +38,7 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **MCP 优先**：所有原语通过 MCP server 暴露给任何 agent
 - **结构化优先**：`uia -> cdp -> vision` 降级链，能走无障碍树 / DOM 就不看像素，截图只作最后手段
 - **解析式 vision backend**：OmniParser v2 兼容，屏幕先被解析成结构化元素再决策，不让模型对着像素点坐标
-- **跨平台**：Windows（首发）/ macOS / Linux，统一抽象
+- **Windows 优先**：当前只有 Windows（UIA）后端真正可用；macOS / Linux 在路线图上，尚未实现
 - **远程浏览器**：经 SSH 转发驱动另一台机器上的 Firefox（WebDriver BiDi），隧道与 Host 头一并处理
 - **会话恢复**：`recover_session` 把「掉线 → 拉起进程 → 重连 → 状态稳定」收进一个预算（默认 20 秒），报告带实际耗时，可断言、可 dry-run
 
@@ -64,7 +64,7 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 | UiBot / APA | Record/playback, weak on dynamic UIs |
 | pywinauto / xdotool | Raw libs, no AI-friendly schema |
 
-OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform.
+OpenEyes fuses these into one MIT-licensed, AI-friendly platform for Windows desktops.
 
 ### Features
 
@@ -75,7 +75,7 @@ OpenEyes fuses these into one MIT-licensed, cross-platform, AI-friendly platform
 - **MCP-first** — every primitive exposed as an MCP tool to any agent
 - **Structured first** — a `uia -> cdp -> vision` degradation chain: prefer the accessibility tree or the DOM, treat pixels as the last resort
 - **Parsing-style vision backend** — OmniParser v2 compatible; the screen is parsed into structured elements before anything decides, never raw coordinate clicking
-- **Cross-platform** — Windows (first), macOS, Linux, with one unified abstraction
+- **Windows first** — the Windows (pywinauto/UIA) backend is the one that works today; macOS and Linux are on the roadmap, not in the box
 - **Remote browser** — drive a Firefox on another machine through an SSH forward (WebDriver BiDi); the tunnel and the Host header are handled for you
 - **Session recovery** — `recover_session` chases a dropped session (detect -> start the process -> reconnect -> settle) inside one budget (20 s by default) and reports the seconds it took, so the promise can be asserted instead of hoped for
 
@@ -160,7 +160,7 @@ python examples\feishu_first_test.py --dry-run
 ├────────────────────────────────────────────────────────────────┤
 │  L1  Actuate          mouse / key / drag  (Win32 / CG / XTest)  │
 ├────────────────────────────────────────────────────────────────┤
-│  L0  Platform         Windows / macOS / Linux                   │
+│  L0  Platform         Windows (UIA) - macOS/Linux planned       │
 └────────────────────────────────────────────────────────────────┘
 ```
 
