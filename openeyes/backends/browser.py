@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from openeyes.core.coords import MissingViewportOrigin, to_screen_point
+
 PROTOCOLS = ("cdp", "bidi")
 DEFAULT_PROTOCOL = "cdp"
 
@@ -60,3 +62,34 @@ def type_text(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
 def screenshot(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
                out_path: str = "") -> str:
     return backend_for(protocol).screenshot(conn, out_path)
+
+
+#: Backends that can measure where the page viewport sits on screen. A
+#: backend that cannot is not guessed at: its click path stays in-page
+#: (CDP ``Input.dispatchMouseEvent``, BiDi ``origin: "viewport"``), and a
+#: caller that needs a physical click must supply the origin itself.
+VIEWPORT_ORIGIN_BACKENDS = ("bidi",)
+
+
+def viewport_origin(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
+                    element: Any = None):
+    """The viewport's screen corner for *protocol*, or a stated refusal."""
+    backend = backend_for(protocol)
+    resolver = getattr(backend, "viewport_origin", None)
+    if resolver is None:
+        raise MissingViewportOrigin(
+            f"the {protocol!r} backend has no source for the page viewport's "
+            "screen corner; its click path dispatches inside the page "
+            "(no screen coordinates involved). Pass viewport_origin=(x, y) "
+            "from a source that measured it, or click through the backend."
+        )
+    return resolver(conn, element)
+
+
+def screen_point(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
+                 element: Any = None, *, origin=None) -> tuple[int, int]:
+    """Absolute screen pixels for *element*, using a measured origin."""
+    if origin is None:
+        origin = viewport_origin(protocol, conn, element)
+    pair = origin.as_tuple() if hasattr(origin, "as_tuple") else origin
+    return to_screen_point(element, viewport_origin=pair)

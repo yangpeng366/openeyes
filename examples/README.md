@@ -349,3 +349,31 @@ with the vendored Node bridge, writes JSON evidence plus a machine-readable
 summary, prints a one-line CLI result, and exits non-zero on a schema or
 step-count mismatch. Action sequences are reported; add `--require-actions`
 for recordings expected to be operationally identical.
+
+## multi-monitor-smoke.py
+
+Measures the coordinate maths that Windows hides: a window away from
+(0, 0), a monitor at a negative coordinate, and a display at 125 % / 130 %
+scaling. It enumerates every monitor with its DPI, then - only with
+`--go` - opens its own window on the display under test, sends a real
+click, and compares what the window received with the point that was
+computed through `to_screen_xy`.
+
+```powershell
+# dry-run (default): the plan and every monitor's dpi; nothing is clicked
+python examples\multi-monitor-smoke.py
+
+# real windows and real clicks; the cursor is restored afterwards
+python examples\multi-monitor-smoke.py --go
+
+# machine-readable report, including expected/measured points
+python examples\multi-monitor-smoke.py --go --json
+```
+
+A scenario the machine cannot exercise is `SKIP` with its reason and the
+numbers behind it - a single-monitor laptop says
+`SKIP negative_secondary_click: no secondary monitor with a negative origin
+(displays: \\.\DISPLAY1 at (0,0))`, never a fabricated pass. Measured on
+this machine (single 2240x1400 display at 130 %): both runnable scenarios
+PASS with 0 px error, the negative-coordinate scenario SKIPs, and the
+overall verdict stays `DRY-RUN` until `--go` is passed.

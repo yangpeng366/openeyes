@@ -19,6 +19,28 @@ from typing import Any
 import websocket
 
 from openeyes.backends.dom_probe import control_type_map, dom_js, make_element
+from openeyes.core.coords import MissingViewportOrigin, to_screen_point
+from openeyes.core.viewport import (
+    SOURCE_INNER_SCREEN,
+    ViewportOrigin,
+    missing_origin_message,
+    origin_from_probe,
+)
+
+#: The viewport corner, asked of the page itself. ``mozInnerScreenX``/``Y``
+#: are a Gecko extension (CSS pixels from the web-exposed screen area to the
+#: viewport's top-left corner); multiplying by ``devicePixelRatio`` gives
+#: device pixels, which is what ``SetCursorPos`` speaks. A browser without
+#: them answers ``null`` and the caller refuses rather than guessing the
+#: browser-chrome offset - see ``openeyes.core.viewport``.
+_VIEWPORT_ORIGIN_JS = """(function() {
+  var dpr = window.devicePixelRatio;
+  return {
+    x: (typeof window.mozInnerScreenX === "number") ? window.mozInnerScreenX : null,
+    y: (typeof window.mozInnerScreenY === "number") ? window.mozInnerScreenY : null,
+    dpr: (typeof dpr === "number") ? dpr : null
+  };
+})()"""
 
 BIDI_DEFAULT_PORT = 9222
 # Firefox Remote Agent checks the HTTP Host header against
@@ -127,6 +149,9 @@ class BidiConnection:
                     "context": context_id,
                     "url": node.get("url") or "",
                     "parent": parent,
+                    # Kept so a viewport-origin refusal can quote the window
+                    # the context lives in.
+                    "clientWindow": node.get("clientWindow") or "",
                 })
                 walk(node.get("children") or [], context_id)
 
@@ -202,6 +227,67 @@ class BidiConnection:
     def page_title_for(self, context_id: str) -> str:
         value = self.evaluate("document.title", context_id=context_id)
         return value if isinstance(value, str) else ""
+
+    def client_window(self, context_id: str | None = None
+                      ) -> dict[str, Any] | None:
+        """The BiDi client window of the selected context, or ``None``.
+
+        This is the *window*, chrome included: per the BiDi specification
+        its ``x``/``y`` are CSS pixels between the web-exposed screen
+        area's edges and the window's edges. It is not the viewport
+        origin, and it is read here only to make a refusal concrete.
+        """
+        wanted = self.context_client_window(context_id)
+        try:
+            result = self.call("browser.getClientWindows", {})
+        except BidiError:
+            return None
+        windows = result.get("clientWindows")
+        if not isinstance(windows, list) or not windows:
+            return None
+        for window in windows:
+            if not isinstance(window, dict):
+                continue
+            if wanted and window.get("clientWindow") != wanted:
+                continue
+            return window
+        first = windows[0]
+        return first if isinstance(first, dict) else None
+
+    def context_client_window(self, context_id: str | None = None) -> str:
+        """The ``clientWindow`` id BiDi associates with *context_id*."""
+        context = context_id or self.context_id
+        for item in self.contexts:
+            if item.get("context") == context:
+                return str(item.get("clientWindow") or "")
+        return ""
+
+    def viewport_origin(self, context_id: str | None = None
+                        ) -> ViewportOrigin:
+        """The viewport's top-left corner in screen device pixels.
+
+        Asks the page for its own corner (``mozInnerScreenX/Y``) and
+        converts CSS pixels to device pixels. When the browser does not
+        answer, this raises
+        :class:`~openeyes.core.coords.MissingViewportOrigin` carrying the
+        client window it *did* report - never ``(0, 0)`` and never the
+        window origin plus a guessed chrome height.
+        """
+        context = self._context(context_id)
+        try:
+            payload = self.evaluate(_VIEWPORT_ORIGIN_JS, context_id=context)
+        except BidiError as exc:
+            raise MissingViewportOrigin(missing_origin_message(
+                "bidi", detail=f"script.evaluate failed: {exc}",
+                client_window=self.client_window(context),
+            )) from exc
+        try:
+            return origin_from_probe(payload, source=SOURCE_INNER_SCREEN)
+        except MissingViewportOrigin as exc:
+            raise MissingViewportOrigin(missing_origin_message(
+                "bidi", detail=str(exc),
+                client_window=self.client_window(context),
+            )) from exc
 
     # ----- acting -----------------------------------------------------
 
@@ -427,6 +513,27 @@ def focus_element(conn: BidiConnection, element: Any) -> bool:
 def click_center(conn: BidiConnection, element: Any) -> None:
     conn.click_at(element.center.x, element.center.y,
                   context_id=conn.context_of(element))
+
+
+def viewport_origin(conn: BidiConnection,
+                    element: Any | None = None) -> ViewportOrigin:
+    """The viewport corner for *element*'s context (default: selected tab)."""
+    context = conn.context_of(element) if element is not None else None
+    return conn.viewport_origin(context)
+
+
+def screen_point(conn: BidiConnection, element: Any, *, origin=None
+                 ) -> tuple[int, int]:
+    """Where an OS-level click would have to go for *element*.
+
+    ``click_center`` stays in-page (``origin: "viewport"``) and needs no
+    screen origin; this function exists for callers that must drive the
+    real pointer instead - and it refuses to answer when the origin was
+    not measured.
+    """
+    if origin is None:
+        origin = conn.viewport_origin(conn.context_of(element))
+    return to_screen_point(element, viewport_origin=origin.as_tuple())
 
 
 def type_text(conn: BidiConnection, text: str, element=None,

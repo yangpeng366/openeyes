@@ -153,6 +153,54 @@ print(result.used_backend, [a.to_dict() for a in result.attempts])
 与 CLI 的 pixel 路径都在物理点击前经 `to_screen_point` 换算；未登记的后
 端不会被猜成某个空间，而是抛 `UnknownCoordinateSpace`。
 
+### viewport 左上角屏幕坐标：规范保证 / 实测可得 / 只能估算
+
+`to_screen_point` 需要 viewport 原点（屏幕/设备像素）。这个原点从哪来，
+`openeyes.core.viewport` 一处写清，并且把三种来源分开，不互相顶替：
+
+| 层级 | 来源 | 结论 |
+| --- | --- | --- |
+| 规范保证 | `browser.getClientWindows` 的 `x`/`y`：web-exposed screen area 左/上边缘到**客户端窗口**左/上边缘的 CSS 像素 | 是真事实，但**不是答案**：它给的是整个窗口（含标签栏、地址栏、窗口边框），规范没有任何字段暴露 viewport 在窗口内的偏移 |
+| 实测可得 | Firefox `window.mozInnerScreenX` / `mozInnerScreenY`（CSS 像素）乘 `window.devicePixelRatio` | 本机实测与 Win32 `ClientToScreen` 逐像素一致，是当前唯一精确来源（Gecko 扩展，非 BiDi 命令） |
+| 只能估算 | `outerHeight - innerHeight` 当 chrome 高度、或假定窗口在 `(0, 0)` | 一律**拒绝**：差 90 px 的"成功点击"会落在标题上而不是按钮上 |
+
+实测记录（Firefox 159 / Windows 11，2240x1400 @130%，`devicePixelRatio`
+1.3043478260869565，窗口由 `SetWindowPos` 移到 (400,260)）：
+
+```
+mozInnerScreenX/Y      313.5667, 272.1667   CSS px
+x dpr                  409.0,    355.0      device px
+Win32 ClientToScreen   409,      260        + 95 px chrome = 355
+browser.getClientWindows  x=307 y=199 w=843 h=613  (window, CSS px)
+```
+
+契约（`tests/test_viewport_origin.py` 锁住）：
+
+- 有测量值 → `BidiConnection.viewport_origin()` 返回 `ViewportOrigin`
+  （同时带 CSS 值、dpr、来源），`bidi.screen_point()` /
+  `backends.browser.screen_point()` 用它做换算。
+- 没有测量值 → 抛 `MissingViewportOrigin`，报错里写明：试过哪个属性、
+  `browser.getClientWindows` 报了什么窗口矩形、为什么窗口不等于 viewport、
+  两条出路（自己传 `viewport_origin=(x, y)`，或用页内派发
+  `origin='viewport'`）。**绝不**退化成 `(0, 0)` 或窗口原点。
+- 页内点击路径不变：`bidi.click_center` 仍走 `input.performActions` 的
+  `origin: "viewport"`，不需要屏幕原点，因此不受上述拒绝影响；
+  `cdp` 后端没有原点来源，`browser.viewport_origin("cdp")` 直接拒绝而
+  不是猜一个。
+
+前置条件与后续可选来源：
+
+- `mozInnerScreenX/Y` 只保证在 Gecko 上存在；Chromium 系浏览器必须由调用方
+  提供原点，或改走页内点击。
+- CSS→设备像素的换算要求宿主进程是 per-monitor DPI aware：
+  `openeyes.core.dpi.ensure_dpi_awareness()` 必须先跑，否则 130% 下的
+  `SetCursorPos` 会落在虚拟化坐标里。
+- 多屏/负坐标副屏上的 `mozInnerScreenX/Y` 是否已经是虚拟桌面坐标，本机
+  （单屏 130%）**未实测**，已列为待测项（见 
+  `examples/multi-monitor-smoke.py`）。
+- 可选来源（尚未接入）：Chromium 系若将来在 BiDi 暴露 viewport 矩形，
+  可由 `clientWindow` 矩形 + 该矩形换算；目前没有该字段，故不做估算。
+
 两种取数模式，结果完全一致：
 
 - **file 模式** —— `detections_path=` 指向已保存的检测 JSON，无需模型与网络；
