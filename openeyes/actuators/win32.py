@@ -114,12 +114,43 @@ def send_hotkey(*keys: str) -> None:
             user32.keybd_event(v, 0, win32con.KEYEVENTF_KEYUP, 0)
 
 
+def _vk_for_char(ch: str) -> tuple[int, bool] | None:
+    """Virtual key and Shift flag for one character, or None.
+
+    ``ord(ch)`` is not a virtual-key code: "," would arrive as
+    VK_SNAPSHOT and "@" as a key that does not exist. ``VkKeyScanW`` asks
+    the active layout the question we actually mean.
+    """
+    scan = user32.VkKeyScanW(ctypes.c_wchar(ch))
+    if scan == -1 or scan == 0xFFFF:
+        return None
+    vk = scan & 0xFF
+    shift = bool(scan & 0x0100)
+    if scan & 0x0600:  # Ctrl or Alt needed: not expressible here
+        return None
+    return vk, shift
+
+
 def type_text(text: str, interval: float = 0.0) -> None:
-    """Type a literal string. Uses keybd_event for ASCII chars only."""
+    """Type a literal string through the active keyboard layout.
+
+    Shift is pressed when the character needs it, so "a@b.com" arrives
+    as written. A character the layout cannot produce raises ValueError -
+    silently typing the wrong key is worse than failing.
+    """
     for ch in text:
-        vk = ord(ch.upper())
+        pair = _vk_for_char(ch)
+        if pair is None:
+            raise ValueError(
+                f"cannot type {ch!r} on the active keyboard layout"
+            )
+        vk, shift = pair
+        if shift:
+            user32.keybd_event(win32con.VK_SHIFT, 0, 0, 0)
         user32.keybd_event(vk, 0, 0, 0)
         user32.keybd_event(vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+        if shift:
+            user32.keybd_event(win32con.VK_SHIFT, 0, win32con.KEYEVENTF_KEYUP, 0)
         if interval:
             time.sleep(interval)
 

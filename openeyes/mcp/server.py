@@ -675,6 +675,15 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if not hwnd:
                     return [TextContent(type="text", text=_to_json(
                         {"error": "need x/y or hwnd"}))]
+                if not any(arguments.get(key) for key in
+                           ("name_contains", "control_type", "regex")):
+                    # No selector used to mean "the first element", which is
+                    # a click nobody asked for. Fail closed instead.
+                    return [TextContent(type="text", text=_to_json({
+                        "error": ("need x/y, or hwnd plus a selector "
+                                  "(name_contains / control_type / regex)"),
+                        "tool": name,
+                    }))]
                 elems = detect_elements(hwnd, restore=True)
                 matches = find_elements(
                     elems,
@@ -971,11 +980,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                         if e.control_type == arguments["control_type"]:
                             chosen = e
                             break
-                if not chosen and elems:
-                    chosen = elems[0]
                 if not chosen:
+                    # A stale hint or a typo must not click the first
+                    # element on the page. The CLI already fails here.
                     return [TextContent(type="text", text=_to_json(
-                        {"error": "no element matched", "tool": name}))]
+                        {"error": "no element matched the selector",
+                         "tool": name}))]
                 go = arguments.get("go", False)
                 if not go:
                     return [TextContent(type="text", text=_to_json({
@@ -1057,8 +1067,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                             if e.control_type == arguments["control_type"]:
                                 chosen = e
                                 break
-                    if not chosen and elems:
-                        chosen = elems[0]
+                if has_target and chosen is None:
+                    return [TextContent(type="text", text=_to_json({
+                        "error": "no element matched the selector",
+                        "sent": False,
+                        "tool": name,
+                    }))]
                 if not dry_run:
                     if chosen is None:
                         focused = next(

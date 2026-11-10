@@ -87,7 +87,7 @@ def resolve_elements(
     vision_parser: Callable[[str], Sequence[Element]] | None = None,
     vision_elements: Sequence[Element] | None = None,
     order: Sequence[str] = DEFAULT_ORDER,
-    max_depth: int = 12,
+    max_depth: int | None = None,
 ) -> ResolveResult:
     """Walk the backend chain and return the first non-empty element set.
 
@@ -102,7 +102,14 @@ def resolve_elements(
             if backend == "uia":
                 if not hwnd:
                     raise LookupError("no hwnd given for uia")
-                elements = _try_uia(hwnd, max_depth)
+                depth = max_depth
+                if depth is None:
+                    # One default, taken from the backend: a web surface
+                    # buries its DOM around depth 20, so 12 silently
+                    # reported "no accessibility tree".
+                    from openeyes.backends import uia as uia_backend
+                    depth = uia_backend.DEFAULT_MAX_DEPTH
+                elements = _try_uia(hwnd, depth)
             elif backend == "cdp":
                 if not port:
                     raise LookupError("no port given for cdp")

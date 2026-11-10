@@ -254,10 +254,28 @@ versioning: [Semantic Versioning](https://semver.org/).
   candidate index, and accepts the per-option support scores a history vote
   returns instead of a probability distribution.
 
+### Fixed
+- **A click nobody asked for is now refused.** MCP `click` with a `hwnd`
+  and no selector used to click the first element it found; `browser_click`
+  with a stale hint and `browser_type` with a mistyped selector did the same
+  on the page. All three now fail closed with `no element matched the
+  selector`, the way the CLI already did.
+- **`type_text` types the character it was given.** It used `ord(ch)` as a
+  virtual-key code, so `,` arrived as VK_SNAPSHOT, `@` as a key that does
+  not exist, and `A` arrived as `a`. It now asks the active layout
+  (`VkKeyScanW`) for the key and the Shift flag, and raises on a character
+  the layout cannot produce instead of typing the wrong one.
+- **`eyes resolve` uses the backend depth.** Its 12-level default hid
+  WebView2/Tauri trees that sit around depth 20; it now takes
+  `uia.DEFAULT_MAX_DEPTH` (30) unless the caller says otherwise.
+- **`eyes capture` with a bad hwnd reports an error, not a traceback**, and
+  `eyes click --dry-run` is accepted again (it is the default; the flag now
+  exists so the README and scripts can say it out loud).
+- CONTRIBUTING points at `yangpeng366/openeyes` and the real `tool_count: 19`.
 ### Changed
 - `openeyes.backends.cdp.launch_edge` now captures Edge stderr to a temp file and surfaces both the early-exit return code and a bounded stderr tail in the `CDPError` message, so a failed CDP launch on a dedicated port (e.g. 9333) reports *why* Edge quit instead of only that it did. `_diagnose_launch` accepts optional `exit_code` and `stderr_tail` and the new `_read_stderr_tail` helper truncates very long output.
 - `docs/architecture.md` documents the backend priority order, the degradation chain, and the coordinate semantics of the vision tier (image pixels are converted to window-relative coordinates through `origin=(dx, dy)`).
-- `docs/capability-contract.md` records the MCP surface at 15 tools: the vision tier and the chain ship as CLI, Python, and MCP surfaces, and both MCP hosts can call the CLI.
+- `docs/capability-contract.md` records the MCP surface at 19 tools: the vision tier and the chain ship as CLI, Python, and MCP surfaces, and both MCP hosts can call the CLI.
 
 ### Added
 - `openeyes.backends.vision` — a *parsing-style* vision backend. Screen-parsing detections (OmniParser v2 native shape, plus per-item dicts and `boxes`/`labels`/`scores` shapes) become the same `Element[]` shape the UIA and CDP backends emit, so the selector, hint and decision layers work unchanged. `OmniParserBackend` supports a model-free file mode (`detections_path=`) and an HTTP endpoint mode (`endpoint=`); both funnel through the same conversion, so results are identical. Vision elements carry `score < 1.0` so the decision layer can prefer structured backends, and only actionable labels are marked `interactive`.

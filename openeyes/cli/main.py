@@ -111,7 +111,15 @@ def windows_list(title_contains: str | None, class_name: str | None,
 @click.option("--json", "as_json", is_flag=True, help="write metadata JSON next to image")
 def capture(window: int, out: str, as_json: bool) -> None:
     """Capture a window or the full screen to PNG."""
-    img = capture_window(window) if window else capture_screen()
+    try:
+        img = capture_window(window) if window else capture_screen()
+    except Exception as exc:
+        emit_error(
+            f"could not capture hwnd={window}: {exc}",
+            code=4, hwnd=window,
+            hint="run `eyes windows list` to get a real hwnd",
+        )
+        return
     img.save(out, "PNG")
     click.echo(out)
     if as_json:
@@ -306,13 +314,16 @@ def _click_by_ladder(window: int, target: Element | None, desc: str,
               help="how many times this run may take the foreground away from "
                    "you (0 = never, the default). The rungs that reach for "
                    "your pointer are paid for from it.")
+@click.option("--dry-run", "dry_run", is_flag=True,
+              help="print the plan and do not click (the default); "
+                   "accepted so scripts can say it out loud")
 @click.option("--go", "go", is_flag=True,
               help="actually click. Default is dry-run.")
 @json_option
 def tap(window: int, x: int | None, y: int | None,
           name_contains: str | None, control_type: str | None, regex: str | None,
           button: str, double: bool, return_to_origin: bool,
-          focus_titlebar: bool, method: str, budget: int, go: bool,
+          focus_titlebar: bool, method: str, budget: int, go: bool, dry_run: bool,
           as_json: bool) -> None:
     """Click by coordinates OR by element selector.
 
@@ -341,6 +352,7 @@ def tap(window: int, x: int | None, y: int | None,
     ``physical_input`` (the user's pointer was driven), ``cursor_moved``
     and ``focus_stolen`` (the focus was pulled onto the target).
     """
+    go = go and not dry_run
     target = None
     if x is not None and y is not None:
         cx, cy = x, y
@@ -466,7 +478,11 @@ def hotkey(combo: str) -> None:
 @click.option("--interval", type=float, default=0.0)
 def type(text: str, interval: float) -> None:
     """Type a literal string."""
-    type_text(text, interval=interval)
+    try:
+        type_text(text, interval=interval)
+    except ValueError as exc:
+        emit_error(str(exc), code=4, hint="use clipboard paste for non-ASCII text")
+        return
     click.echo(f"typed {len(text)} chars")
 
 

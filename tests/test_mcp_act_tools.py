@@ -256,3 +256,44 @@ def test_act_and_verify_rejects_an_empty_expectation(monkeypatch):
 
     assert result["ok"] is False
     assert "element_appears" in result["observed"]["detail"]
+
+# ------------------------------------------------- fail closed, never guess
+def test_click_without_a_selector_is_refused(monkeypatch):
+    """An empty call used to click the first element in the window."""
+    _stub_elements(monkeypatch, [_mk("Submit")])
+    monkeypatch.setattr(
+        "openeyes.mcp.server.click_xy",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("clicked")),
+    )
+
+    result = _call("click", {"hwnd": 42, "dry_run": False})
+
+    assert "error" in result
+    assert "selector" in result["error"]
+
+
+class _FakeBrowser:
+    def __init__(self, elements):
+        self.elements = elements
+        self.clicked = []
+
+    def connect(self, **kwargs):
+        return object()
+
+    def scan_dom(self, conn):
+        return list(self.elements)
+
+    def click_center(self, conn, element):
+        self.clicked.append(element)
+
+
+def test_browser_click_with_a_stale_hint_refuses_to_click_the_first_element(
+        monkeypatch):
+    """A typo in the hint must not turn into a click on elems[0]."""
+    fake = _FakeBrowser([_mk("Submit")])
+    monkeypatch.setattr(mcp_server, "_browser_backend", lambda args: fake)
+
+    result = _call("browser_click", {"hint": "zz", "go": True})
+
+    assert "error" in result
+    assert fake.clicked == []

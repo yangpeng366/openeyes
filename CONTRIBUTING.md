@@ -20,14 +20,14 @@ pwsh -NoProfile -File examples\quality-gate.ps1
 - `ruff check .` must be clean (the repo's rule set is in `pyproject.toml`).
 - `examples/bom-sweep.py` must report no BOM: a BOM is invisible in an editor
   and breaks toolchains.
-- The MCP contract probe must report `tool_count: 15`.
+- The MCP contract probe must report `tool_count: 19`.
 - `pytest` must be green. A test that only skips is not a passing test - say
   in the PR what was skipped and why.
 
 ## Development setup
 
 ```powershell
-git clone https://github.com/openeyes-ai/openeyes.git
+git clone https://github.com/yangpeng366/openeyes.git
 cd openeyes
 pip install -e ".[windows,mcp,dev]"
 

@@ -92,22 +92,27 @@ git clone https://github.com/yangpeng366/openeyes.git
 cd openeyes
 pip install -e ".[windows,mcp]"
 
-# 1. list visible top-level windows
+# 1. list visible top-level windows; take an hwnd from the table
 eyes windows list
 
-# 2. capture a window or the full screen
-eyes capture --window 123456 --out shot.png
+# 2. capture that window (0 = the whole screen)
+eyes capture --window <hwnd> --out shot.png
 
 # 3. enumerate interactive elements
-eyes detect --window 123456 --pretty
+eyes detect --window <hwnd> --pretty
 
-# 4. click by text (resolves to bbox center)
-eyes click --window 123456 --name-contains "Submit" --dry-run
-eyes click --window 123456 --name-contains "Submit" --go
+# 4. click by text: dry-run first, then --go
+eyes click --window <hwnd> --name-contains "Submit"
+eyes click --window <hwnd> --name-contains "Submit" --go --budget 1
 
 # 5. start MCP server (for Codex / Claude / Cursor)
 eyes-mcp
 ```
+
+`--budget N` allows at most N physical clicks in one run (default `0`:
+semantic clicks only). A control with no `invoke` path then fails with
+`BACKGROUND_UNAVAILABLE` instead of moving your mouse; add `--budget 1`,
+or ask for it by name with `--method pixel`.
 
 ### Output contract
 
