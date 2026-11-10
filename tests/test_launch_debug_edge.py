@@ -66,3 +66,15 @@ def test_helper_stop_with_unused_port_is_noop():
     proc = _run(["-Stop", "-Port", "19999"])
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "nothing to stop" in proc.stdout or "no msedge.exe" in proc.stdout
+
+
+def test_example_scripts_do_not_hardcode_a_checkout_path():
+    # The helper used to Set-Location to E:\gitAll\openeyes, which only exists on
+    # the author's machine; every example must derive its own repo root instead.
+    offenders = []
+    for script in sorted((ROOT / "examples").glob("*.ps1")):
+        text = script.read_text(encoding="utf-8")
+        for needle in (r"E:\gitAll\openeyes", r"D:\gitAll\openeyes"):
+            if needle in text:
+                offenders.append(f"{script.name}: {needle}")
+    assert not offenders, "example scripts must derive their repo root: " + ", ".join(offenders)

@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "E:\gitAll\openeyes"
+$ProjectDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $Script = Join-Path $ProjectDir "examples\anyvpn_keepalive.py"
 $DisconnectScript = Join-Path $ProjectDir "examples\anyvpn_disconnect.py"
 

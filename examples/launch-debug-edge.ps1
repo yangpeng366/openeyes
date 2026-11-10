@@ -27,8 +27,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "E:\gitAll\openeyes"
-Set-Location $ProjectDir
+# Derive the repo root from this script (examples/<script>) so a CI checkout
+# or a second working copy works without editing the path.
+$ProjectDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+if (-not (Test-Path -LiteralPath $ProjectDir)) {
+    Write-Error "repo root not found: $ProjectDir"
+    exit 4
+}
+Set-Location -LiteralPath $ProjectDir
 
 if ($Help) {
     Get-Content -LiteralPath $PSCommandPath -TotalCount 30
