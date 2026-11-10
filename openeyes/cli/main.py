@@ -34,6 +34,7 @@ from openeyes import __version__
 from openeyes.cli.output import emit_error, emit_json, render_table, wants_json
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.capture import capture_screen, capture_window
+from openeyes.core.coords import to_screen_point
 from openeyes.core.selector import detect_elements, find_elements
 from openeyes.core.windows import find_window, foreground_window
 
@@ -288,10 +289,26 @@ def _click_by_ladder(window: int, target: Element | None, desc: str,
     click.echo(f"clicked {desc} ({report.get('method')})")
 
 
+def _window_origin(hwnd: int) -> tuple[int, int]:
+    """The window's top-left corner in absolute screen pixels.
+
+    The UIA and vision backends measure *inside* the window (``uia.py``
+    subtracts the window origin while it walks the tree), while
+    ``click_xy`` speaks absolute screen pixels. Reading the origin is the
+    only way back across the gap, and it is read here - at the click -
+    rather than cached from a capture that may be stale by now.
+    """
+    import win32gui
+    left, top, _right, _bottom = win32gui.GetWindowRect(hwnd)
+    return int(left), int(top)
+
+
 @cli.command("click")
 @click.option("--window", type=int, default=0)
-@click.option("--x", type=int)
-@click.option("--y", type=int)
+@click.option("--x", type=int,
+              help="absolute screen X - not window-relative")
+@click.option("--y", type=int,
+              help="absolute screen Y - not window-relative")
 @click.option("--name-contains")
 @click.option("--control-type")
 @click.option("--regex")
@@ -330,6 +347,21 @@ def tap(window: int, x: int | None, y: int | None,
 
     By default the click is dry-run — only the resolved target is printed.
     Pass --go to actually click.
+
+    Two coordinate spaces meet here, and they are not interchangeable:
+
+    * ``--x/--y`` are **absolute screen pixels**. They are used verbatim
+      and are never shifted by the window origin.
+    * a selector's centre comes from a backend that measures *inside* the
+      window (uia / vision: window-relative, cdp: viewport-relative). A
+      physical click on such a target is converted with
+      ``openeyes.core.coords.to_screen_point`` — the window origin is
+      added back before the pointer moves, so the click lands where the
+      element is rather than one window origin away from it.
+
+    A pixel click therefore reports both ``center`` (the element's own
+    coordinates, in its backend's space) and ``screen_point`` (the
+    absolute point the pointer was sent to).
 
     ``--method`` says how the click reaches the application:
 
@@ -422,8 +454,28 @@ def tap(window: int, x: int | None, y: int | None,
     if return_to_origin:
         import win32api
         ox, oy = win32api.GetCursorPos()
+    # A selector was measured in a window-relative space (uia / vision) or a
+    # viewport-relative one (cdp); a physical click needs absolute screen
+    # pixels. --x/--y is already absolute and is used verbatim.
+    screen_point: tuple[int, int] | None = None
+    if target is not None:
+        try:
+            window_origin = _window_origin(window)
+        except Exception as exc:
+            emit_error(f"could not read the rectangle of hwnd={window}: {exc}",
+                       code=4, hwnd=window)
+            return
+        try:
+            screen_point = to_screen_point(target, window_origin=window_origin)
+        except ValueError as exc:
+            emit_error(
+                f"could not convert {desc} to screen coordinates: {exc}",
+                code=4, hwnd=window,
+            )
+            return
+    click_x, click_y = screen_point if screen_point is not None else (cx, cy)
     foreground_before = foreground_window()
-    click_xy(cx, cy, button=button, double=double)
+    click_xy(click_x, click_y, button=button, double=double)
     if return_to_origin:
         win32api.SetCursorPos((ox, oy))
     # The focus was stolen when it came onto the target from somewhere else.
@@ -431,12 +483,15 @@ def tap(window: int, x: int | None, y: int | None,
         and foreground_window() == window
     if as_json or wants_json():
         emit_json({"ok": True, "clicked": True, "dry_run": False,
-                   "center": {"x": cx, "y": cy}, "description": desc,
+                   "center": {"x": cx, "y": cy},
+                   "screen_point": {"x": click_x, "y": click_y},
+                   "description": desc,
                    "target": target.to_dict() if target else None,
                    "method": "pixel", "physical_input": True,
                    "focus_stolen": focus_stolen, "cursor_moved": True})
         return
-    click.echo(f"clicked {desc}")
+    click.echo(f"clicked {desc}" if screen_point is None
+               else f"clicked {desc} at screen ({click_x},{click_y})")
 
 
 # ----- grid -----------------------------------------------------------------
@@ -872,9 +927,11 @@ def browser_shot(port: int, protocol: str, host_header: str | None,
 @click.option("--detections", required=True,
               help="OmniParser-style detection JSON to convert into elements")
 @click.option("--origin-x", type=int, default=0, show_default=True,
-              help="image-to-window offset on X")
+              help="window top-left inside the image, X (subtracted; pass the "
+                   "window origin for a whole-screen capture)")
 @click.option("--origin-y", type=int, default=0, show_default=True,
-              help="image-to-window offset on Y")
+              help="window top-left inside the image, Y (subtracted; pass the "
+                   "window origin for a whole-screen capture)")
 @click.option("--score", type=float, default=0.9, show_default=True,
               help="confidence for detections that carry none")
 @click.option("--pretty", is_flag=True)

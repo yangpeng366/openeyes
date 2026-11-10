@@ -38,11 +38,19 @@ def test_only_actionable_labels_are_interactive():
     assert elements[1].interactive is False
 
 
-def test_origin_offsets_image_pixels_to_window_coords():
+def test_origin_is_the_window_position_in_the_image():
+    """A whole-screen capture: a box at (310, 220) with the window at
+    (300, 200) is (10, 20) *inside the window*."""
     elements = elements_from_detections(
-        [[[10, 20, 110, 60], "button"]], origin=(100, 50))
-    assert elements[0].bbox.to_dict() == {"x": 110, "y": 70, "w": 100, "h": 40}
-    assert elements[0].center.to_dict() == {"x": 160, "y": 90}
+        [[[310, 220, 410, 260], "button"]], origin=(300, 200))
+    assert elements[0].bbox.to_dict() == {"x": 10, "y": 20, "w": 100, "h": 40}
+    assert elements[0].center.to_dict() == {"x": 60, "y": 40}
+
+
+def test_a_window_capture_needs_no_origin():
+    """Window-local image pixels are already window coordinates."""
+    elements = elements_from_detections([[[10, 20, 110, 60], "button"]], origin=(0, 0))
+    assert elements[0].bbox.to_dict() == {"x": 10, "y": 20, "w": 100, "h": 40}
 
 
 def test_numeric_label_ids_use_the_id2label_table():
@@ -175,3 +183,45 @@ def test_backend_file_mode_tolerates_a_bom(tmp_path):
     path.write_text(json.dumps(OMNIPARSER_SAMPLE), encoding="utf-8-sig")
     backend = OmniParserBackend(detections_path=str(path))
     assert len(backend.parse_file(path)) == 3
+
+
+# ------------------------------------ the origin contract (docstring level)
+def test_the_docstring_states_which_way_the_offset_goes():
+    """The module once said "bbox is window-relative" and, in the same
+    breath, "a whole-screen capture takes (0, 0)" - two rules that cannot
+    both hold. The contract is now written once: ``origin`` is the window's
+    top-left corner *inside the image*, and ``to_screen_point`` is the way
+    back to screen pixels.
+    """
+    import openeyes.backends.vision as vision
+
+    raw = vision.__doc__ or ""
+    doc = " ".join(raw.split())
+    compact = "".join(raw.split())  # line wraps must not hide a phrase
+    assert "窗口左上角在图像中的位置" in compact
+    assert "整屏截图" in doc and "origin=(left, top)" in doc
+    assert "to_screen_point" in doc
+    # the contradictory phrasing must not come back
+    assert "整屏截图取" not in compact
+
+
+def test_the_default_origin_means_no_offset():
+    """Default (0, 0) leaves image pixels alone: they are screen pixels when
+    the capture was the whole screen, and the caller owns the window origin."""
+    elements = elements_from_detections([[[10, 20, 110, 60], "button"]])
+    assert elements[0].center.to_dict() == {"x": 60, "y": 40}
+
+
+def test_a_whole_screen_capture_plus_the_window_origin_round_trips():
+    """Whole-screen capture at origin=(left, top) yields window-relative
+    boxes, which ``to_screen_point`` sends back to the same screen pixel."""
+    from openeyes.core.coords import to_screen_point
+
+    left, top = 300, 200
+    elements = elements_from_detections(
+        [[[left + 10, top + 20, left + 110, top + 60], "button"]],
+        origin=(left, top),
+    )
+    element = elements[0]
+    assert element.center.to_dict() == {"x": 60, "y": 40}
+    assert to_screen_point(element, window_origin=(left, top)) == (left + 60, top + 40)

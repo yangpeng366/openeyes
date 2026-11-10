@@ -529,12 +529,14 @@ def test_vision_detect_accepts_inline_detections():
 
 
 def test_vision_detect_applies_the_origin_offset():
+    """origin is the window's position in the image: subtract it to reach
+    window-relative coordinates."""
     result = _call("vision_detect", {
-        "detections": json.dumps([[[10, 20, 110, 60], "button"]]),
+        "detections": json.dumps([[[110, 70, 210, 110], "button"]]),
         "origin_x": 100,
         "origin_y": 50,
     })
-    assert result[0]["bbox"] == {"x": 110, "y": 70, "w": 100, "h": 40}
+    assert result[0]["bbox"] == {"x": 10, "y": 20, "w": 100, "h": 40}
 
 
 def test_vision_detect_reports_a_missing_source():

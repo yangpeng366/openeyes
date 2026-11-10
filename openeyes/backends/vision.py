@@ -12,9 +12,24 @@ OmniParser v2（微软）官方输出形如::
 本模块以该格式为默认输入，并支持若干常见变体（带置信度、boxes/labels
 并列、逐项 dict）。调用方可覆盖 ``id2label`` 映射。
 
-坐标语义：解析结果为 *图像像素坐标*；``Element.bbox`` 统一为 *窗口相对
-坐标*，故提供 ``origin=(dx, dy)`` 偏移参数（整屏截图取 ``(0, 0)``，窗口
-内截图取窗口左上角）。
+坐标语义：解析结果为 *图像像素坐标*；``origin`` 是 **窗口左上角在图像中
+的位置** ``(left, top)``，输出 ``bbox`` / ``center`` = 图像像素 − origin，
+即 *窗口相对坐标*（与 uia 同一个空间）。它不是一个「截的是不是整屏」的
+开关，而是同一条减法：
+
+* 窗口内截图（``capture_window``）：图像左上角就是窗口左上角，``origin=(0, 0)``；
+* 整屏截图（``capture_screen``）：窗口左上角落在图像的 ``(left, top)`` 处，
+  必须传 ``origin=(left, top)``。
+
+两种截图都得到窗口相对坐标，所以物理点击前统一经
+``openeyes.core.coords.to_screen_point`` 补回窗口原点——**一次，不多不少**。
+
+漏传时默认 ``(0, 0)``，它的含义固定为「图像左上角就是窗口左上角」。这
+在窗口内截图下是对的；在整屏截图下等于断言了一个假前提，此时 ``bbox``
+仍是 *屏幕绝对坐标*：直接 ``click_xy`` 可以，但**不能**再走
+``to_screen_point``，否则窗口原点会被加两次。
+
+一句话：``origin`` 只能传窗口原点、只能做减法；漏传就是屏幕坐标。
 """
 from __future__ import annotations
 
@@ -173,8 +188,11 @@ def elements_from_detections(
         detections: payload in any of the shapes listed in ``_iter_detections``.
         id2label: optional label-id -> label-text table (defaults to
             :data:`DEFAULT_ID2LABEL`).
-        origin: ``(dx, dy)`` offset converting image pixels to window-relative
-            coordinates.
+        origin: **窗口左上角在图像中的位置** ``(left, top)``。窗口内截图传
+            ``(0, 0)``；整屏截图传窗口的屏幕原点。输出 = 图像像素 − origin，
+            与 uia 同为窗口相对坐标。不传（``(0, 0)``）时等于断言「图像左上
+            角即窗口左上角」：整屏截图下输出仍是屏幕绝对坐标，可直接
+            ``click_xy``，但不要再经 ``to_screen_point``。
         score: confidence assigned when a detection carries none. Vision
             elements are intentionally scored below 1.0 so the decision layer
             can prefer structured backends.
@@ -201,8 +219,10 @@ def elements_from_detections(
         control_type = _label_to_control_type(label)
         confidence = float(raw_score) if isinstance(raw_score, (int, float)) else float(score)
         confidence = min(max(confidence, 0.0), 1.0)
-        left = int(round(x1)) + dx
-        top = int(round(y1)) + dy
+        # 窗口相对坐标 = 图像像素 − 窗口原点。加号会把偏移算两次，
+        # 也正是本模块此前与自身文档矛盾的地方。
+        left = int(round(x1)) - dx
+        top = int(round(y1)) - dy
         out.append(Element(
             backend="vision",
             control_type=control_type,

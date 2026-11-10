@@ -132,7 +132,10 @@ print(result.used_backend, [a.to_dict() for a in result.attempts])
 ```
 
 也兼容带置信度、`boxes/labels/scores` 并列、逐项 dict 等常见变体。坐标语义
-统一为窗口相对（`origin=(dx, dy)` 把图像像素换算到窗口坐标）。
+统一为窗口相对：`origin=(left, top)` 是**窗口左上角在图像中的位置**，图像像素
+减去它得到窗口坐标（窗口内截图传 `(0, 0)`；整屏截图也要传窗口原点）。物理
+点击前统一由 `openeyes.core.coords.to_screen_point` 补回窗口原点；漏传
+`origin` 时输出等价于屏幕绝对坐标，此时直接 `click_xy`，不可再补一次。
 
 两种取数模式，结果完全一致：
 

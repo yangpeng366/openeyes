@@ -269,6 +269,9 @@ def test_an_invoke_needs_a_selector_target():
 def test_a_physical_click_says_it_moved_the_pointer(monkeypatch):
     monkeypatch.setattr("openeyes.cli.main.detect_elements",
                         lambda *a, **k: [_save_element()])
+    # The pixel path now needs the window origin: without it the element
+    # centre cannot become a screen point.
+    monkeypatch.setattr("openeyes.cli.main._window_origin", lambda hwnd: (0, 0))
     monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
     monkeypatch.setattr("openeyes.cli.main.foreground_window", lambda: 42)
     result = _run("--json", "click", "--window", "42", "--name-contains", "Save",
@@ -283,6 +286,7 @@ def test_a_physical_click_reports_the_focus_it_took(monkeypatch):
     """The focus came onto the target: a cost, and it is reported."""
     monkeypatch.setattr("openeyes.cli.main.detect_elements",
                         lambda *a, **k: [_save_element()])
+    monkeypatch.setattr("openeyes.cli.main._window_origin", lambda hwnd: (0, 0))
     monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
     reads = iter([7, 42])
     monkeypatch.setattr("openeyes.cli.main.foreground_window",
@@ -291,6 +295,64 @@ def test_a_physical_click_reports_the_focus_it_took(monkeypatch):
                   "--method", "pixel", "--go")
     payload = json.loads(result.stdout)
     assert payload["focus_stolen"] is True
+
+
+# ------------------------------------------------- the coordinate contract
+def test_a_pixel_click_reports_local_and_screen_coordinates(monkeypatch):
+    """``center`` is where the element says it is; ``screen_point`` is where
+    the pointer actually went. A caller needs both to tell the spaces apart."""
+    import sys
+    import types
+
+    from openeyes.core.schema import BBox, Center, Element
+
+    element = Element(backend="uia", control_type="Button", name="Save",
+                      bbox=BBox(5, 15, 10, 10), center=Center(10, 20),
+                      automation_id="SaveButton")
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [element])
+    monkeypatch.setitem(sys.modules, "win32gui", types.SimpleNamespace(
+        GetWindowRect=lambda hwnd: (300, 200, 1100, 800)))
+    monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
+    monkeypatch.setattr("openeyes.cli.main.foreground_window", lambda: 42)
+
+    result = _run("--json", "click", "--window", "42",
+                  "--name-contains", "Save", "--method", "pixel", "--go")
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["center"] == {"x": 10, "y": 20}
+    assert payload["screen_point"] == {"x": 310, "y": 220}
+
+
+def test_absolute_coordinates_report_themselves_as_the_screen_point(monkeypatch):
+    """``--x/--y`` is absolute already: center and screen_point agree."""
+    monkeypatch.setattr("openeyes.cli.main._window_origin", lambda hwnd: (300, 200))
+    monkeypatch.setattr("openeyes.cli.main.click_xy", lambda *a, **k: None)
+    monkeypatch.setattr("openeyes.cli.main.foreground_window", lambda: 42)
+
+    result = _run("--json", "click", "--window", "42", "--x", "310", "--y", "220",
+                  "--method", "pixel", "--go")
+    assert result.exit_code == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["center"] == {"x": 310, "y": 220}
+    assert payload["screen_point"] == {"x": 310, "y": 220}
+
+
+def test_a_semantic_click_keeps_its_old_shape(monkeypatch):
+    """Only the pixel path reports a screen point; the ladder does not move
+    the pointer, so it has none to report."""
+    monkeypatch.setattr("openeyes.cli.main.detect_elements",
+                        lambda *a, **k: [_save_element()])
+    monkeypatch.setattr(
+        "openeyes.core.selector.click_element",
+        lambda *a, **k: {"ok": True, "method": "invoke", "physical_input": False,
+                         "cursor_moved": False, "focus_stolen": False})
+
+    result = _run("--json", "click", "--window", "42",
+                  "--name-contains", "Save", "--method", "invoke", "--go")
+    payload = json.loads(result.stdout)
+    assert payload["method"] == "invoke"
+    assert "screen_point" not in payload
 
 
 # ------------------------------------------------------------- the budget

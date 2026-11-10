@@ -30,12 +30,14 @@ def test_vision_command_converts_detections(tmp_path):
 
 
 def test_vision_command_honours_the_origin_offset(tmp_path):
-    path = _write_detections(tmp_path)
+    path = tmp_path / "det.json"
+    # 整屏截图：按钮在屏幕上 (110, 70)，窗口左上角在图像的 (100, 50) 处
+    path.write_text(json.dumps([[[110, 70, 210, 110], "button"]]), encoding="utf-8")
     result = CliRunner().invoke(
         cli, ["vision", "--detections", str(path), "--origin-x", "100", "--origin-y", "50"])
     assert result.exit_code == 0, result.output
     elements = json.loads(result.output)
-    assert elements[0]["bbox"] == {"x": 110, "y": 70, "w": 100, "h": 40}
+    assert elements[0]["bbox"] == {"x": 10, "y": 20, "w": 100, "h": 40}
 
 
 def test_resolve_command_reports_which_tier_answered(tmp_path):
