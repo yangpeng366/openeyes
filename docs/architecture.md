@@ -137,6 +137,22 @@ print(result.used_backend, [a.to_dict() for a in result.attempts])
 点击前统一由 `openeyes.core.coords.to_screen_point` 补回窗口原点；漏传
 `origin` 时输出等价于屏幕绝对坐标，此时直接 `click_xy`，不可再补一次。
 
+### 坐标空间只有两种：window 与 viewport
+
+`openeyes.core.coords` 是坐标语义唯一写下来的地方，`BACKEND_SPACES` 一
+处登记：
+
+| 后端 | 空间 | 点击前加回的 origin |
+| --- | --- | --- |
+| `uia` / `vision` | window | `GetWindowRect` 的 `(left, top)` |
+| `cdp` / `bidi` | viewport | viewport 左上角的屏幕坐标 |
+
+`cdp` 与 `bidi` 是**同一个空间**：两者量到的都是 DOM 
+`getBoundingClientRect()`，BiDi 派发 `pointerMove` 时也明确以
+`origin: "viewport"` 为准，因此都不加窗口原点。前端 `click_by_selector`
+与 CLI 的 pixel 路径都在物理点击前经 `to_screen_point` 换算；未登记的后
+端不会被猜成某个空间，而是抛 `UnknownCoordinateSpace`。
+
 两种取数模式，结果完全一致：
 
 - **file 模式** —— `detections_path=` 指向已保存的检测 JSON，无需模型与网络；

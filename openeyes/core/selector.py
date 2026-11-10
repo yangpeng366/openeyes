@@ -46,13 +46,34 @@ def find_elements(elements: list[Element], *,
     return out
 
 
+def _window_origin(hwnd: int) -> tuple[int, int]:
+    """The window's top-left corner in absolute screen pixels.
+
+    The UIA backend measures *inside* the window; ``click_xy`` speaks
+    absolute screen pixels. Reading the rectangle is the only way back
+    across that gap, and it is read here - at the click - rather than
+    cached from a capture that may be stale by now.
+    """
+    import win32gui
+    left, top, _right, _bottom = win32gui.GetWindowRect(hwnd)
+    return int(left), int(top)
+
+
 def click_by_selector(hwnd: int, *, name_contains: str | None = None,
                       control_type: str | None = None,
                       regex: str | None = None,
                       automation_id: str | None = None,
                       button: str = "left", double: bool = False,
                       dry_run: bool = True) -> Element:
-    """One-shot: detect, filter, click first match. Dry-run by default."""
+    """One-shot: detect, filter, click first match. Dry-run by default.
+
+    The matched element's ``center`` is window-relative (UIA), but
+    ``click_xy`` takes absolute screen pixels: the window origin is added
+    back through :func:`openeyes.core.coords.to_screen_point` before the
+    pointer moves. A conversion that cannot be done - no window rectangle,
+    or a backend with no known coordinate space - raises instead of
+    clicking one window origin away from the control.
+    """
     elements = detect_elements(hwnd, restore=True)
     matches = find_elements(elements, name_contains=name_contains,
                             control_type=control_type, regex=regex,
@@ -66,7 +87,11 @@ def click_by_selector(hwnd: int, *, name_contains: str | None = None,
     target = matches[0]
     if not dry_run:
         from openeyes.core.actuator import click_xy
-        click_xy(target.center.x, target.center.y, button=button, double=double)
+        from openeyes.core.coords import to_screen_point
+
+        origin = _window_origin(hwnd)
+        x, y = to_screen_point(target, window_origin=origin)
+        click_xy(x, y, button=button, double=double)
     return target
 
 

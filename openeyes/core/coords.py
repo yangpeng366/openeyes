@@ -9,7 +9,15 @@ different spaces:
 ``uia``       ``window``   the top-left corner of the window
 ``vision``    ``window``   the top-left corner of the window
 ``cdp``       ``viewport`` the top-left corner of the page viewport
+``bidi``      ``viewport`` the top-left corner of the page viewport
 ============  ===========  ==============================================
+
+``cdp`` and ``bidi`` are the same space, not two similar ones. The CDP
+backend reads ``getBoundingClientRect()``; the WebDriver BiDi backend asks
+the same question of the same document and then dispatches ``pointerMove``
+with ``origin: "viewport"``. Both are viewport-relative, so neither takes
+a window origin — passing one would shift the click by the window's
+position on screen.
 
 :func:`openeyes.core.actuator.click_xy` takes **absolute screen**
 coordinates. An element measured in a window-relative space therefore has
@@ -37,6 +45,8 @@ BACKEND_SPACES: dict[str, str] = {
     "uia": WINDOW,
     "vision": WINDOW,
     "cdp": VIEWPORT,
+    # WebDriver BiDi measures DOM boxes in the same viewport space as CDP.
+    "bidi": VIEWPORT,
 }
 
 
@@ -67,9 +77,9 @@ class MissingViewportOrigin(MissingOrigin):
 def element_space(element: object) -> str:
     """The coordinate space *element* was measured in.
 
-    ``"window"`` for the uia / vision backends, ``"viewport"`` for cdp.
-    An unknown backend raises :class:`UnknownCoordinateSpace` — a caller
-    that does not know the space must not click on a guess.
+    ``"window"`` for the uia / vision backends, ``"viewport"`` for cdp and
+    bidi. An unknown backend raises :class:`UnknownCoordinateSpace` — a
+    caller that does not know the space must not click on a guess.
     """
     backend = str(getattr(element, "backend", "") or "").strip().lower()
     space = BACKEND_SPACES.get(backend)
