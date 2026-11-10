@@ -56,6 +56,38 @@ effective, 0% false positives, 0 cursor moves; the pixel path 0/4
 effective with 100% false positives - the click was delivered but the
 menu never opened, because the window was not in the foreground.
 
+## mouse-cluster-demo.py / interference-report.py
+
+Two agents, two cursors, one desktop - and the receipt that shows nobody
+was disturbed. The demo draws a cursor per agent (colour derived from the
+identity), records every drawn frame in the action ledger under the agent
+that drew it, and exits non-zero when the user's foreground window
+changed. No entry drives the pointer: `physical_input` is false on every
+one.
+
+```powershell
+# CI form: no window is created, but the ledger and the verdict are real
+python examples\mouse-cluster-demo.py --dry-run --seconds 1
+
+# a real run: two cursors, five seconds
+python examples\mouse-cluster-demo.py --seconds 5
+```
+
+The ledger it writes is what the report reads:
+
+```powershell
+python examples\interference-report.py --ledger examples\out\mouse-cluster-ledger.jsonl
+python examples\interference-report.py --ledger examples\out\mouse-cluster-ledger.jsonl --json
+```
+
+The report recounts `physical_input`, `focus_stolen`, `refused` and
+`verified` entry by entry and compares them with the summary the run
+itself wrote: exit 1 means the claim and the entries disagree (the
+difference is printed), exit 2 means the file cannot be read as a ledger.
+Measured here (2026-11-10, 2 s at 20 fps): 245 and 246 pixels of the two
+agent colours on screen at once, foreground window unchanged, 82 ledger
+entries with `physical_input=0`.
+
 ## App lifecycle
 
 ```powershell

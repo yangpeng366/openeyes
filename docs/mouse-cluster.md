@@ -42,6 +42,8 @@
 | 隔离判定 | `openeyes/agent/isolation.py` | `IsolationConfig` / `IsolationVerdict` / `evaluate_isolation`：三条触发——真并行 → `vm`、语义路径大面积失效率 → `session`、打扰预算反复耗尽 → `session` |
 | 在场接线 | `openeyes/agent/presence.py` | `AgentPresence`：决策信号 → 注意力预算 → Agent 光标三者接通 |
 | 决策信号 | `openeyes/decision/action.py`、`openeyes/decision/router.py` | `Action.needs_attention` 只在 `FLAG_FOR_REVIEW` 这一档为真，其余档位一律为假 |
+| 双 Agent 同屏演示 | `examples/mouse-cluster-demo.py` | `MouseClusterDemo`：两个 Agent 各画各的光标、共享一份注意力预算、每帧按 `agent_id` 入账；开始与结束的前台句柄不同即非零退出，`--dry-run` 不建窗口 |
+| 打扰度报告 | `examples/interference-report.py` | `summarise`：四个数逐条重算，并与账本自带的 `summary` 声明逐字段比对；不一致非零退出 |
 
 未落地的部分见 §7，**不要把「判定代码存在」当成「隔离环境可用」**。
 
@@ -257,10 +259,12 @@ B（虚拟显示器）是**输出侧的配件**：它给 A 或 L4 提供「看�
 - **已达成**：真实桌面上能看见光标——`examples/overlay-check.py` 实测 245 个该 Agent 颜色的像素、落点在其要求的矩形内、隐藏后归零、用户前台窗口全程未变；截图能取到它，形状与区域一致。
 - **还差一项**：**点击穿透**的实机验证——点光标所在位置的底层窗口，事件真的落到那个窗口（`WM_NCHITTEST` 已答 `HTTRANSPARENT`，但要用真鼠标点一次才算数）。
 
-### 步骤 3：双 Agent 同屏演示
+### 步骤 3：双 Agent 同屏演示 —— **已落地**
 
 - **做什么**：一个脚本拉起两个 Agent，各画各的光标（颜色由 `color_for` 按身份派生），各自移动。
-- **验收通过**：屏幕上同时出现两个不同颜色的光标；用户窗口的前台焦点全程不变；动作账本里能分别看到两个 `agent_id` 的记录。
+- **已达成**：`examples/mouse-cluster-demo.py`（`python examples\mouse-cluster-demo.py --seconds 5`；`--dry-run` 不建窗口，只走账本与判定）。两个 Agent 各占一条泳道、各走一条轨迹（figure8 / sweep），共享**一份**注意力预算——人的注意力只有一份，两个 Agent 同时宣告就是打扰同一个人两次；每帧按 `agent_id` 入账，`physical_input` 逐条为假。开始与结束各读一次前台窗口句柄，不同即以退出码 3 结束并说明；有 Agent 被预算拒绝（退出码 4）也算没达成本步骤的承诺。
+- **本机实测（2026-11-10，2240x1400，2 秒 / 20fps）**：同一时刻的截图上取到 `worker-a` 颜色的像素 **245** 个、`worker-b` 颜色的像素 **246** 个（开跑前同色基线均为 0）；前台窗口 `197980` → `197980` 未变；账本 **82** 条、`physical_input=0`、`focus_stolen=0`、`verified=82`。
+- **单测**：`tests/test_mouse_cluster_demo.py`（假 overlay，不依赖真桌面：两色不同、账本分得清 `agent_id`、前台句柄变化判失败、预算拒绝不画）。
 
 ### 步骤 4：决策信号 → 注意力预算 → 光标（端到端）
 
@@ -272,10 +276,13 @@ B（虚拟显示器）是**输出侧的配件**：它给 A 或 L4 提供「看�
 - **做什么**：两个 Agent 抢同一个 target 时，败者拿结构化码 `TARGET_CONFLICT` 并排队，而不是各点各的。
 - **验收通过**：同目标并发时**不出现并发点击**；同优先级时败者排队；严格高优先级抢占时，`conflicts()` 里留下一条记录且账本能查到这次抢占。
 
-### 步骤 6：打扰度度量闭环
+### 步骤 6：打扰度度量闭环 —— **已落地**
 
 - **做什么**：把动作账本与注意力预算的数字汇总成一份可读的「这轮打扰了用户几次」报告。
-- **验收通过**：跑完一个典型任务，能回答四个数——动了多少次物理输入（`physical_input`）、抢了几次前台（`focus_stolen`）、被预算拒了几次（`refused`）、多少动作被验证过（`verified`）；且这些数与账本原始条目逐条对得上。
+- **已达成**：`examples/interference-report.py` 读一份账本导出（JSONL 或 JSON 数组），给出 `physical_input` / `focus_stolen` / `refused` / `verified` 四个数与 `verified/total`，并且**逐条重算**：每个数都由原始条目重新加总，再与账本自带的 `summary` 声明逐字段（含按 Agent 的分项）比对。不一致时退出码 1，并打印 `claimed` 与 `counted` 的差；账本本身不可读（条目缺 `agent_id`、标志位不是布尔、被拒条目却声称已投递）时退出码 2，不拿一个坏账本去算数。
+- **口径**：`refused` 只记「想被看见、被预算挡下」的条目；`take(False)` 那种没有话说的静默既不画也不入账，不会被算成一次打扰——与 `AttentionBudget.disturbance` 的口径一致。
+- **本机实测**：`python examples\interference-report.py --ledger examples\out\mouse-cluster-ledger.jsonl --json` 读 42 条账本，得 `physical_input=0`、`focus_stolen=0`、`refused=0`、`verified=42`，`verified/total = 42/42 = 100%`，`diffs` 与 `errors` 均为空（账本声明与逐条重算一致）。
+- **单测**：`tests/test_interference_report.py`（含「谎报的 summary 必须被抓到」「坏账本必须报错」两条）。
 
 ### 步骤 7：虚拟显示器可行性验证（只验，不投）
 
@@ -309,9 +316,10 @@ B（虚拟显示器）是**输出侧的配件**：它给 A 或 L4 提供「看�
 | 虚拟鼠标键盘作为并行手段 | **已排除** | 软件层键鼠仍汇入同一根系统指针；`docs/isolation-policy.md` §5 明令不得用 RawInput 自绘冒充多根指针 |
 | 真并行（多个 Agent 同时动手） | **未实现** | 共享桌面的物理约束；判定为 `vm` 级，不是同桌面能消化的 |
 | Agent 光标的非分层实现 | **已落地，待补「点击穿透」实测** | 已改为非分层顶层窗口 + `SetWindowRgn`（`openeyes/agent/overlay.py`）；本机实测：截图取到 245 个该 Agent 颜色的像素、落点在其要求的矩形内、隐藏后归零、用户前台窗口全程未变；`WM_NCHITTEST` 答 `HTTRANSPARENT`（点击穿透）尚未做过实机点击验证 |
-| `AgentPresence` / `AttentionBudget` / `Scheduler` / `evaluate_isolation` 接进真实回路 | **未接** | 目前只有单元测试与包导出（`openeyes/agent/__init__.py`），仓内未见把它们串起来的端到端演示 |
-| 多 Agent 同屏演示 | **未落地** | 无演示脚本；见 §6 步骤 3 |
-| 打扰度的可读报告 | **未落地** | 度量数据已在账本与预算里，汇总报告未做；见 §6 步骤 6 |
+| `AgentPresence` / `AttentionBudget` 接进真实回路 | **已接（步骤 3 演示）** | `examples/mouse-cluster-demo.py` 用 `AgentPresence.announce` → `AttentionBudget.take` → `CursorOverlay.show` 串成一条回路，并逐条入账；预算拒绝时不画、记 `BUDGET_EXCEEDED` |
+| `Scheduler` / `evaluate_isolation` 接进真实回路 | **未接** | 仍只有单元测试与包导出（`openeyes/agent/__init__.py`）；见 §6 步骤 5、步骤 10 |
+| 多 Agent 同屏演示 | **已落地** | `examples/mouse-cluster-demo.py`，`--dry-run` 供 CI；本机实测见 §6 步骤 3 |
+| 打扰度的可读报告 | **已落地** | `examples/interference-report.py`：四个数逐条重算并与账本自带声明比对；见 §6 步骤 6 |
 | 无人值守模式（预算放开 / 复核攒批） | **未落地** | 无显式开关与攒批通道；见 §6 步骤 9 |
 | 跨会话 / 跨隔离环境的回报通道 | **未落地** | 隔离环境一旦成立就需要，本文尚未定义 |
 | 本机 OS 版本口径 | **待统一** | 本文记 Windows 11 家庭版 Insider Preview（build 26340），`docs/isolation-policy.md` §4.1 记 Windows 10 Home（build 26340）；以实测为准统一一处 |
