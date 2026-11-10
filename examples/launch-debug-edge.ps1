@@ -27,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Redirected stdout on Windows defaults to the OEM code page; the help text is UTF-8.
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 # Derive the repo root from this script (examples/<script>) so a CI checkout
 # or a second working copy works without editing the path.
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $PSCommandPath)

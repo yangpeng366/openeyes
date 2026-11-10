@@ -33,7 +33,12 @@ pytestmark = pytest.mark.skipif(_pwsh() is None, reason="pwsh not on PATH")
 def _run(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
     assert SCRIPT.exists(), f"missing helper script at {SCRIPT}"
     cmd = [_pwsh(), "-NoLogo", "-NoProfile", "-File", str(SCRIPT), *args]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=str(ROOT))
+    # The helper prints UTF-8; CI's Windows console code page is not UTF-8, so decode
+    # explicitly instead of relying on the locale.
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=timeout, cwd=str(ROOT),
+    )
 
 
 def test_helper_script_is_no_bom_utf8_and_readable():
