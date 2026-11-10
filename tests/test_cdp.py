@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from openeyes.backends import cdp as cdpmod
+from openeyes.core.coords import MissingViewportOrigin
 
 # ---------------------------------------------------------------------------
 # _make_element + scan_dom parsing
@@ -396,3 +397,41 @@ def test_read_stderr_tail_truncates_long_output(tmp_path):
     tail = cdpmod._read_stderr_tail(str(p), max_chars=40)
     assert tail.startswith("...")
     assert len(tail) <= 44
+
+
+def test_window_bounds_is_none_when_a_page_session_cannot_see_the_window():
+    """Edge 152 answers ``Browser window not found`` on a page session."""
+    conn = MagicMock()
+    conn.call = MagicMock(side_effect=cdpmod.CDPError(
+        "Browser.getWindowForTarget: Browser window not found"))
+
+    assert cdpmod.window_bounds(conn) is None
+
+
+def test_window_bounds_reads_the_window_the_browser_reports():
+    conn = MagicMock()
+    conn.call = MagicMock(side_effect=[
+        {"windowId": 7},
+        {"bounds": {"left": 100, "top": 80, "width": 702, "height": 522}},
+    ])
+
+    assert cdpmod.window_bounds(conn) == {"left": 100, "top": 80,
+                                         "width": 702, "height": 522}
+
+
+def test_viewport_origin_refuses_and_leaves_the_click_path_alone():
+    conn = MagicMock()
+    conn.evaluate = MagicMock(return_value={
+        "screenX": 100, "screenY": 80, "outerWidth": 702,
+        "outerHeight": 522, "innerWidth": 680, "innerHeight": 430,
+        "dpr": 1.3020833730697632})
+    conn.call = MagicMock(side_effect=cdpmod.CDPError("no window"))
+
+    with pytest.raises(MissingViewportOrigin):
+        cdpmod.viewport_origin(conn)
+
+    # the probe is read-only: nothing is dispatched, nothing is clicked
+    assert [c.args[0] for c in conn.call.call_args_list] == [
+        "Browser.getWindowForTarget"]
+    assert conn.evaluate.call_count == 1
+    assert "screenX" in conn.evaluate.call_args.args[0]

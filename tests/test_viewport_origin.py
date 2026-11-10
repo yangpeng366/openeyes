@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from openeyes.backends import bidi
+from openeyes.backends import bidi, cdp
 from openeyes.backends import browser as browser_api
 from openeyes.backends.bidi import BidiConnection
 from openeyes.core.coords import MissingViewportOrigin, to_screen_point
@@ -244,3 +244,127 @@ def test_the_window_origin_is_still_not_a_viewport_origin():
     """The old mistake, pinned: a window origin must not satisfy this."""
     with pytest.raises(MissingViewportOrigin):
         to_screen_point(_element(10, 20), window_origin=(300, 200))
+
+
+# ------------------------------------------------ CDP (Chromium) refuses too
+#: Measured on Edge 152 / Windows 11 25H2, 2240x1400 at 130 %: the window sat
+#: at (130,104) in screen device pixels and the page's own (0,0) marker was
+#: found at (145,209) inside the captured frame - 15 px right, 105 px down.
+CDP_WINDOW = {"screenX": 100, "screenY": 80,
+              "outerWidth": 702, "outerHeight": 522,
+              "innerWidth": 680, "innerHeight": 430,
+              "dpr": 1.3020833730697632, "fullscreen": False,
+              "displayModeFullscreen": False}
+
+#: The same page in Browser.setWindowBounds fullscreen: window edge and
+#: viewport edge did coincide at (0,0), but Chromium still answered
+#: outerHeight=1076 against innerHeight=1077.
+CDP_FULLSCREEN = {"screenX": 0, "screenY": 0,
+                  "outerWidth": 1721, "outerHeight": 1076,
+                  "innerWidth": 1721, "innerHeight": 1077,
+                  "dpr": 1.3020833730697632, "fullscreen": True,
+                  "displayModeFullscreen": True}
+
+
+def _cdp(report=None, *, bounds=None, error=None) -> MagicMock:
+    """A CDP connection that answers with an injected payload."""
+    conn = MagicMock()
+    conn.evaluate = MagicMock(return_value=report)
+    if error is not None:
+        conn.evaluate.side_effect = cdp.CDPError(error)
+    if bounds is None:
+        conn.call = MagicMock(side_effect=cdp.CDPError(
+            "Browser.getWindowForTarget: Browser window not found"))
+    else:
+        conn.call = MagicMock(side_effect=[
+            {"windowId": 7}, {"bounds": bounds}])
+    return conn
+
+
+def test_cdp_never_returns_a_coordinate_for_a_window_off_the_origin():
+    """The window's position is not the viewport's position."""
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        cdp.viewport_origin(_cdp(CDP_WINDOW))
+
+    message = str(excinfo.value)
+    # what it asked, and what the page answered
+    assert "screenX=100" in message and "innerWidth=680" in message
+    # the measured gap, not a guess at it
+    assert "(130,104)" in message and "(145,209)" in message
+    assert "105 px" in message and "120 device px" in message
+    # and the two ways forward
+    assert "viewport_origin=(x, y)" in message
+    assert "Input.dispatchMouseEvent" in message
+    assert "Do not substitute the window origin or (0, 0)" in message
+
+
+def test_cdp_refuses_in_fullscreen_even_though_the_edges_met():
+    """Fullscreen is not a certificate: no field says 'no chrome'."""
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        cdp.viewport_origin(_cdp(CDP_FULLSCREEN, bounds={
+            "windowState": "fullscreen", "left": 0, "top": 0,
+            "width": 1721, "height": 1076}))
+
+    message = str(excinfo.value)
+    assert "outerHeight=1076" in message and "innerHeight=1077" in message
+    assert "fullscreen is not a certificate" in message
+    assert "windowState=fullscreen" in message
+
+
+def test_cdp_refusal_names_the_route_that_needs_no_screen_origin():
+    """A windowed refusal must say what to do instead, not just 'no'."""
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        cdp.viewport_origin(_cdp(CDP_WINDOW))
+
+    message = str(excinfo.value)
+    assert "chrome band" in message
+    assert "dispatch the click in the page" in message
+    assert "viewport_relative" not in message
+
+
+def test_cdp_refuses_even_when_every_number_looks_perfect():
+    """outer == inner at (0,0) is still an inference, so there is no return."""
+    perfect = {"screenX": 0, "screenY": 0, "outerWidth": 1280,
+               "outerHeight": 720, "innerWidth": 1280, "innerHeight": 720,
+               "dpr": 1.0, "fullscreen": True}
+
+    with pytest.raises(MissingViewportOrigin):
+        cdp.viewport_origin(_cdp(perfect))
+
+
+def test_cdp_reports_a_probe_failure_as_the_reason():
+    conn = _cdp(error="Runtime.evaluate failed: target closed")
+
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        cdp.viewport_origin(conn)
+
+    assert "Runtime.evaluate failed: target closed" in str(excinfo.value)
+
+
+def test_cdp_survives_a_page_session_without_browser_window_access():
+    """getWindowForTarget is refused on a page session; refusal still stands."""
+    conn = _cdp(CDP_WINDOW)
+
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        cdp.viewport_origin(conn)
+
+    assert "Browser.getWindowBounds reported" not in str(excinfo.value)
+    assert "screenX=100" in str(excinfo.value)
+
+
+def test_the_protocol_switch_delegates_the_cdp_refusal():
+    with pytest.raises(MissingViewportOrigin) as excinfo:
+        browser_api.viewport_origin("cdp", _cdp(CDP_WINDOW))
+
+    assert "cdp (Chromium)" in str(excinfo.value)
+
+
+def test_the_cdp_click_path_needs_no_screen_origin():
+    """``click_center`` dispatches inside the page and must stay that way."""
+    conn = MagicMock()
+
+    cdp.click_center(conn, _element(10, 20, backend="cdp"))
+
+    sent = [c.args[0] for c in conn.call.call_args_list]
+    assert sent == ["Input.dispatchMouseEvent", "Input.dispatchMouseEvent"]
+    conn.evaluate.assert_not_called()

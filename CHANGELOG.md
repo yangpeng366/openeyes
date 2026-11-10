@@ -32,6 +32,20 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **CDP states why it cannot give the viewport's screen corner.**
+  `openeyes.backends.cdp.viewport_origin()` now exists and always raises
+  `MissingViewportOrigin`: Chromium exposes the *window* (`screenX`/`screenY`,
+  `Browser.getWindowBounds`) and the viewport's *size* (`inner*`,
+  `getLayoutMetrics`), never the offset between them. Measured on Edge 152 /
+  Windows 11 at 130 %: the window sat at (130,104) while the viewport's own
+  (0,0) was at (145,209) - 15 px and 105 px away, where
+  `outerHeight - innerHeight` predicted 120 px. Fullscreen is not a
+  certificate either (the measured fullscreen window did coincide, but
+  Chromium answered `outerHeight=1076` against `innerHeight=1077`, and an
+  infobar was measured holding the viewport 55 px down), so no return path is
+  implemented. The message names both ways forward: pass `viewport_origin`,
+  or dispatch in-page with `Input.dispatchMouseEvent`. `docs/architecture.md`
+  records the protocol fields, the pixel measurements and the refusal.
 - **Replay can be verified, not just planned.** `eyes record replay <trajectory.jsonl> --live` calls `Replayer(dry_run=False)`: it sends the recorded input and judges every step `verified` / `unverified` / `failed`, exiting 1 when any step failed (dry-run output and `--json` shape are unchanged without the flag). The MCP server exposes the same thing as `record_replay(trajectory_path, live=false)`, returning `report.to_dict()` plus `ok` and `failed_steps`, so a failed step keeps its reason instead of being folded into a count. `sent=true` still means delivered, never effective.
 - **Recorded workflows export as loadable skills.** `eyes record export <trajectory.jsonl> --skill-dir <dir>` writes the `SKILL.md` rendered by `to_codex_skill()` plus a byte-for-byte copy of the recording, and the body names the replay entry point (`eyes record replay ...`, a dry run). Non-empty targets are refused unless `--force`; the skill name is normalised to `[a-z0-9-]` so a loader accepts it. `openeyes.record.export.export_skill_dir()` exposes the same behaviour to Python callers.
 - **Session recovery inside one budget.** `openeyes.core.recover.recover_session()`

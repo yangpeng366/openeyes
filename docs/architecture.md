@@ -188,6 +188,85 @@ browser.getClientWindows  x=307 y=199 w=843 h=613  (window, CSS px)
   `cdp` 后端没有原点来源，`browser.viewport_origin("cdp")` 直接拒绝而
   不是猜一个。
 
+### CDP（Edge/Chromium）不做屏幕坐标
+
+和 BiDi 不同，CDP 连「窗口矩形」都只在特定连接上给得出来，viewport 的屏幕
+原点则完全没有字段。所以 `cdp.viewport_origin()` 存在，但**只做拒绝**：
+它先把页面能说的都读出来，再明确拒绝，并给出两条出路。
+
+协议字段各自是什么（本机 Edge 152 实测，逐条核对）：
+
+| 字段 | 坐标系与语义 | 是不是答案 |
+| --- | --- | --- |
+| `Page.getLayoutMetrics` 的 `visualViewport.clientWidth/Height` | 渲染器给的视口尺寸，**设备像素**（本次 1721x1077 @ dpr 1.302），不含任何屏幕偏移 | 只有尺寸 |
+| `Browser.getWindowForTarget` / `Browser.getWindowBounds` | **窗口**矩形，CSS 像素（DIP）；`left=100,top=80,width=702,height=522` 对应物理 `(130,104) 912x678` | 是窗口，含边框与浏览器 UI |
+| `Runtime.evaluate` 的 `screenX`/`screenY` | **窗口**左/上边缘到屏幕原点，CSS 像素 | 是窗口原点，不是视口原点 |
+| `Runtime.evaluate` 的 `outerWidth`/`outerHeight` | **窗口**外框尺寸，CSS 像素 | 窗口尺寸 |
+| `Runtime.evaluate` 的 `innerWidth`/`innerHeight` | **视口**尺寸，CSS 像素（含滚动条，不含浏览器 UI） | 视口尺寸；与 `outer*` 的差并**不是** chrome 高度 |
+
+实测（可见 Edge 152.0.4191.19，Windows 11 25H2，2240x1400 @130%，
+`devicePixelRatio` 1.3020833730697632；几何只用 `Browser.setWindowBounds`
+驱动，页面在自身 `(0,0)` 画一块 40x40 洋红，`PrintWindow(PW_RENDERFULLCONTENT)`
+取得窗口位图后定位该块；`Target.activateTarget` 保证渲染器报的是当前几何）：
+
+```
+窗口 bounds(100,80) 700x520
+  Win32 GetWindowRect      (130,104) 912x678      ClientToScreen (139,104)
+  screenX/Y                100, 80   x dpr -> (130,104)   = 窗口原点，逐像素相等
+  outer / inner            702x522 / 680x430              outer-inner = 22x92 CSS
+  像素里的视口原点          (145,209)  ->  相对窗口 (15,105)
+  差值：窗口原点 - 视口原点  (15,105)；而 outerHeight-innerHeight 预测 120 px
+
+窗口 bounds(40,30) 900x640
+  Win32 GetWindowRect      (52,39) 1172x834
+  screenX/Y                40, 30   x dpr -> (52,39)     = 窗口原点
+  像素里的视口原点          (67,144)  ->  相对窗口 (15,105)   同一偏移
+
+Browser.setWindowBounds fullscreen
+  Win32 GetWindowRect      (0,0) 2240x1400
+  screenX/Y                0, 0     x dpr -> (0,0)
+  outer / inner            1721x1076 / 1721x1077          outer-inner = 0x-1
+  像素里的视口原点          (0,0)                           与窗口边缘重合
+```
+
+三档归位：
+
+- **规范保证**：没有。CDP 没有任何字段描述「viewport 左上角在屏幕上的位置」，
+  `getLayoutMetrics` 只给 CSS 像素下的尺寸，`getWindowBounds` 只给窗口矩形。
+- **实测可得**：只有全屏这一个状态经实测重合（窗口 `(0,0)`、视口 `(0,0)`，差值
+  0 像素）。但它不是可判定的：同一次全屏里 Chromium 报 `outerHeight=1076`
+  对 `innerHeight=1077`（差 1 px），任务里假设的
+  `outerWidth===innerWidth && outerHeight===innerHeight` 在真机上**不成立**；
+  而且全屏下浏览器 UI 仍可能压住顶部——带 `--no-sandbox` 的实例在同样全屏
+  状态下，洋红块出现在窗口 `(0,55)`，说明 infobar 把视口又推下去了 55 px。
+  要么放宽成「差 1-2 px 也算全屏」，那就是估算；要么只在精确相等时返回，那在
+  本机一次都不会成立。两条路都不满足「未实测不返回」，因此不实现返回分支。
+- **只能估算**：`screenX*dpr` 当视口原点、`outerHeight-innerHeight` 当 chrome
+  高度。实测前者差 105 px（纵向）、后者差 15 px，一律拒绝。
+
+于是 `openeyes/backends/cdp.py` 里：
+
+```python
+def viewport_origin(conn, element=None):
+    report = conn.evaluate(VIEWPORT_ORIGIN_JS)      # 只读，不点任何东西
+    raise MissingViewportOrigin(
+        cdp_origin_message(report, bounds=window_bounds(conn)))
+```
+
+拒绝信息里写明：页面报了什么（`screenX/screenY/outer*/inner*/dpr`）、
+`Browser.getWindowBounds` 报的窗口矩形（页面级会话上常被拒，
+`Browser window not found`，因此是 best-effort）、本机实测的 15/105 px 偏移、
+以及两条出路：调用方自己传 `viewport_origin=(x, y)`（屏幕/设备像素），或改走
+页内派发 `Input.dispatchMouseEvent`（它本来就吃 viewport 坐标，不需要屏幕原点）。
+`browser.viewport_origin("cdp", …)` 直接透传这个拒绝，`browser.screen_point`
+因此也不会给出估算坐标。
+
+复现命令（可见 Edge，非无头；跑完自动恢复被临时最小化的窗口）：
+
+```powershell
+python C:\Users\47037\AppData\Local\Temp\oe-cdp-origin-probe8.py
+```
+
 前置条件与后续可选来源：
 
 - `mozInnerScreenX/Y` 只保证在 Gecko 上存在；Chromium 系浏览器必须由调用方

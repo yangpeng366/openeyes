@@ -59,6 +59,17 @@ SOURCE_CALLER = "caller-supplied viewport_origin"
 #: A corner this module converted from CSS pixels.
 SOURCE_CSS = "css-pixels * devicePixelRatio"
 
+#: What a normal Chromium window looked like when measured against pixels.
+#: Edge 152 / Windows 11 25H2, 2240x1400 at 130 % (``devicePixelRatio``
+#: 1.3020833730697632): the window's top-left was (130,104) and the page's
+#: own (0,0) marker was found at (145,209) in the frame captured for that
+#: window - 15 px to the right and 105 px below. ``outerHeight -
+#: innerHeight`` said 92 CSS px, i.e. 120 device px: 15 px more than the
+#: chrome that was actually there.
+CDP_MEASURED_CHROME = (
+    "a 15 px left inset and a 105 px chrome band on this machine"
+)
+
 
 @dataclass(frozen=True)
 class ViewportOrigin:
@@ -169,6 +180,96 @@ def origin_from_probe(payload: object, *,
             "cannot be turned into screen pixels"
         )
     return from_css_point(x, y, dpr, source=source)
+
+
+def _fmt(value: object) -> str:
+    """A number for a message - never an invented one."""
+    if isinstance(value, bool) or value is None:
+        return repr(value)
+    if isinstance(value, (int, float)):
+        return f"{value:g}" if isinstance(value, float) else str(value)
+    return repr(value)
+
+
+def cdp_report_fields(report: object) -> str:
+    """The five JS numbers Chromium answers, as one readable phrase."""
+    if not isinstance(report, Mapping):
+        return "the page did not answer the window probe"
+    order = ("screenX", "screenY", "outerWidth", "outerHeight",
+             "innerWidth", "innerHeight", "dpr")
+    shown = [f"{name}={_fmt(report.get(name))}" for name in order
+             if name in report]
+    return "the page reported " + ", ".join(shown) if shown else \
+        "the page reported no window geometry"
+
+
+def report_is_fullscreen(report: object,
+                         bounds: Mapping[str, Any] | None = None) -> bool:
+    """True when the browser itself says it is in fullscreen."""
+    if isinstance(report, Mapping):
+        if report.get("fullscreenElement") or report.get("fullscreen"):
+            return True
+        if report.get("displayModeFullscreen"):
+            return True
+    if isinstance(bounds, Mapping) and bounds.get("windowState"):
+        return str(bounds.get("windowState")) == "fullscreen"
+    return False
+
+
+def cdp_origin_message(report: object = None, *,
+                       bounds: Mapping[str, Any] | None = None,
+                       detail: str = "") -> str:
+    """Why Chromium's own numbers are not the viewport corner.
+
+    Chromium never exposes the viewport's screen position. ``screenX``/
+    ``screenY`` are the *window's* left/top in CSS pixels, ``outerWidth``/
+    ``outerHeight`` its size, ``innerWidth``/``innerHeight`` the viewport's
+    size; no field is the offset between them. The message states what the
+    page did answer, what was measured instead, and the two ways forward.
+    """
+    parts = [
+        "cdp (Chromium) could not determine the page viewport's top-left "
+        "corner in screen coordinates, so a viewport-relative point cannot "
+        "be turned into a physical click"
+    ]
+    if detail:
+        parts.append(detail)
+    if isinstance(report, Mapping):
+        parts.append(cdp_report_fields(report))
+    if isinstance(bounds, Mapping) and bounds:
+        where = ", ".join(
+            f"{key}={bounds.get(key)}"
+            for key in ("left", "top", "width", "height", "windowState")
+            if bounds.get(key) is not None
+        )
+        if where:
+            parts.append(
+                "Browser.getWindowBounds reported the window (" + where
+                + ", CSS px): that is the window, chrome included"
+            )
+    parts.append(
+        "Chromium exposes no field for the offset between the window's "
+        "edge and the page viewport; measured here, a window at (130,104) "
+        "had its viewport at (145,209), i.e. " + CDP_MEASURED_CHROME
+        + ", while outerHeight - innerHeight predicted 120 device px"
+    )
+    if report_is_fullscreen(report, bounds):
+        parts.append(
+            "fullscreen is not a certificate either: the measured "
+            "fullscreen window did put the viewport at its (0,0), but "
+            "Chromium still answered outerHeight=1076 against "
+            "innerHeight=1077, so no field says 'no chrome', and browser "
+            "UI at the top (an infobar was measured at 55 device px) moves "
+            "the viewport again"
+        )
+    parts.append(
+        "pass viewport_origin=(x, y) in screen/device pixels from a source "
+        "that measured the viewport itself, or let the browser dispatch "
+        "the click in the page (Input.dispatchMouseEvent with "
+        "viewport-relative coordinates, which needs no screen origin)"
+    )
+    return "; ".join(parts) + ". Do not substitute the window origin or " \
+        "(0, 0) for it."
 
 
 def missing_origin_message(backend: str, *, detail: str = "",

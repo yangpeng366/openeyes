@@ -68,7 +68,14 @@ def screenshot(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
 #: backend that cannot is not guessed at: its click path stays in-page
 #: (CDP ``Input.dispatchMouseEvent``, BiDi ``origin: "viewport"``), and a
 #: caller that needs a physical click must supply the origin itself.
+#: ``cdp`` is deliberately not listed: it exposes a ``viewport_origin()`` so
+#: the refusal is specific (measured window vs. viewport), but that function
+#: always raises - Chromium never states the viewport's screen position.
 VIEWPORT_ORIGIN_BACKENDS = ("bidi",)
+
+#: Backends whose ``viewport_origin()`` exists only to refuse, with the
+#: evidence of what their protocol does and does not expose.
+REFUSING_VIEWPORT_ORIGIN_BACKENDS = ("cdp",)
 
 
 def viewport_origin(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,

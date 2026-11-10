@@ -22,7 +22,9 @@ from typing import Any
 import websocket
 
 from openeyes.backends.dom_probe import control_type_map, dom_js, make_element
+from openeyes.core.coords import MissingViewportOrigin
 from openeyes.core.schema import BBox, Center, Element
+from openeyes.core.viewport import cdp_origin_message
 
 # Connection constants
 CDP_DEFAULT_PORT = 9222
@@ -388,8 +390,79 @@ def scan_dom(conn, *, filter_url_contains=None, limit: int = 500) -> list:
         out.append(_make_element(r2))
     return out
 
-# ===== Actuation (CDP Input domain) =====
+# ===== Viewport origin (deliberately not answered) =====
 
+#: What Chromium will say about the *window*. ``screenX``/``screenY`` are
+#: the window's left/top in CSS pixels relative to the screen, ``outerWidth``
+#: /``outerHeight`` its size, ``innerWidth``/``innerHeight`` the viewport's
+#: size. The protocol has no field for the offset between the window edge and
+#: the page viewport, so this probe cannot produce the viewport's corner - it
+#: only collects what the page *did* say, for the refusal message.
+VIEWPORT_ORIGIN_JS = """(function() {
+  var vv = window.visualViewport;
+  return {
+    screenX: (typeof window.screenX === "number") ? window.screenX : null,
+    screenY: (typeof window.screenY === "number") ? window.screenY : null,
+    outerWidth: (typeof window.outerWidth === "number") ? window.outerWidth : null,
+    outerHeight: (typeof window.outerHeight === "number") ? window.outerHeight : null,
+    innerWidth: (typeof window.innerWidth === "number") ? window.innerWidth : null,
+    innerHeight: (typeof window.innerHeight === "number") ? window.innerHeight : null,
+    dpr: (typeof window.devicePixelRatio === "number") ? window.devicePixelRatio : null,
+    vvOffsetTop: vv ? vv.offsetTop : null,
+    fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement),
+    displayModeFullscreen: window.matchMedia
+      ? window.matchMedia("(display-mode: fullscreen)").matches : false
+  };
+})()"""
+
+
+def window_bounds(conn) -> dict | None:
+    """Best-effort ``Browser.getWindowBounds``, for diagnostics only.
+
+    A page-level session is often refused with ``Browser window not found``
+    (measured on Edge 152), so this returns ``None`` rather than raising: the
+    refusal that follows does not depend on it.
+    """
+    try:
+        info = conn.call("Browser.getWindowForTarget", {}, timeout=5.0)
+        window_id = info.get("windowId") if isinstance(info, dict) else None
+        if window_id is None:
+            return None
+        bounds = conn.call("Browser.getWindowBounds",
+                           {"windowId": window_id}, timeout=5.0)
+    except (CDPError, AttributeError, TypeError):
+        return None
+    got = bounds.get("bounds") if isinstance(bounds, dict) else None
+    return got if isinstance(got, dict) else None
+
+
+def viewport_origin(conn, element=None):
+    """Refuse: Chromium reports the window, never the viewport's corner.
+
+    Every CDP field that looks like a candidate is the *window's*: the page
+    reports ``screenX``/``screenY`` for it, and ``innerWidth``/``innerHeight``
+    only size the viewport. Measured against pixels (see
+    :mod:`openeyes.core.viewport` and ``docs/architecture.md``), the viewport
+    sat 15 px right of and 105 px below the window's top-left, while
+    ``outerHeight - innerHeight`` predicted 120 px - so subtracting that
+    difference is the estimate tier this project refuses.
+
+    ``Input.dispatchMouseEvent`` (the click path this backend already uses)
+    takes viewport-relative coordinates and needs no screen origin, which is
+    why refusing here costs a caller nothing but a wrong click.
+    """
+    report = None
+    detail = ""
+    try:
+        report = conn.evaluate(VIEWPORT_ORIGIN_JS, timeout=5.0)
+    except CDPError as exc:
+        detail = "Runtime.evaluate failed: " + str(exc)
+    raise MissingViewportOrigin(
+        cdp_origin_message(report, bounds=window_bounds(conn), detail=detail)
+    )
+
+
+# ===== Actuation (CDP Input domain) =====
 
 def click_center(conn, element: Element) -> None:
     cx, cy = element.center.x, element.center.y
