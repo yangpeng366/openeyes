@@ -3,7 +3,7 @@
 Covers:
 - Trajectory JSONl round-trip
 - Recorder lifecycle + declarative APIs
-- Replayer dry-run
+- Replayer dry-run, and real-replay verification (verified / unverified / failed)
 - _build_selector priority
 - merge_trajectories DAG
 - to_natural_language rendering
@@ -227,6 +227,208 @@ class TestReplayer:
         assert report.actions[0]["plan"]["kind"] == "click"
         assert report.actions[1]["plan"]["kind"] == "hotkey"
         assert not report.errors
+
+    def test_dry_run_claims_nothing_and_needs_no_openeyes(self, monkeypatch):
+        from openeyes.record import replayer as replayer_mod
+
+        def _no_openeyes():
+            raise ImportError("openeyes is not installed here")
+
+        monkeypatch.setattr(replayer_mod, "_import_openeyes", _no_openeyes)
+        r = Recorder()
+        r.start(name="dry-run-no-openeyes")
+        r.record_click(100, _FakeElement(), meta={"expect": {"automation_id": "dialog_ok"}})
+        traj = r.stop()
+
+        report = Replayer(dry_run=True).replay(traj)
+        assert [a["status"] for a in report.actions] == ["planned"]
+        assert report.to_dict()["summary"]["planned"] == 1
+        assert report.to_dict()["summary"]["all_effect_verified"] is None
+
+
+# ---------------------------------------------------------------------------
+# Replayer: real replay must prove effect, not delivery
+# ---------------------------------------------------------------------------
+
+class _FakeBackend:
+    """A backend that records calls and never touches mouse or keyboard.
+
+    ``present`` models the state an expectation can observe. ``effect=True``
+    means a delivered click actually changes that state.
+    """
+
+    def __init__(self, *, present=False, effect=True, fail_selector=False):
+        self.present = present
+        self.effect = effect
+        self.fail_selector = fail_selector
+        self.calls = []
+        self.probes = 0
+
+    def click_selector(self, hwnd, selector, *, button="left", double=False):
+        self.calls.append(("click_selector", hwnd, selector, button, double))
+        if self.fail_selector:
+            raise LookupError(f"no element matches selector {selector!r} in hwnd={hwnd}")
+        if self.effect:
+            self.present = True
+
+    def click_xy(self, x, y, *, button="left", double=False):
+        self.calls.append(("click_xy", x, y, button, double))
+        if self.effect:
+            self.present = True
+
+    def send_hotkey(self, combo):
+        self.calls.append(("send_hotkey", combo))
+
+    def type_text(self, text):
+        self.calls.append(("type_text", text))
+
+    def scroll(self, dx, dy):
+        self.calls.append(("scroll", dx, dy))
+
+    def drag(self, from_xy, to_xy):
+        self.calls.append(("drag", from_xy, to_xy))
+
+    def probe(self, spec, *, hwnd=0):
+        self.probes += 1
+        return {"found": self.present, "observed": f"probe#{self.probes} present={self.present}"}
+
+
+class TestReplayerVerification:
+    def _click_traj(self, meta=None):
+        r = Recorder()
+        r.start(name="verify-test")
+        r.record_click(4242, _FakeElement(), intent="open dialog", meta=meta)
+        return r.stop()
+
+    def test_observed_expectation_is_verified(self):
+        backend = _FakeBackend(present=False)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.2, interval=0.01).replay(
+            self._click_traj({"expect": {"automation_id": "dialog_ok"}}),
+        )
+        action = report.actions[0]
+        assert action["status"] == "verified"
+        assert action["sent"] is True
+        assert action["attempts"] == 1
+        assert action["path"] == "selector"
+        assert action["paths"] == ["selector"]
+        assert action["preexisting"] is False
+        assert action["expectation_source"] == "meta.expect"
+        assert "present=True" in action["last_observed"]
+        assert backend.calls[0][0] == "click_selector"
+        summary = report.to_dict()["summary"]
+        assert summary["verified"] == 1
+        assert summary["unverified"] == 0
+        assert summary["failed"] == 0
+        assert summary["all_effect_verified"] is True
+        # The report stays JSON-serialisable all the way down.
+        assert json.loads(json.dumps(report.to_dict()))["summary"] == summary
+
+    def test_expectation_that_never_holds_is_failed_not_sent(self):
+        backend = _FakeBackend(present=False, effect=False)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.05, interval=0.01).replay(
+            self._click_traj({"expect": {"automation_id": "dialog_ok"}}),
+        )
+        action = report.actions[0]
+        assert action["status"] == "failed"
+        assert action["attempts"] == 2
+        assert action["elapsed"] >= 0.05
+        assert action["last_observed"].startswith("probe#")
+        assert action["reason"] == "expected state not observed within timeout"
+        # Delivery happened; the failure is about effect, and the ladder used
+        # to try again is recorded rather than hidden.
+        assert action["sent"] is True
+        assert action["paths"] == ["selector", "bbox"]
+        assert report.to_dict()["summary"]["failed"] == 1
+        assert report.to_dict()["summary"]["all_effect_verified"] is False
+
+    def test_step_without_expectation_is_unverified_never_success(self):
+        backend = _FakeBackend(present=False)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.2, interval=0.01).replay(self._click_traj())
+        action = report.actions[0]
+        assert action["status"] == "unverified"
+        assert action["reason"] == "no expectation recorded"
+        assert action["sent"] is True
+        assert action["expectation"] is None
+        assert backend.probes == 0  # nothing to observe, so nothing is claimed
+        summary = report.to_dict()["summary"]
+        assert (summary["verified"], summary["unverified"]) == (0, 1)
+        assert summary["all_effect_verified"] is False
+
+    def test_preexisting_expectation_is_not_claimed_as_effect(self):
+        backend = _FakeBackend(present=True, effect=False)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.05, interval=0.01).replay(
+            self._click_traj({"expect": {"automation_id": "dialog_ok"}}),
+        )
+        action = report.actions[0]
+        assert action["status"] == "unverified"
+        assert action["preexisting"] is True
+        assert action["sent"] is True
+        assert "already held before" in action["reason"]
+        summary = report.to_dict()["summary"]
+        assert (summary["verified"], summary["unverified"]) == (0, 1)
+        assert summary["all_effect_verified"] is False
+
+    def test_selector_failure_retries_through_bbox_and_records_the_path(self):
+        backend = _FakeBackend(present=False, fail_selector=True)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.2, interval=0.01).replay(
+            self._click_traj({"expect": {"automation_id": "dialog_ok"}}),
+        )
+        action = report.actions[0]
+        assert action["status"] == "verified"
+        assert action["paths"] == ["selector", "bbox"]
+        assert action["path"] == "bbox"
+        assert action["attempts"] == 2
+        kinds = [call[0] for call in backend.calls]
+        assert kinds[:2] == ["click_selector", "click_xy"]
+        assert backend.calls[1][1:3] == (140, 215)  # recorded bbox center
+        assert report.to_dict()["summary"]["verified"] == 1
+
+    def test_no_delivery_path_at_all_is_failed(self):
+        r = Recorder()
+        r.start(name="cdp-pointer")
+        r.record_click(0, {"source": "cdp-browser"}, meta=None)
+        traj = r.stop()
+        backend = _FakeBackend()
+        report = Replayer(dry_run=False, backend=backend).replay(traj)
+        action = report.actions[0]
+        assert action["status"] == "failed"
+        assert action["sent"] is False
+        assert backend.calls == []
+        assert "no structured selector and no bbox center" in action["error"]
+
+    def test_unjudgeable_expectation_is_unverified_with_reason(self):
+        backend = _FakeBackend(present=True)
+        report = Replayer(dry_run=False, backend=backend,
+                          timeout=0.05, interval=0.01).replay(
+            self._click_traj({"expect": {"mood": "happy"}}),
+        )
+        action = report.actions[0]
+        assert action["status"] == "unverified"
+        assert "not judgeable" in action["reason"]
+        assert backend.probes == 0
+
+    def test_openeyes_import_failure_fails_steps_instead_of_claiming_sent(self, monkeypatch):
+        from openeyes.record import replayer as replayer_mod
+
+        def _no_openeyes():
+            raise ImportError("openeyes is not installed here")
+
+        monkeypatch.setattr(replayer_mod, "_import_openeyes", _no_openeyes)
+        report = Replayer(dry_run=False).replay(self._click_traj())
+
+        assert report.errors
+        assert "openeyes not importable" in report.errors[0]
+        assert [a["status"] for a in report.actions] == ["failed"]
+        assert report.actions[0]["sent"] is False
+        assert report.actions[0]["attempts"] == 0
+        summary = report.to_dict()["summary"]
+        assert (summary["failed"], summary["verified"]) == (1, 0)
+        assert summary["all_effect_verified"] is False
 
 
 # ---------------------------------------------------------------------------
