@@ -19,7 +19,23 @@ A pure text LLM can read this and decide when/how to call the skill.
 """
 from __future__ import annotations
 
+import re
+
 from ..event import Trajectory
+
+_SKILL_NAME_MAX = 64
+
+
+def _skill_name(traj_name: str) -> str:
+    """A loader-safe skill name: [a-z0-9-], at most 64 chars.
+
+    Trajectory names are free text (they may carry a URL or a path), while a
+    skill name is a narrow slug. Normalise here so the exported SKILL.md is
+    loadable as-is.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", traj_name.lower()).strip("-")
+    name = "openeyes-record-" + (slug or "workflow")
+    return name[:_SKILL_NAME_MAX].rstrip("-")
 
 
 def to_codex_skill(traj: Trajectory, *, description: str = "", model_hint: str = "") -> str:
@@ -34,7 +50,7 @@ def to_codex_skill(traj: Trajectory, *, description: str = "", model_hint: str =
     if not model_hint:
         model_hint = "text-only LLM friendly (no vision required)"
 
-    name = "openeyes-record-" + (traj.name or "workflow").lower().replace(" ", "-")
+    name = _skill_name(traj.name or "workflow")
     lines: list[str] = []
     lines.append("---")
     lines.append(f"name: \"{name}\"")

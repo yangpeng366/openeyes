@@ -14,6 +14,7 @@ No real UI needed; uses fake element dicts throughout.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -532,6 +533,14 @@ class TestExports:
         md = to_codex_skill(traj, description="Search GitHub for OpenEyes")
         assert "openeyes" in md.lower() or "search" in md.lower()
         assert "---" in md  # YAML front-matter
+
+    def test_codex_skill_name_is_a_loader_safe_slug(self):
+        traj = self._sample_traj()
+        traj.name = "Explore file:///C:/Users/47037/page"
+        md = to_codex_skill(traj)
+        name = re.search(r'^name: "(.+)"$', md, re.MULTILINE).group(1)
+        assert re.fullmatch(r"[a-z0-9-]{1,64}", name)
+        assert name.startswith("openeyes-record-explore")
 
     def test_action_receipt_output(self):
         traj = self._sample_traj()
