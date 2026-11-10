@@ -203,11 +203,18 @@ print(to_codex_skill(traj))            # Codex SKILL.md
 report = Replayer(dry_run=True).replay(traj)
 ```
 
-### CLI dry-run
+### CLI replay
 
 ```powershell
-eyes record replay trajectory.jsonl --json
+eyes record replay trajectory.jsonl --json          # dry-run: plan only, sends nothing
+eyes record replay trajectory.jsonl --live          # send real input, judge each step
+eyes record replay trajectory.jsonl --live --json   # same, report.to_dict() on stdout
 ```
+
+Without `--live` nothing is sent and every step is `planned`. With `--live` the
+steps are delivered and each one is `verified` / `unverified` / `failed`; the exit
+code is 1 when any step failed. `sent: true` means *delivered*, not *effective*.
+See `docs/RECORD_DESIGN.md` for the three-state semantics.
 
 ### Export a loadable skill
 

@@ -32,6 +32,7 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **Replay can be verified, not just planned.** `eyes record replay <trajectory.jsonl> --live` calls `Replayer(dry_run=False)`: it sends the recorded input and judges every step `verified` / `unverified` / `failed`, exiting 1 when any step failed (dry-run output and `--json` shape are unchanged without the flag). The MCP server exposes the same thing as `record_replay(trajectory_path, live=false)`, returning `report.to_dict()` plus `ok` and `failed_steps`, so a failed step keeps its reason instead of being folded into a count. `sent=true` still means delivered, never effective.
 - **Recorded workflows export as loadable skills.** `eyes record export <trajectory.jsonl> --skill-dir <dir>` writes the `SKILL.md` rendered by `to_codex_skill()` plus a byte-for-byte copy of the recording, and the body names the replay entry point (`eyes record replay ...`, a dry run). Non-empty targets are refused unless `--force`; the skill name is normalised to `[a-z0-9-]` so a loader accepts it. `openeyes.record.export.export_skill_dir()` exposes the same behaviour to Python callers.
 - **Session recovery inside one budget.** `openeyes.core.recover.recover_session()`
   chases a dropped session through the same four steps a person would:

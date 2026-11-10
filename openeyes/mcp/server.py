@@ -1,7 +1,7 @@
 """
 OpenEyes MCP server — exposes core primitives as MCP tools.
 
-Tools (19):
+Tools (20):
     list_windows()             -> [{hwnd, title, ...}, ...]
     capture_window(hwnd, out?, dry_run?) -> {path, size, captured}
     detect_elements(hwnd, restore?, depth?, name_contains?, control_type?, regex?)
@@ -34,6 +34,8 @@ Tools (19):
     app_ensure(title_contains?, class_name?, process_name?, exe?, aumid?,
               timeout?, dry_run?)
                                 -> {ok, state, action, hwnd, pid, ...}
+    record_replay(trajectory_path, live?, retries?, timeout?, interval?)
+                                -> {ok, dry_run, actions, summary, failed_steps, ...}
 
 Run:
     eyes-mcp
@@ -663,6 +665,44 @@ async def list_tools() -> list[Tool]:
                 "required": ["app"],
             },
         ),
+        Tool(
+            name="record_replay",
+            description="Replay a recorded trajectory (JSONL) and report, per "
+                        "step, whether it was verified / unverified / failed. "
+                        "live=false (the default) sends no input: the actions "
+                        "come back as 'planned'. live=true delivers real "
+                        "keyboard and mouse input and judges each step against "
+                        "the expectation recorded in the trajectory. 'sent' "
+                        "only means delivered - it is not proof of effect, and "
+                        "a step with no recorded expectation stays "
+                        "'unverified'. Failed steps keep their reason and "
+                        "error in actions[] and in failed_steps[].",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "trajectory_path": {
+                        "type": "string",
+                        "description": "path to a trajectory.jsonl "
+                                       "(header + one step per line)",
+                    },
+                    "live": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "false = plan only and send nothing; "
+                                       "true = send real input and verify",
+                    },
+                    "retries": {"type": "integer", "default": 2,
+                                "description": "attempts per step when the "
+                                               "expectation is judged"},
+                    "timeout": {"type": "number", "default": 2.0,
+                                "description": "seconds to wait for the "
+                                               "expectation to hold"},
+                    "interval": {"type": "number", "default": 0.1,
+                                 "description": "seconds between probes"},
+                },
+                "required": ["trajectory_path"],
+            },
+        ),
 
     ]
 
@@ -1273,6 +1313,12 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             payload = result.to_dict()
             payload["dry_run"] = bool(arguments.get("dry_run", True))
             return [TextContent(type="text", text=_to_json(payload))]
+
+        if name == "record_replay":
+            from openeyes.mcp.replay_tool import record_replay_payload
+
+            return [TextContent(type="text", text=_to_json(
+                record_replay_payload(arguments)))]
 
         return [TextContent(type="text", text=_to_json(
             {"error": f"unknown tool: {name}"}))]

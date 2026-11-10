@@ -12,7 +12,7 @@ Usage:
     eyes grid   --window <hwnd> --row R --col C [--rows N --cols N] [--dry-run|--go]
     eyes hotkey [--combo ctrl+a]      # or: eyes send hotkey --combo ctrl+a
     eyes type   --text <str> [--interval N]
-    eyes record replay <trajectory.jsonl> [--json]
+    eyes record replay <trajectory.jsonl> [--live] [--json]
     eyes record export <trajectory.jsonl> --skill-dir <dir> [--description TEXT] [--force] [--json]
     eyes version
 
@@ -559,27 +559,61 @@ def record() -> None:
 
 @record.command("replay")
 @click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
-@click.option("--json", "as_json", is_flag=True, help="emit the replay plan as JSON")
-def record_replay(trajectory_path: str, as_json: bool) -> None:
-    """Preview replay actions without sending input."""
+@click.option("--live", is_flag=True,
+              help="send real input and judge each step (default: plan only)")
+@click.option("--json", "as_json", is_flag=True, help="emit the replay report as JSON")
+def record_replay(trajectory_path: str, live: bool, as_json: bool) -> None:
+    """Preview replay actions, or replay them for real with --live.
+
+    Without --live nothing is sent: the report only holds the planned calls
+    and every step is 'planned'. With --live the steps are delivered to the
+    desktop and each one is judged 'verified' / 'unverified' / 'failed'.
+    'sent' in the report means delivered - it is not proof of effect, so a
+    live step with no recorded expectation stays 'unverified'.
+
+    The exit code is 0 when no step failed, 1 when any step failed. A bad
+    invocation (missing file, unknown option) still exits 2 through click.
+    """
     from openeyes.record import Trajectory
-    from openeyes.record.replayer import Replayer
+    from openeyes.record.replayer import STATUS_FAILED, Replayer
 
     trajectory = Trajectory.load(trajectory_path)
-    report = Replayer(dry_run=True).replay(trajectory)
+    report = Replayer(dry_run=not live).replay(trajectory)
+    counts = report.counts()
+
     if as_json:
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
-        return
+    elif not live:
+        # Unchanged dry-run rendering: a plan, no claims about effect.
+        click.echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
+        for item in report.actions:
+            plan = item["plan"]
+            detail = plan.get("selector") or plan.get("combo") or plan.get("text") or ""
+            click.echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
+        click.echo(
+            f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
+            f"{len(report.errors)} errors"
+        )
+    else:
+        click.echo(f"[live] trajectory {trajectory.name} ({trajectory.id[:8]})")
+        for item in report.actions:
+            click.echo(
+                f"{item['index']}: {item['status']} {item.get('reason') or ''}".rstrip()
+            )
+        for item in report.skipped:
+            click.echo(f"{item['index']}: skipped {item.get('reason') or ''}".rstrip())
+        click.echo(
+            f"{counts['verified']} verified / {counts['unverified']} unverified / "
+            f"{counts[STATUS_FAILED]} failed"
+        )
 
-    click.echo(f"[dry-run] trajectory {trajectory.name} ({trajectory.id[:8]})")
-    for item in report.actions:
-        plan = item["plan"]
-        detail = plan.get("selector") or plan.get("combo") or plan.get("text") or ""
-        click.echo(f"{item['index']}: {plan['kind']} {detail}".rstrip())
-    click.echo(
-        f"{len(report.actions)} planned, {len(report.skipped)} skipped, "
-        f"{len(report.errors)} errors"
-    )
+    if counts[STATUS_FAILED]:
+        # Loud on stderr, parseable JSON still only on stdout.
+        click.echo(
+            f"error: {counts[STATUS_FAILED]} of {len(report.actions)} steps failed",
+            err=True,
+        )
+        sys.exit(1)
 
 
 @record.command("export")

@@ -97,6 +97,9 @@ from openeyes_record.export import (
 # dry-run 回放（不真发输入）
 Replayer(dry_run=True).replay(traj).to_dict()
 
+# 真实回放（真发输入 + 逐步骤校验）
+Replayer(dry_run=False).replay(traj).to_dict()
+
 # 多个 variant → DAG
 graph = merge_trajectories([traj1, traj2, traj3])
 graph.to_dot()                      # Graphviz 可视化
@@ -109,6 +112,62 @@ to_opencua_trajectory(traj)                        # OpenCUA AgentNet JSONL
 traj.save("trajectory.jsonl")                      # 原生 JSONL
 graph.to_dot()                                      # DAG DOT
 ```
+
+## 回放验证：三态与 `--live`
+
+回放有两档，区别只在**是否把输入真的发到桌面**：
+
+| 方式 | 行为 | 每步 `status` | 副作用 |
+|---|---|---|---|
+| `eyes record replay <t.jsonl>`（默认） | 只生成 `actuate()` 计划 | `planned` | 无：不读桌面、不发输入、不校验 |
+| `eyes record replay <t.jsonl> --live` | 真实发送输入并轮询期望 | `verified` / `unverified` / `failed` | 会驱动本机键鼠，会改变前台窗口内容 |
+| MCP `record_replay`（`live` 缺省 `false`） | 同上两档，返回 `report.to_dict()` | 同上 | 只有 `live=true` 才真实执行 |
+| `Replayer(dry_run=False)`（Python API） | 真实发送 + 校验 | 同上 | 同上 |
+
+### 三态语义
+
+- `verified`：轨迹里记录了可判定的期望（`meta.expect` / `meta.verify` /
+  `meta.expect_window_title`），且该期望在动作前**不成立**、动作后**被观察到成立**。
+- `unverified`：动作已投递，但没有可判定期望；或期望的读取设备不可用（
+  `hwnd=0`、无元素过滤条件）；或期望在动作前**已经成立**——此时事后看到它成立
+  不能证明是本动作造成的。
+- `failed`：动作在超时内没能让期望成立，或根本没有可投递的路径
+  （既无结构化 selector 又无 bbox 中心）、或投递本身抛错。
+
+`skipped` 是计划阶段就识别出的未知动作，单独计数，不进入上面三态。
+
+### 「已发送」不等于「已生效」
+
+报告里每步有 `sent` 字段，它只表示**输入已投递**，不表示界面状态发生了改变：
+
+- 投递成功但期望未成立 → `failed`，`sent` 仍为 `true`；
+- 投递成功且没有期望可判 → `unverified`，`sent` 为 `true`；
+- 期望在动作前就已成立 → `unverified`，`sent` 为 `true`（`preexisting=true`）。
+
+因此 `summary.all_effect_verified` 只在「至少一个 verified，且 failed 与
+unverified 都为 0」时为 `true`；dry-run 下该字段为 `null`（没有任何结论）。
+录制器当前默认不写 `meta.expect`，所以录下来的轨迹直接 `--live` 回放通常是
+`unverified`——要拿到 `verified`，录制时传入 `meta={"expect": {...}}`。
+
+期望只在机器可复核时才成立：`window_title` / `app_name` / `pid` / `hwnd` 是
+采集时上下文（回放开始时窗口通常已经在，标题「还在」证明不了任何事），
+`intent` 是自然语言，`input_text` 只是按键内容（掩码框、焦点被抢、输入法都会
+让「文本已输入」失真），这些都不作为期望。
+
+### CLI 退出码与输出
+
+- 无 `failed` → `0`；有 `failed` → `1`（stderr 另打一行 `error: N of M steps failed`）；
+  参数/文件错误仍由 click 返回 `2`。
+- `--json` 在两种模式下都只把 `report.to_dict()` 打到 stdout，便于管道解析。
+- 不带 `--json`：dry-run 保持原有计划输出；`--live` 逐步打印
+  `index: status reason`，末行 `N verified / N unverified / N failed`。
+
+### MCP
+
+`record_replay(trajectory_path, live=false, retries=2, timeout=2.0, interval=0.1)`
+返回 `report.to_dict()` 外加 `ok`（无 failed 即为 `true`）与 `failed_steps`
+（每个失败步骤的 `index` / `action` / `reason` / `error`）。`actions[]` 原样保留，
+失败明细不会被摘要覆盖。参数错误与读不到文件时返回 `{"error": ..., "tool": "record_replay"}`。
 
 ## 降低门槛的设计要点（适用于所有路径）
 
