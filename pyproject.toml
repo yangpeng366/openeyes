@@ -52,7 +52,7 @@ windows = [
     "pywin32>=306",
 ]
 mcp = [
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
 ]
 vision = [
     "onnxruntime>=1.16",
