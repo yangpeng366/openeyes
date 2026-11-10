@@ -70,6 +70,41 @@ def _result_content(result: dict) -> dict:
     return json.loads(content[0]["text"])
 
 
+def _require_dry_run_click(payload: dict, expected_name: str) -> dict:
+    """A dry-run click must resolve ``expected_name`` and report its centre.
+
+    Guards four real regressions: ``clicked`` becoming truthy (a live click
+    got through), ``would_click`` being falsy (the element was not resolved),
+    the selector resolving a different element, and ``center`` being a
+    placeholder instead of the resolved target's own centre.
+    """
+    if payload.get("clicked") is not False:
+        raise RuntimeError(f"matched call was not a dry-run: {payload!r}")
+    if payload.get("would_click") is not True:
+        raise RuntimeError(f"matched call was not a dry-run: {payload!r}")
+    target = payload.get("target") or {}
+    if target.get("name") != expected_name:
+        raise RuntimeError(f"matched call resolved wrong element: {payload!r}")
+    center = payload.get("center") or {}
+    if center != (target.get("center") or {}):
+        raise RuntimeError(
+            f"matched call reported a centre that is not the target's: {payload!r}"
+        )
+    return payload
+
+
+def _require_fail_closed_click(payload: dict) -> str:
+    """An unmatched ``url_contains`` must name the miss and propose nothing."""
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"missing call did not fail closed: {payload!r}")
+    error = payload.get("error", "")
+    if "no page target matched url_contains" not in error:
+        raise RuntimeError(f"missing call did not fail closed: {payload!r}")
+    if "would_click" in payload or "clicked" in payload or payload.get("target"):
+        raise RuntimeError(f"missing call proposed an action: {payload!r}")
+    return error
+
+
 def _port_listening(port: int, host: str = "127.0.0.1",
                     timeout: float = 2.0) -> bool:
     import socket
@@ -227,10 +262,7 @@ def main() -> int:
                 "name_contains": "Learn more",
             },
         }))
-        if matched.get("clicked") is not False or matched.get("would_click") is not True:
-            raise RuntimeError(f"matched call was not a dry-run: {matched!r}")
-        if matched.get("target", {}).get("name") != "Learn more":
-            raise RuntimeError(f"matched call resolved wrong element: {matched!r}")
+        _require_dry_run_click(matched, "Learn more")
 
         missing = _result_content(call(5, "tools/call", {
             "name": "browser_click",
@@ -240,11 +272,7 @@ def main() -> int:
                 "name_contains": "Learn more",
             },
         }))
-        error = missing.get("error", "")
-        if "no page target matched url_contains" not in error:
-            raise RuntimeError(f"missing call did not fail closed: {missing!r}")
-        if missing.get("would_click") or missing.get("target"):
-            raise RuntimeError(f"missing call proposed an action: {missing!r}")
+        error = _require_fail_closed_click(missing)
     except (AssertionError, KeyError, OSError, queue.Empty, RuntimeError, TypeError,
             ValueError, json.JSONDecodeError) as exc:
         stderr = _stop_process(process)

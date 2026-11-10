@@ -125,6 +125,66 @@ def _scan_element_names(payload: dict) -> list[str]:
     return [e.get("name") or "" for e in payload]
 
 
+def _select_acceptance_tabs(
+    tabs: list[dict], target_filter: str, decoy_filter: str
+) -> tuple[list[dict], dict, dict]:
+    """Return the acceptance tab list plus exactly one target and one decoy tab.
+
+    Edge session-restore can reopen previously closed fixture tabs, so the
+    contract is "at least one of each" and the first match is used. A run that
+    silently drops the decoy tab would prove the filter matches nothing.
+    """
+    acceptance_tabs = [
+        tab for tab in tabs if ACCEPTANCE_MARKER in (tab.get("url") or "")
+    ]
+    target_tabs = [
+        tab for tab in acceptance_tabs if target_filter in (tab.get("url") or "")
+    ]
+    decoy_tabs = [
+        tab for tab in acceptance_tabs if decoy_filter in (tab.get("url") or "")
+    ]
+    if len(target_tabs) < 1 or len(decoy_tabs) < 1:
+        raise RuntimeError(
+            "expected at least one target-a and one decoy acceptance "
+            f"tab; got targets={len(target_tabs)}, "
+            f"decoys={len(decoy_tabs)}, tabs={tabs!r}"
+        )
+    return acceptance_tabs, target_tabs[0], decoy_tabs[0]
+
+
+def _require_exact_scan_names(payload: dict, expected: str, *, label: str) -> list[str]:
+    """The filtered scan must return exactly ``[expected]``.
+
+    Guards three real regressions: comparing with ``in`` (a decoy-tab element
+    leaks through), dropping the empty check (a scan that found nothing is
+    accepted), and treating ``name_contains`` as case-sensitive equality
+    against a different element.
+    """
+    names = _scan_element_names(payload)
+    if names != [expected]:
+        raise RuntimeError(f"{label}: expected [{expected!r}], got {names!r}")
+    return names
+
+
+def _require_fail_closed_scan(payload: dict) -> str:
+    """An unmatched ``url_contains`` must name the miss and return no element."""
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"missing call did not fail closed: {payload!r}")
+    error = payload.get("error", "")
+    if "no page target matched url_contains" not in error:
+        raise RuntimeError(f"missing call did not fail closed: {payload!r}")
+    leaked = [
+        key
+        for key in ("elements", "target", "target_url", "results", "url")
+        if payload.get(key)
+    ]
+    if leaked:
+        raise RuntimeError(
+            f"missing call returned a target for {leaked}: {payload!r}"
+        )
+    return error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cdp-port", type=int, default=9222)
@@ -214,25 +274,9 @@ def main() -> int:
             "name": "browser_tabs",
             "arguments": {"port": args.cdp_port},
         }))
-        acceptance_tabs = [
-            tab for tab in tabs if ACCEPTANCE_MARKER in (tab.get("url") or "")
-        ]
-        target_tabs = [
-            tab for tab in acceptance_tabs
-            if target_filter in (tab.get("url") or "")
-        ]
-        decoy_tabs = [
-            tab for tab in acceptance_tabs
-            if decoy_filter in (tab.get("url") or "")
-        ]
-        if len(target_tabs) < 1 or len(decoy_tabs) < 1:
-            raise RuntimeError(
-                "expected at least one target-a and one decoy acceptance "
-                f"tab; got targets={len(target_tabs)}, "
-                f"decoys={len(decoy_tabs)}, tabs={tabs!r}"
-            )
-        target_tabs = target_tabs[:1]
-        decoy_tabs = decoy_tabs[:1]
+        acceptance_tabs, target_tab, decoy_tab = _select_acceptance_tabs(
+            tabs, target_filter, decoy_filter
+        )
 
         matched = _result_content(call(4, "tools/call", {
             "name": "browser_scan",
@@ -242,12 +286,11 @@ def main() -> int:
                 "name_contains": "Secondary action",
             },
         }))
-        matched_names = _scan_element_names(matched)
-        if matched_names != ["Secondary action"]:
-            raise RuntimeError(
-                "matched scan did not isolate the target-a Secondary action: "
-                f"{matched!r}"
-            )
+        _require_exact_scan_names(
+            matched,
+            "Secondary action",
+            label="matched scan did not isolate the target-a Secondary action",
+        )
 
         decoy = _result_content(call(5, "tools/call", {
             "name": "browser_scan",
@@ -257,12 +300,11 @@ def main() -> int:
                 "name_contains": "Learn more",
             },
         }))
-        decoy_names = _scan_element_names(decoy)
-        if decoy_names != ["Learn more"]:
-            raise RuntimeError(
-                "decoy scan did not isolate the decoy Learn more link: "
-                f"{decoy!r}"
-            )
+        _require_exact_scan_names(
+            decoy,
+            "Learn more",
+            label="decoy scan did not isolate the decoy Learn more link",
+        )
 
         missing = _result_content(call(6, "tools/call", {
             "name": "browser_scan",
@@ -272,11 +314,7 @@ def main() -> int:
                 "name_contains": "Learn more",
             },
         }))
-        error = missing.get("error", "")
-        if "no page target matched url_contains" not in error:
-            raise RuntimeError(f"missing call did not fail closed: {missing!r}")
-        if isinstance(missing, list) and len(missing) > 0:
-            raise RuntimeError(f"missing call returned elements: {missing!r}")
+        error = _require_fail_closed_scan(missing)
     except (AssertionError, KeyError, OSError, queue.Empty, RuntimeError,
             TypeError, ValueError, json.JSONDecodeError) as exc:
         stderr = _stop_process(process)
@@ -297,8 +335,8 @@ def main() -> int:
         "passed": True,
         "transport": "mcp-stdio",
         "acceptance_tabs": len(acceptance_tabs),
-        "target_url": target_tabs[0]["url"],
-        "decoy_url": decoy_tabs[0]["url"],
+        "target_url": target_tab["url"],
+        "decoy_url": decoy_tab["url"],
         "matched_scan": matched,
         "decoy_scan": decoy,
         "missing_scan_error": error,
