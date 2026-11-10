@@ -36,8 +36,12 @@ def pick_hwnd(title_contains: str = "飞书") -> int | None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--go", action="store_true",
-                    help="actually click. Default is dry-run.")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--go", dest="go", action="store_true",
+                      help="actually click. Default is dry-run.")
+    mode.add_argument("--dry-run", dest="go", action="store_false",
+                      help="enumerate only; this is the default.")
+    ap.set_defaults(go=False)
     ap.add_argument("--title-contains", default="飞书")
     ap.add_argument("--target", default="消息",
                     help="element name to find and click")
