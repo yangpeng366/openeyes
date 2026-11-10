@@ -43,6 +43,7 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.24",
     "click>=8.0",
+    "websocket-client>=1.6",
 ]
 
 [project.optional-dependencies]
