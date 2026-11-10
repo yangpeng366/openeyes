@@ -238,25 +238,42 @@ def _dib_from_image(image: Image.Image):
     return hbitmap, hdc
 
 
+#: The combine mode that unions two regions.
+_RGN_OR = 2
+
+
 def _region_from_runs(runs: list[tuple[int, int, int, int]]) -> int:
-    """Cut one window region out of the runs of a drawing."""
+    """Cut one window region out of the runs of a drawing.
+
+    ``CombineRgn`` answers with the complexity of the merged region
+    (``SIMPLEREGION``/``COMPLEXREGION``/``NULLREGION``), not with a
+    handle: the merged region is the destination it was handed. Using
+    the answer as the next region - as this did - left the window with
+    no region at all, so the cursor covered a rectangle instead of its
+    own silhouette.
+    """
     gdi32 = ctypes.windll.gdi32
     gdi32.CreateRectRgn.restype = ctypes.c_void_p
     gdi32.CreateRectRgn.argtypes = [ctypes.c_int, ctypes.c_int,
                                     ctypes.c_int, ctypes.c_int]
-    gdi32.CombineRgn.restype = ctypes.c_void_p
+    gdi32.CombineRgn.restype = ctypes.c_int
     gdi32.CombineRgn.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_int]
     gdi32.DeleteObject.restype = ctypes.c_void_p
     gdi32.DeleteObject.argtypes = [ctypes.c_void_p]
 
     region = gdi32.CreateRectRgn(0, 0, 0, 0)
+    if not region:
+        raise OSError("could not create the cursor region")
     for left, top, right, bottom in runs:
         piece = gdi32.CreateRectRgn(left, top, right, bottom)
-        merged = gdi32.CombineRgn(gdi32.CreateRectRgn(0, 0, 0, 0),
-                                  region, piece, 2)      # RGN_OR
+        merged = gdi32.CreateRectRgn(0, 0, 0, 0)
+        combined = gdi32.CombineRgn(merged, region, piece, _RGN_OR)
         gdi32.DeleteObject(region)
         gdi32.DeleteObject(piece)
+        if not combined:                              # 0 is ERROR
+            gdi32.DeleteObject(merged)
+            raise OSError("could not build the cursor region")
         region = merged
     return region
 
