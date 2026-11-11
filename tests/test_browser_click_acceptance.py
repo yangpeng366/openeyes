@@ -212,3 +212,72 @@ def test_dsh_runbook_section_4_keeps_both_calls_dry_run():
     assert "clicked:false" in runbook
     assert "would_click:true" in runbook
     assert "no page target matched url_contains" in runbook
+
+
+def test_a_covered_centre_fails_the_hittable_check():
+    """An overlay on the reported centre is the failure this check exists for."""
+    module = _load_module()
+    overlay_report = {"matched": False, "hit": "div#cover", "wanted": "#learn-more"}
+
+    with pytest.raises(RuntimeError, match="covered by"):
+        module._require_hittable(
+            overlay_report, center={"x": 10, "y": 12}, selector="#learn-more"
+        )
+
+    assert module._require_hittable(
+        {"matched": True, "hit": "a#learn-more"}, center={"x": 10, "y": 12}, selector="#learn-more"
+    )["matched"] is True
+
+
+def test_the_hittable_check_needs_a_real_measurement():
+    module = _load_module()
+
+    with pytest.raises(RuntimeError, match="no measurement"):
+        module._require_hittable(None, center={"x": 1, "y": 2}, selector="#learn-more")
+
+
+def test_an_absent_name_that_leaks_a_proposal_is_not_fail_closed():
+    module = _load_module()
+    leaked = {
+        "error": module.NO_ELEMENT_ERROR,
+        "would_click": True,
+        "target": {"name": "Learn more"},
+    }
+
+    with pytest.raises(RuntimeError, match="proposed"):
+        module._require_fail_closed_click_miss(leaked, name="Absent")
+
+    assert module._require_fail_closed_click_miss(
+        {"error": module.NO_ELEMENT_ERROR}, name="Absent"
+    ) == module.NO_ELEMENT_ERROR
+
+
+def test_a_dry_run_that_reports_a_click_is_rejected():
+    module = _load_module()
+    payload = {
+        "clicked": True,
+        "would_click": True,
+        "target": {"name": "Learn more", "center": {"x": 5, "y": 6}, "bbox": {"x": 0, "y": 0, "w": 9, "h": 9}},
+        "center": {"x": 5, "y": 6},
+    }
+
+    with pytest.raises(RuntimeError, match="not a dry-run"):
+        module._require_dry_run_click(payload, expected_name="Learn more")
+
+
+def test_a_dry_run_aiming_outside_the_box_is_rejected():
+    module = _load_module()
+    payload = {
+        "clicked": False,
+        "would_click": True,
+        "target": {
+            "name": "Learn more",
+            "center": {"x": 5, "y": 6},
+            "bbox": {"x": 0, "y": 0, "w": 9, "h": 9},
+        },
+        "center": {"x": 5, "y": 6},
+    }
+    payload["center"] = {"x": 5, "y": 60}
+
+    with pytest.raises(RuntimeError, match="centre that is not the target"):
+        module._require_dry_run_click(payload, expected_name="Learn more")

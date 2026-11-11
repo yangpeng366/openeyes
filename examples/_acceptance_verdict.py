@@ -443,8 +443,9 @@ def _classify_powershell(record: dict, *, expect_status: int = 200) -> dict:
         return _leg(FAIL, reason="powershell-timeout", **detail)
     if detail["returncode"] != 0:
         return _leg(FAIL, reason=f"powershell-exit-{detail['returncode']}", **detail)
-    tokens = detail["stdout"].split()
-    if str(expect_status) not in tokens:
+    # Exact match, not "the number appears somewhere": a command that exits 0
+    # while printing an error line such as "Error 500: expected 200" must fail.
+    if detail["stdout"] != str(expect_status):
         return _leg(FAIL, reason="powershell-unexpected-output", **detail)
     return _leg(PASS, **detail)
 

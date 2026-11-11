@@ -549,6 +549,9 @@ def main(argv: list[str] | None = None) -> int:
                 region = _measure_viewport(page_port, TARGET_MARKER)
                 judgement["viewport"] = {"width": region[0], "height": region[1]}
 
+                # Baseline before any probe call: a dry run that writes anyway
+                # must be caught, so this snapshot cannot be taken afterwards.
+                before = _file_state(final_png)
                 matched_arguments = _shot_arguments(
                     page_port, out=str(final_png), url_contains=TARGET_MARKER
                 )
@@ -577,7 +580,6 @@ def main(argv: list[str] | None = None) -> int:
                 judgement.update(_missing_judgement(missing_error))
                 checks[-1]["detail"] = {"error_kind": NO_PAGE_ERROR}
 
-                before = _file_state(final_png)
                 with _check(checks, "dry-run-wrote-nothing"):
                     _require_no_new_capture(final_png, before=before)
 

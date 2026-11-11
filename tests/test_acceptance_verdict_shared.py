@@ -294,3 +294,42 @@ def test_every_probe_routes_the_injection_through_the_shared_resolver(probe):
     assert calls, f"{probe} never calls _injected_ps_command"
     for call in calls:
         assert len(call.args) == 2
+
+
+def test_powershell_pass_needs_the_exact_status_not_the_number_somewhere():
+    """exit 0 + an error line that mentions 200 must still be FAIL."""
+    shared = _shared()
+
+    noisy = shared._classify_powershell(
+        {"executable": "pwsh", "returncode": 0, "stdout": "Error 500: expected 200", "stderr": ""}
+    )
+    assert noisy["verdict"] == shared.FAIL
+    assert noisy["reason"] == "powershell-unexpected-output"
+
+    exact = shared._classify_powershell(
+        {"executable": "pwsh", "returncode": 0, "stdout": "200", "stderr": ""}
+    )
+    assert exact["verdict"] == shared.PASS
+
+
+def test_powershell_nonzero_exit_and_timeout_are_fail_not_skip():
+    shared = _shared()
+
+    failed = shared._classify_powershell(
+        {"executable": "pwsh", "returncode": 1, "stdout": "200", "stderr": ""}
+    )
+    assert failed["verdict"] == shared.FAIL
+
+    timed_out = shared._classify_powershell(
+        {"executable": "pwsh", "returncode": None, "stdout": "", "stderr": "", "timed_out": True}
+    )
+    assert timed_out["verdict"] == shared.FAIL
+
+
+def test_powershell_skip_is_reserved_for_an_unrunnable_environment():
+    shared = _shared()
+
+    leg = shared._classify_powershell({"unavailable": "no interpreter"})
+
+    assert leg["verdict"] == shared.SKIP
+    assert leg["reason"] == "no interpreter"

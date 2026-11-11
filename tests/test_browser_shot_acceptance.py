@@ -589,3 +589,17 @@ def test_missing_judgement_stays_free_of_volatile_text():
 
     assert judgement == {"error_kind": module.NO_PAGE_ERROR, "error_matched": True}
     assert "53100" not in json.dumps(judgement)
+
+
+def test_the_no_write_baseline_is_snapshotted_before_any_probe_call():
+    """A dry run that writes anyway must be caught, so the baseline comes first."""
+    source = PROBE.read_text(encoding="utf-8")
+    main_source = source[source.index("def main("):]
+
+    baseline = main_source.index("before = _file_state(final_png)")
+    first_call = main_source.index('"name": "browser_shot"')
+
+    assert baseline < first_call, (
+        "the dry-run-wrote-nothing baseline is taken after a browser_shot call, "
+        "which makes the check compare a state with itself"
+    )
