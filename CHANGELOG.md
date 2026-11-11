@@ -6,6 +6,24 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`browser_scan` and `browser_click` acceptance probes, judged by one model.**
+  `examples/browser-scan-acceptance.py` and `examples/browser-click-acceptance.py`
+  cover the same two-tab, real-Edge surface as the type/shot probes: scan must
+  isolate the right element per `url_contains` filter and fail closed (empty
+  list, not another element) on a miss; click must resolve with
+  `clicked:false` / `would_click:true`, hit-test its reported centre, and fail
+  closed on both unmatched filters. The verdict rules now live once in
+  `examples/_acceptance_verdict.py`; `tests/test_acceptance_verdict_shared.py`
+  turns red if a probe re-declares any of them.
+
+### Fixed
+- **`--inject-failure powershell|both` actually fails the PowerShell leg.** It
+  used to be recorded in the receipt without replacing the command, so all four
+  probes still came back PASS. The injection now supplies a command that must
+  exit non-zero, and each probe routes it through the shared resolver; a live
+  `--inject-failure powershell` run on all four probes returns FAIL / exit 2.
+
 ### Changed
 - **The MCP surface pays for the pointer out of the same budget as the CLI.**
   `click` with a selector now goes through the shared ladder (`invoke` ->

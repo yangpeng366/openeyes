@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes acceptance - unhittable</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 8px; font-family: sans-serif; }
+  #cover { position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+           background: rgba(0, 0, 0, 0.06); z-index: 10; }
+</style>
+</head>
+<body>
+<h1>unhittable page</h1>
+<p>Fixtures for the OpenEyes <code>browser_click</code> acceptance probe.</p>
+<p>The link below exists, is enabled, has a non-zero box and is reported by
+<code>browser_scan</code>, but a transparent overlay sits on top of it: the
+element at its centre is the overlay, so a real click at the reported centre
+would never reach the link. This is the "target present but not clickable"
+failure surface.</p>
+<p><a href="#" id="learn-more" data-test="learn-more">Learn more</a></p>
+<div id="cover" aria-hidden="true"></div>
+</body>
+</html>

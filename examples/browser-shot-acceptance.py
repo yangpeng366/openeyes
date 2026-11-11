@@ -34,21 +34,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import functools
-import hashlib
-import http.server
 import json
-import os
 import queue
-import shutil
-import signal
 import subprocess
 import sys
 import threading
 import time
-import urllib.parse
-import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,344 +52,80 @@ PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 PNG_IEND = b"IEND\xaeB`\x82"
 NO_PAGE_ERROR = "no page target matched url_contains"
 PROBE_NAME = "browser-shot-acceptance"
-PASS = "PASS"
-FAIL = "FAIL"
-SKIP = "SKIP"
-INTERRUPTED = "INTERRUPTED"
-EXIT_CODES = {PASS: 0, FAIL: 2, SKIP: 3}
 PAGE_FAILURES = ("missing-page", "cdp-error")
-#: Windows STATUS_CONTROL_C_EXIT, signed and unsigned: the console event that
-#: a Ctrl+C / graceful ``taskkill`` sends to every process on the console.
-CONSOLE_INTERRUPT_CODES = (3221225786, -1073741510)
 
 
-# ===== verdict core (pure) =====
-
-
-def _leg(verdict: str, reason: str | None = None, **detail) -> dict:
-    """One surface's verdict. ``reason`` names why it is not PASS."""
-    leg: dict = {"verdict": verdict}
-    if reason is not None:
-        leg["reason"] = reason
-    leg.update(detail)
-    return leg
-
-
-def _combine_verdicts(*verdicts: str) -> str:
-    """FAIL beats SKIP and SKIP beats PASS: a skipped leg is never a pass."""
-    unknown = [verdict for verdict in verdicts if verdict not in (PASS, FAIL, SKIP)]
-    if unknown:
-        raise ValueError(f"unknown verdict(s): {unknown!r}")
-    if FAIL in verdicts:
-        return FAIL
-    if SKIP in verdicts:
-        return SKIP
-    return PASS
-
-
-def _verdict_exit_code(verdict: str) -> int:
-    try:
-        return EXIT_CODES[verdict]
-    except KeyError:
-        raise ValueError(f"unknown verdict: {verdict!r}") from None
-
-
-def _canonical_sha256(payload: dict) -> str:
-    blob = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
-
-
-def _judgement_sha256(
-    *,
-    probe: str,
-    verdict: str,
-    page: str,
-    powershell: str,
-    checks: list[dict],
-    judgement: dict,
-) -> str:
-    """Hash of the decision only - no timestamps, ports, ids or file paths.
-
-    Two consecutive runs must produce the same value; that is what makes
-    "the verdict is stable" a checked fact instead of an impression.
-    """
-    material = {
-        "probe": probe,
-        "verdict": verdict,
-        "page": page,
-        "powershell": powershell,
-        "checks": [[entry.get("check"), bool(entry.get("ok"))] for entry in checks],
-        "judgement": judgement,
-    }
-    return _canonical_sha256(material)
-
-
-def _file_sha256(path: str | Path) -> str | None:
-    target = Path(path)
-    if not target.is_file():
-        return None
-    digest = hashlib.sha256()
-    with target.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-
-
-def _configure_stdout() -> None:
-    """Print the receipt in UTF-8 even when the console code page is not."""
-    with contextlib.suppress(Exception):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-
-def _install_interrupt_handler(state: dict) -> None:
-    """Note Ctrl+C/SIGBREAK so no receipt is written for an interrupted run."""
-
-    def handler(signum, frame):
-        state["requested"] = True
-        raise KeyboardInterrupt(f"signal {signum}")
-
-    for name in ("SIGINT", "SIGBREAK"):
-        number = getattr(signal, name, None)
-        if number is not None:
-            with contextlib.suppress(OSError, ValueError):
-                signal.signal(number, handler)
-
-
-def _require_not_interrupted(state: dict) -> None:
-    if state.get("requested"):
-        raise KeyboardInterrupt("interrupted before the receipt")
-
-
-# ===== --out contract =====
-
-
-class OutDirError(RuntimeError):
-    """``--out`` cannot hold evidence; the probe must not pretend otherwise."""
-
-
-def _resolve_out_dir(out: str | Path | None) -> Path:
-    """Create ``--out`` (and missing parents) and prove it is writable.
-
-    An existing non-empty directory is reused as-is: nothing is deleted and
-    nothing is merged, so a stale receipt cannot be read as this run's.
-    """
-    if not out:
-        raise OutDirError("--out directory is required to store the receipt")
-    target = Path(out).expanduser()
-    if not target.is_absolute():
-        target = target.absolute()
-    if target.exists() and not target.is_dir():
-        raise OutDirError(f"--out is not a directory: {target}")
-    try:
-        target.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise OutDirError(
-            f"--out directory cannot be created: {target}: {exc}"
-        ) from exc
-    probe = target / ".openeyes-out-probe"
-    try:
-        probe.write_text("probe\n", encoding="utf-8")
-        probe.unlink()
-    except OSError as exc:
-        raise OutDirError(
-            f"--out directory is not writable: {target}: {exc}"
-        ) from exc
-    return target
-
-
-def _require_free_evidence(
-    out_dir: str | Path, names: list[str], *, force: bool = False
-) -> None:
-    """Refuse to overwrite earlier evidence unless ``--force`` is given."""
-    directory = Path(out_dir)
-    existing = [str(directory / name) for name in names if (directory / name).exists()]
-    if existing and not force:
-        raise OutDirError(
-            "refusing to overwrite existing evidence "
-            f"{existing}; pass --force to replace it"
-        )
-
-
-def _staged(path: str | Path) -> Path:
-    """``<name>.part``: visible as in-progress, never mistakable for evidence."""
-    target = Path(path)
-    return target.with_name(target.name + ".part")
-
-
-def _finalize(staged: str | Path, final: str | Path) -> Path:
-    final_path = Path(final)
-    os.replace(Path(staged), final_path)
-    return final_path
-
-
-def _discard(*paths: str | Path) -> None:
-    for path in paths:
-        if path is None:
-            continue
-        with contextlib.suppress(OSError):
-            Path(path).unlink()
-
-
-def _write_receipt_atomic(path: str | Path, payload: dict) -> Path:
-    """Write ``.tmp`` then ``os.replace``: a kill leaves no receipt at all."""
-    target = Path(path)
-    tmp = target.with_name(target.name + ".tmp")
-    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    with tmp.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp, target)
-    return target
-
-
-def _default_out_dir(probe: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return str(REPO_ROOT / "examples" / "out" / f"{probe}-{stamp}")
-
-
-# ===== PowerShell leg =====
-
-
-def _powershell_command(port: int, override: str | None = None) -> str:
-    """The PS leg asks the debug endpoint for ``200`` through real PowerShell."""
-    if override:
-        return override
-    return (
-        "$r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 "
-        f"-Uri 'http://127.0.0.1:{port}/json/version'; $r.StatusCode"
-    )
-
-
-def _run_powershell(command: str, *, timeout: float = 30.0) -> dict:
-    record: dict = {
-        "executable": None,
-        "command": command,
-        "returncode": None,
-        "stdout": "",
-        "stderr": "",
-        "timed_out": False,
-        "unavailable": None,
-    }
-    executable = shutil.which("pwsh") or shutil.which("powershell")
-    if not executable:
-        record["unavailable"] = "pwsh-not-found"
-        return record
-    record["executable"] = executable
-    try:
-        completed = subprocess.run(
-            [executable, "-NoProfile", "-NonInteractive", "-Command", command],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        record["timed_out"] = True
-        return record
-    except OSError as exc:
-        record["unavailable"] = f"pwsh-not-runnable: {exc}"
-        return record
-    record["returncode"] = completed.returncode
-    record["stdout"] = completed.stdout or ""
-    record["stderr"] = completed.stderr or ""
-    if completed.returncode in CONSOLE_INTERRUPT_CODES:
-        # Ctrl+C reached the child but not this interpreter: it is an
-        # interruption, not a failing PowerShell command.
-        raise KeyboardInterrupt("console control event stopped the PowerShell leg")
-    return record
-
-
-def _classify_powershell(record: dict, *, expect_status: int = 200) -> dict:
-    """PASS only when pwsh ran, exited 0 and printed ``expect_status``.
-
-    SKIP is reserved for an environment that cannot run the leg at all; a
-    command that ran and failed is FAIL, which is what an injected failing
-    command produces.
-    """
-    detail = {
-        "executable": record.get("executable"),
-        "returncode": record.get("returncode"),
-        "stdout": (record.get("stdout") or "").strip(),
-        "stderr": (record.get("stderr") or "").strip()[-2000:],
-        "timed_out": bool(record.get("timed_out")),
-    }
-    if record.get("unavailable"):
-        return _leg(SKIP, reason=str(record["unavailable"]), **detail)
-    if detail["timed_out"]:
-        return _leg(FAIL, reason="powershell-timeout", **detail)
-    if detail["returncode"] != 0:
-        return _leg(FAIL, reason=f"powershell-exit-{detail['returncode']}", **detail)
-    tokens = detail["stdout"].split()
-    if str(expect_status) not in tokens:
-        return _leg(FAIL, reason="powershell-unexpected-output", **detail)
-    return _leg(PASS, **detail)
-
-
-# ===== page checks =====
-
-
-class PageCheckError(RuntimeError):
-    """A page-side check failed; carries the check name for the verdict."""
-
-    def __init__(self, check: str, message: str) -> None:
-        super().__init__(f"{check}: {message}")
-        self.check = check
-
-
-@contextlib.contextmanager
-def _check(checks: list[dict], name: str):
-    """Record one named page-side check and turn any failure into its verdict."""
-    try:
-        yield
-    except Exception as exc:
-        checks.append({"check": name, "ok": False, "error": str(exc)})
-        raise PageCheckError(name, str(exc)) from exc
-    checks.append({"check": name, "ok": True, "detail": None})
-
-
-def _request(request_id: int, method: str, params: dict | None = None) -> str:
-    message = {"jsonrpc": "2.0", "id": request_id, "method": method}
-    if params is not None:
-        message["params"] = params
-    return json.dumps(message, ensure_ascii=False)
-
-
-def _notification(method: str) -> str:
-    return json.dumps(
-        {"jsonrpc": "2.0", "method": method}, ensure_ascii=False
-    )
-
-
-def _read_stdout(stream, lines: queue.Queue[str]) -> None:
-    for line in stream:
-        if line.strip():
-            lines.put(line)
-
-
-def _stop_process(process: subprocess.Popen[str]) -> str:
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-    return process.stderr.read() if process.stderr else ""
-
-
-def _result_content(result: dict) -> dict:
-    content = result["content"]
-    if len(content) != 1 or content[0].get("type") != "text":
-        raise RuntimeError(f"unexpected tool result content: {content!r}")
-    return json.loads(content[0]["text"])
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _acceptance_verdict import (  # noqa: E402
+    EXIT_CODES,
+    EXIT_INTERRUPTED,
+    FAIL,
+    INTERRUPTED,
+    PASS,
+    SKIP,
+    OutDirError,
+    PageCheckError,
+    _check,
+    _classify_powershell,
+    _close_tab,
+    _combine_verdicts,
+    _configure_stdout,
+    _default_out_dir,
+    _discard,
+    _file_sha256,
+    _finalize,
+    _injected_ps_command,
+    _install_interrupt_handler,
+    _judgement_sha256,
+    _leg,
+    _notification,
+    _open_tab,
+    _out_dir_failure,
+    _port_listening,
+    _powershell_command,
+    _read_stdout,
+    _receipt,
+    _request,
+    _require_free_evidence,
+    _require_not_interrupted,
+    _resolve_out_dir,
+    _result_content,
+    _run_powershell,
+    _staged,
+    _start_fixture_server,
+    _stop_process,
+    _url_port,
+    _utc_now,
+    _verdict_exit_code,
+    _write_receipt_atomic,
+)
+
+#: The verdict model this probe judges with, named once so the objects are
+#: reachable from ``tests/`` (they are the shared module's, not a copy).
+#: ``tests/test_acceptance_verdict_shared.py`` compares them by identity.
+VERDICT_CONTRACT = {
+    "PASS": PASS,
+    "FAIL": FAIL,
+    "SKIP": SKIP,
+    "INTERRUPTED": INTERRUPTED,
+    "EXIT_CODES": EXIT_CODES,
+    "EXIT_INTERRUPTED": EXIT_INTERRUPTED,
+    "OutDirError": OutDirError,
+    "PageCheckError": PageCheckError,
+    "_check": _check,
+    "_classify_powershell": _classify_powershell,
+    "_combine_verdicts": _combine_verdicts,
+    "_discard": _discard,
+    "_finalize": _finalize,
+    "_judgement_sha256": _judgement_sha256,
+    "_leg": _leg,
+    "_receipt": _receipt,
+    "_require_free_evidence": _require_free_evidence,
+    "_resolve_out_dir": _resolve_out_dir,
+    "_staged": _staged,
+    "_verdict_exit_code": _verdict_exit_code,
+    "_write_receipt_atomic": _write_receipt_atomic,
+}
 
 
 def _shot_arguments(port: int, *, out: str, url_contains: str) -> dict:
@@ -663,58 +390,6 @@ def _select_acceptance_tabs(
     return acceptance_tabs, target_tabs[0], decoy_tabs[0]
 
 
-def _port_listening(port: int, host: str = "127.0.0.1",
-                    timeout: float = 2.0) -> bool:
-    import socket
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def _start_fixture_server(
-    directory: Path,
-) -> tuple[http.server.ThreadingHTTPServer, int]:
-    handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=str(directory)
-    )
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server, server.server_address[1]
-
-
-def _open_tab(cdp_port: int, url: str) -> str:
-    encoded = urllib.parse.quote(url, safe="")
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{cdp_port}/json/new?{encoded}",
-        method="PUT",
-        headers={"Host": "127.0.0.1"},
-    )
-    with urllib.request.urlopen(req, timeout=10) as response:
-        raw = response.read().decode("utf-8", errors="replace")
-    return json.loads(raw).get("id", "") if raw.strip() else ""
-
-
-def _close_tab(cdp_port: int, target_id: str) -> None:
-    if not target_id:
-        return
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{cdp_port}/json/close/{target_id}",
-        headers={"Host": "127.0.0.1"},
-    )
-    with contextlib.suppress(Exception):
-        urllib.request.urlopen(req, timeout=5).read()
-
-
-def _url_port(url: str) -> int:
-    parsed = urllib.parse.urlparse(url)
-    if parsed.port:
-        return parsed.port
-    return 443 if parsed.scheme == "https" else 80
-
-
 def _page_failure_of(args) -> str | None:
     if args.inject_failure not in ("page", "both"):
         return None
@@ -769,13 +444,7 @@ def main(argv: list[str] | None = None) -> int:
             out_dir, [RECEIPT_NAME, SHOT_NAME], force=args.force
         )
     except OutDirError as exc:
-        print(json.dumps({
-            "probe": PROBE_NAME,
-            "verdict": FAIL,
-            "reason": "out-dir",
-            "error": str(exc),
-        }, ensure_ascii=False))
-        return EXIT_CODES[FAIL]
+        return _out_dir_failure(PROBE_NAME, exc)
 
     receipt_path = out_dir / RECEIPT_NAME
     final_png = out_dir / SHOT_NAME
@@ -937,35 +606,26 @@ def main(argv: list[str] | None = None) -> int:
                 page = _leg(FAIL, reason="page-unexpected", checks=checks,
                             error=str(exc))
 
-        ps_command = _powershell_command(args.cdp_port, args.ps_command)
+        ps_override = _injected_ps_command(args.inject_failure, args.ps_command)
+        ps_command = _powershell_command(args.cdp_port, ps_override)
         powershell = _classify_powershell(
             _run_powershell(ps_command, timeout=args.ps_timeout)
         )
         powershell["command"] = ps_command
 
-        overall = _combine_verdicts(page["verdict"], powershell["verdict"])
-        receipt = {
-            "probe": PROBE_NAME,
-            "verdict": overall,
-            "exit_code": _verdict_exit_code(overall),
-            "page": page,
-            "powershell": powershell,
-            "judgement": judgement,
-            "judgement_sha256": _judgement_sha256(
-                probe=PROBE_NAME,
-                verdict=overall,
-                page=page["verdict"],
-                powershell=powershell["verdict"],
-                checks=checks,
-                judgement=judgement,
-            ),
-            "injected_failures": {
+        receipt = _receipt(
+            probe=PROBE_NAME,
+            page=page,
+            powershell=powershell,
+            judgement=judgement,
+            checks=checks,
+            injected_failures={
                 "page": page_failure,
-                "powershell": args.ps_command
+                "powershell": ps_override
                 if args.inject_failure in ("powershell", "both")
                 else None,
             },
-            "run": {
+            run={
                 "started_at": started_at,
                 "finished_at": _utc_now(),
                 "cdp_port": args.cdp_port,
@@ -975,12 +635,12 @@ def main(argv: list[str] | None = None) -> int:
                 "decoy_url": decoy_url,
                 "python": sys.version.split()[0],
             },
-            "evidence": {
+            evidence={
                 "directory": str(out_dir),
                 "receipt": str(receipt_path),
                 "png": str(final_png) if final_png.is_file() else None,
             },
-        }
+        )
         try:
             _require_not_interrupted(interrupt_state)
             _write_receipt_atomic(receipt_path, receipt)
@@ -994,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
             }, ensure_ascii=False))
             return EXIT_CODES[FAIL]
         print(json.dumps(receipt, ensure_ascii=False))
-        return _verdict_exit_code(overall)
+        return _verdict_exit_code(receipt["verdict"])
     except KeyboardInterrupt:
         _discard(
             staged_png,

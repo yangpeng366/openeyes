@@ -113,6 +113,27 @@ python examples\browser-type-acceptance.py --cdp-port 9222
 python examples\browser-shot-acceptance.py --cdp-port 9222
 ```
 
+`examples/browser-scan-acceptance.py` and `examples/browser-click-acceptance.py`
+run the same two-tab surrogate for `browser_scan` and for the hittable half of
+`browser_click`. Scan must isolate `Secondary action` on the `target-a` tab,
+isolate `Learn more` on the decoy tab under a decoy filter, then fail closed
+with no element list for an unmatched `url_contains` and return an empty list -
+not some other element - for a `name_contains` that matches nothing. Click must
+resolve the link with `clicked:false` / `would_click:true`, prove the reported
+centre hit-tests to that same link, and fail closed on both unmatched filters.
+Run them live with:
+
+```powershell
+python examples\browser-scan-acceptance.py --cdp-port 9222
+python examples\browser-click-acceptance.py --cdp-port 9222
+```
+
+All four probes judge through `examples/_acceptance_verdict.py`: FAIL beats
+SKIP beats PASS, PASS/FAIL/SKIP exit `0`/`2`/`3`, and the receipt's
+`judgement_sha256` covers the decision only, so two live runs must print the
+same digest. `--inject-failure page|powershell|both` must turn the run red; run
+it after any probe change, because a check that cannot fail proves nothing.
+
 Ask the dsh agent to call:
 
 ```json

@@ -145,29 +145,44 @@ def test_click_fail_closed_rejects_silent_success_and_proposed_actions(payload):
 def test_click_main_calls_the_contract_checks_it_documents():
     """Wiring only: main() must evaluate the extracted checks, not re-inline them."""
     tree = ast.parse(PROBE.read_text(encoding="utf-8"))
-    main_calls = {
-        node.func.id
+    calls = [
+        node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
+    ]
+    main_calls = {node.func.id for node in calls}
     strings = "".join(
         node.value
         for node in ast.walk(tree)
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     )
     url_filters = {
-        value.id if isinstance(value, ast.Name) else value.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Dict)
-        for key, value in zip(node.keys, node.values, strict=True)
-        if isinstance(key, ast.Constant) and key.value == "url_contains"
-        and isinstance(value, (ast.Name, ast.Constant))
+        keyword.value.id
+        for node in calls
+        if node.func.id == "_click_arguments"
+        for keyword in node.keywords
+        if keyword.arg == "url_contains" and isinstance(keyword.value, ast.Name)
     }
+    go_arguments = [
+        node
+        for node in calls
+        if node.func.id == "_click_arguments"
+        and any(keyword.arg == "go" for keyword in node.keywords)
+    ]
 
-    assert {"_require_dry_run_click", "_require_fail_closed_click", "_result_content"} <= main_calls
+    assert {
+        "_click_arguments",
+        "_require_dry_run_click",
+        "_require_hittable",
+        "_hit_test",
+        "_require_fail_closed_click",
+        "_require_fail_closed_click_miss",
+        "_result_content",
+    } <= main_calls
     assert "openeyes.mcp.server" in strings
     assert "notifications/initialized" in strings
-    assert url_filters == {"TARGET_MARKER", "missing-target"}, url_filters
+    assert url_filters == {"click_filter", "MISSING_FILTER"}, url_filters
+    assert go_arguments == [], "the probe must never ask for a live click"
     assert "3080" not in strings, "the direct probe must not depend on the dsh web host"
 
 
