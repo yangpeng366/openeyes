@@ -46,6 +46,19 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 
 完整设计书：https://my.feishu.cn/docx/Ul6gdMULGo5VfzxDVAYcVoX6n9e （中文，含架构图 / 模块清单 / 路线图）
 
+### 面向 Agent 的接入
+
+下游多半是大模型 agent，所以兼容做到**接口层面**即可，不必先读源码：
+
+- CLI：`eyes <command> --json`，字段固定；子命令一律先 dry-run，再 `--go` 真执行
+- MCP：直接挂 `openeyes-mcp`，工具名与 CLI 一一对应，参数即 JSON schema
+- 退出码：0 成功、1 失败、2 参数错、3 没匹配到目标、4 后端不可达、5 动作没生效
+  （JSON 走 stdout，人读的错误行走 stderr，所以 stdout 永远可直接喂解析器）
+- 元素 schema：`bbox / center / control_type / name / automation_id / class / state`，可直接喂给模型
+- 降级链：`uia -> cdp -> vision`，拿到的 `source` 字段说明这答案从哪来
+
+要改行为或做深度集成时再读 [Architecture](#architecture) 与 [Record & Replay](#record--replay-v020)；交接要点见 [AGENTS.md](AGENTS.md)。
+
 ---
 
 <a id="english"></a>
