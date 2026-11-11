@@ -271,6 +271,72 @@ fails closed. The script starts and cleans up its disposable HTTP fixture tabs:
 python examples\browser-type-acceptance.py --cdp-port 9222
 ```
 
+### browser-shot-acceptance.py
+
+Runs the two-tab `browser_shot` acceptance over direct MCP stdio. The matched
+dry-run must resolve `target-a` and report `captured:false` without creating a
+PNG; the unmatched call must fail closed with `no page target matched
+url_contains`; and then exactly one real capture lands in `--out`, verified by
+reading the bytes back (PNG signature, IHDR geometry against the measured
+viewport, closing IEND). The capture is staged as `browser-shot.png.part` and
+only renamed after every check passed:
+
+```powershell
+python examples\browser-shot-acceptance.py --cdp-port 9222 --out examples\out\shot
+```
+
+### 真机双跑（browser-type / browser-shot）
+
+Both write-tool probes now judge two independent surfaces and write a receipt
+instead of printing `passed`:
+
+| 判定 | page 面 | PowerShell 面 | 退出码 |
+| --- | --- | --- | --- |
+| PASS | 全部检查通过 | `pwsh` 退出 0 且 stdout 含 `200` | 0 |
+| FAIL | 页面/元素不存在、CDP 报错、payload 违约 | 非零退出、超时、没有 `200` | 2 |
+| SKIP | CDP 端口无人监听 | 找不到 `pwsh` | 3 |
+
+总判定是 `FAIL > SKIP > PASS`：SKIP 不会被当成 PASS。同一页面连跑两轮时用
+`--base-url` 固定 fixture 端口，让两轮的 URL 逐字节相同：
+
+```powershell
+# stable fixture server for both rounds
+python -m http.server 18471 --bind 127.0.0.1 --directory examples
+
+python examples\browser-type-acceptance.py --cdp-port 9222 --base-url http://127.0.0.1:18471 --out examples\out\evidence\type-round1
+python examples\browser-type-acceptance.py --cdp-port 9222 --base-url http://127.0.0.1:18471 --out examples\out\evidence\type-round2
+python examples\browser-shot-acceptance.py --cdp-port 9222 --base-url http://127.0.0.1:18471 --out examples\out\evidence\shot-round1
+python examples\browser-shot-acceptance.py --cdp-port 9222 --base-url http://127.0.0.1:18471 --out examples\out\evidence\shot-round2
+```
+
+Measured on 2026-11-11 against visible Edge 152.0.4191.19: every round PASS
+with identical `judgement_sha256`, and the two `browser-shot.png` files are
+byte-identical (1640x1055, 33359 bytes, SHA-256 `61bb000a…aad62`).
+
+Failure surfaces are provoked for real, never stubbed:
+
+```powershell
+# page: element missing / page missing / CDP error
+python examples\browser-type-acceptance.py --inject-failure page --page-failure missing-element ...
+python examples\browser-shot-acceptance.py --inject-failure page --page-failure missing-page ...
+python examples\browser-shot-acceptance.py --inject-failure page --page-failure cdp-error ...
+
+# PowerShell: a command that really fails
+python examples\browser-type-acceptance.py --inject-failure powershell --ps-command "& 'C:\nope\missing-openeyes.exe'" ...
+python examples\browser-shot-acceptance.py --inject-failure powershell --ps-command "exit 7" ...
+
+# both
+python examples\browser-type-acceptance.py --inject-failure both --page-failure missing-element --ps-command "& 'C:\nope\missing-openeyes.exe'" ...
+```
+
+`--out` behaviour: missing parents are created; an existing non-empty directory
+is reused without deleting or overwriting anything; a path that cannot be a
+directory fails with exit `2` and no receipt; an existing receipt is only
+replaced with `--force`. An interrupted run (Ctrl+C/SIGBREAK, graceful kill)
+exits `130` with `verdict=INTERRUPTED`, deletes the `.tmp` receipt and the PNG,
+and leaves the `--out` directory empty. A hard kill cannot run cleanup: it can
+leave a verified PNG, never a receipt.
+
 ### mcp-stdio-probe.py
 
 Boots the repository-local MCP server directly, sends `initialize` + `initialized` notification + `tools/list`, and exits. Run this before the dsh web acceptance to isolate the Python/MCP mount from the dsh tool-dispatch layer:

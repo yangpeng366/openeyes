@@ -467,3 +467,322 @@ def test_type_acceptance_result_content_rejects_multi_part_payloads():
 
     with pytest.raises(RuntimeError):
         module._result_content(result)
+
+
+# ===== verdict, PowerShell leg, --out and interruption (real payloads only) =====
+
+
+@pytest.mark.parametrize(
+    ("verdicts", "expected"),
+    [
+        pytest.param(("PASS", "PASS"), "PASS", id="both-pass"),
+        pytest.param(("FAIL", "PASS"), "FAIL", id="page-failed"),
+        pytest.param(("PASS", "FAIL"), "FAIL", id="powershell-failed"),
+        pytest.param(("FAIL", "FAIL"), "FAIL", id="both-failed"),
+        pytest.param(("SKIP", "PASS"), "SKIP", id="skip-is-not-a-pass"),
+        pytest.param(("SKIP", "FAIL"), "FAIL", id="fail-beats-skip"),
+        pytest.param(("SKIP", "SKIP"), "SKIP", id="nothing-ran"),
+    ],
+)
+def test_combine_verdicts_never_promotes_a_skip_or_hides_a_fail(verdicts, expected):
+    module = _load_module()
+
+    assert module._combine_verdicts(*verdicts) == expected
+
+
+def test_combine_verdicts_rejects_an_unknown_verdict():
+    module = _load_module()
+
+    with pytest.raises(ValueError):
+        module._combine_verdicts("PASS", "passed")
+
+
+def test_verdict_exit_codes_keep_pass_fail_and_skip_apart():
+    module = _load_module()
+
+    assert module._verdict_exit_code("PASS") == 0
+    assert module._verdict_exit_code("FAIL") == 2
+    assert module._verdict_exit_code("SKIP") == 3
+    with pytest.raises(ValueError):
+        module._verdict_exit_code("MAYBE")
+
+
+def test_powershell_leg_passes_on_the_real_200_output():
+    module = _load_module()
+    record = {
+        "executable": r"C:\Program Files\PowerShell\7\pwsh.exe",
+        "command": "Invoke-WebRequest ...",
+        "returncode": 0,
+        "stdout": "200\r\n",
+        "stderr": "",
+        "timed_out": False,
+        "unavailable": None,
+    }
+
+    leg = module._classify_powershell(record)
+
+    assert leg["verdict"] == "PASS"
+    assert leg["stdout"] == "200"
+
+
+@pytest.mark.parametrize(
+    ("record", "verdict", "reason"),
+    [
+        pytest.param(
+            {
+                "returncode": 1,
+                "stdout": "",
+                "stderr": "The term 'C:\\nope\\missing-openeyes.exe' is not recognized "
+                          "as a name of a cmdlet, function, script file, or operable program.",
+                "timed_out": False,
+                "unavailable": None,
+            },
+            "FAIL",
+            "powershell-exit-1",
+            id="non-zero-exit",
+        ),
+        pytest.param(
+            {
+                "returncode": 7,
+                "stdout": "",
+                "stderr": "injected exit 7",
+                "timed_out": False,
+                "unavailable": None,
+            },
+            "FAIL",
+            "powershell-exit-7",
+            id="explicit-exit-code",
+        ),
+        pytest.param(
+            {"returncode": None, "stdout": "", "stderr": "", "timed_out": True,
+             "unavailable": None},
+            "FAIL",
+            "powershell-timeout",
+            id="timeout",
+        ),
+        pytest.param(
+            {"returncode": 0, "stdout": "500", "stderr": "", "timed_out": False,
+             "unavailable": None},
+            "FAIL",
+            "powershell-unexpected-output",
+            id="http-500",
+        ),
+        pytest.param(
+            {"returncode": None, "stdout": "", "stderr": "", "timed_out": False,
+             "unavailable": "pwsh-not-found"},
+            "SKIP",
+            "pwsh-not-found",
+            id="no-powershell",
+        ),
+    ],
+)
+def test_powershell_leg_reports_failure_as_fail_and_absence_as_skip(record, verdict, reason):
+    """A failing command must be FAIL; a missing pwsh is SKIP, never PASS."""
+    module = _load_module()
+
+    leg = module._classify_powershell(record)
+
+    assert leg["verdict"] == verdict
+    assert leg["reason"] == reason
+    assert module._combine_verdicts(leg["verdict"], "PASS") == verdict
+
+
+def test_judgement_digest_ignores_ports_timestamps_and_tab_ids():
+    """Two consecutive runs must agree on the digest despite volatile fields."""
+    module = _load_module()
+    checks = [
+        {"check": "tabs", "ok": True, "detail": {"target_id": "AAA", "target_url": TARGET_URL}},
+        {"check": "matched-dry-run", "ok": True, "detail": {"into": "Learn more"}},
+    ]
+    judgement = {
+        "matched": {"into": "Learn more", "would_send_chars": 5, "sent": False},
+        "focused": {"into": "(focused)", "target_is_null": True},
+        "error_kind": module.NO_PAGE_ERROR,
+        "error_matched": True,
+    }
+    other_checks = [
+        {"check": "tabs", "ok": True, "detail": {"target_id": "BBB", "target_url": TARGET_URL}},
+        {"check": "matched-dry-run", "ok": True, "detail": {"into": "Learn more"}},
+    ]
+
+    first = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS", checks=checks, judgement=judgement,
+    )
+    second = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS", checks=other_checks, judgement=dict(judgement),
+    )
+    flipped = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS",
+        checks=[{"check": "tabs", "ok": True}, {"check": "matched-dry-run", "ok": False}],
+        judgement=judgement,
+    )
+    changed = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS", checks=checks,
+        judgement={**judgement, "matched": {"into": "Learn more", "would_send_chars": 6}},
+    )
+
+    assert first == second
+    assert first != flipped, "a flipped check must change the digest"
+    assert first != changed, "a changed readback must change the digest"
+
+
+def test_out_dir_is_created_with_missing_parents(tmp_path):
+    module = _load_module()
+    out = tmp_path / "a" / "b" / "c"
+
+    resolved = module._resolve_out_dir(str(out))
+
+    assert resolved == out.resolve()
+    assert out.is_dir()
+    assert not (out / ".openeyes-out-probe").exists(), "the write probe must clean up"
+
+
+def test_out_dir_reuses_an_existing_non_empty_directory(tmp_path):
+    module = _load_module()
+    out = tmp_path / "evidence"
+    out.mkdir()
+    keep = out / "previous-note.txt"
+    keep.write_text("keep me\n", encoding="utf-8")
+
+    assert module._resolve_out_dir(str(out)) == out.resolve()
+    assert keep.read_text(encoding="utf-8") == "keep me\n"
+    assert sorted(path.name for path in out.iterdir()) == ["previous-note.txt"]
+
+
+@pytest.mark.parametrize("make_blocker", ["out-is-a-file", "parent-is-a-file"])
+def test_out_dir_refuses_a_path_it_cannot_write(tmp_path, make_blocker):
+    module = _load_module()
+    if make_blocker == "out-is-a-file":
+        blocker = tmp_path / "receipt.json"
+        blocker.write_text("{}", encoding="utf-8")
+        out = blocker
+    else:
+        blocker = tmp_path / "blocked"
+        blocker.write_text("not a directory", encoding="utf-8")
+        out = blocker / "nested"
+
+    with pytest.raises(module.OutDirError) as excinfo:
+        module._resolve_out_dir(str(out))
+
+    assert "out" in str(excinfo.value) or "directory" in str(excinfo.value)
+
+
+def test_out_dir_collision_needs_force(tmp_path):
+    module = _load_module()
+    out = tmp_path / "evidence"
+    module._resolve_out_dir(str(out))
+    receipt = out / module.RECEIPT_NAME
+    receipt.write_text('{"verdict": "PASS"}\n', encoding="utf-8")
+
+    with pytest.raises(module.OutDirError) as excinfo:
+        module._require_free_evidence(out, [module.RECEIPT_NAME])
+    assert "refusing to overwrite" in str(excinfo.value)
+
+    module._require_free_evidence(out, [module.RECEIPT_NAME], force=True)
+    assert receipt.read_text(encoding="utf-8") == '{"verdict": "PASS"}\n'
+
+
+def test_receipt_write_is_atomic_and_leaves_no_temporary_file(tmp_path):
+    module = _load_module()
+    target = tmp_path / module.RECEIPT_NAME
+    payload = {"probe": module.PROBE_NAME, "verdict": "PASS", "checks": [{"check": "tabs", "ok": True}]}
+
+    written = module._write_receipt_atomic(target, payload)
+
+    raw = written.read_bytes()
+    assert written == target
+    assert not raw.startswith(b"\xef\xbb\xbf"), "receipt must stay BOM-free UTF-8"
+    assert json.loads(raw.decode("utf-8")) == payload
+    assert list(tmp_path.iterdir()) == [target], "the .tmp file must be gone"
+
+
+def test_staged_evidence_is_not_the_final_name_until_finalized(tmp_path):
+    module = _load_module()
+    final = tmp_path / "browser-type-receipt.json"
+    staged = module._staged(final)
+
+    assert staged.name == "browser-type-receipt.json.part"
+    assert staged != final
+    staged.write_text("in progress", encoding="utf-8")
+    assert not final.exists(), "a staged file must not read as evidence"
+
+    module._finalize(staged, final)
+
+    assert final.read_text(encoding="utf-8") == "in progress"
+    assert not staged.exists()
+
+
+def test_staged_evidence_can_be_discarded_after_an_interruption(tmp_path):
+    module = _load_module()
+    staged = tmp_path / "browser-type-receipt.json.part"
+    staged.write_text("half", encoding="utf-8")
+
+    module._discard(staged, tmp_path / "never-existed")
+
+    assert not staged.exists()
+
+
+def test_tabs_check_turns_a_cdp_error_payload_into_a_failure():
+    """A listening non-CDP endpoint answers with an error instead of tabs."""
+    module = _load_module()
+    payload = {
+        "error": "HTTP Error 404: Not Found",
+        "tool": "browser_tabs",
+    }
+
+    with pytest.raises(RuntimeError) as excinfo:
+        module._tabs_check(payload, TARGET_FILTER)
+
+    assert "no tab list" in str(excinfo.value)
+    assert "HTTP Error 404" in str(excinfo.value)
+
+
+def test_tabs_check_accepts_the_real_tab_payload():
+    module = _load_module()
+    payload = [
+        {"id": "t1", "url": TARGET_URL, "type": "page"},
+        {"id": "d1", "url": DECOY_URL, "type": "page"},
+        {"id": "x", "url": "about:blank", "type": "page"},
+    ]
+
+    detail = module._tabs_check(payload, TARGET_FILTER)
+
+    assert detail == {
+        "acceptance_tabs": 2,
+        "target_id": "t1",
+        "target_url": TARGET_URL,
+        "decoy_url": DECOY_URL,
+    }
+
+
+def test_missing_judgement_keeps_only_the_documented_kind():
+    module = _load_module()
+    error = (
+        "no page target matched url_contains='missing-9f2c'; available URLs: "
+        "'http://127.0.0.1:53100/acceptance-pages/target-a.html?probe=9f2c'"
+    )
+
+    judgement = module._missing_judgement(error)
+
+    assert judgement == {"error_kind": module.NO_PAGE_ERROR, "error_matched": True}
+    assert "9f2c" not in json.dumps(judgement), "volatile ids must not reach the digest"
+
+
+def test_matched_judgement_keeps_the_readback_values():
+    module = _load_module()
+
+    judgement = module._matched_judgement(_matched_payload())
+
+    assert judgement == {
+        "into": "Learn more",
+        "target_name": "Learn more",
+        "would_send_chars": 5,
+        "sent": False,
+        "sent_chars": 0,
+        "press_enter": False,
+        "dry_run": True,
+    }

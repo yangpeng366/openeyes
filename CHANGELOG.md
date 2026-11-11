@@ -32,6 +32,24 @@ versioning: [Semantic Versioning](https://semver.org/).
   produced 100 semantic deliveries and 0 physical inputs.
 
 ### Added
+- **The `browser_type` / `browser_shot` acceptance probes judge a real Edge run
+  and write evidence instead of printing `passed`.** Each probe now separates a
+  **page** surface (MCP payloads) from a **PowerShell** surface (a real `pwsh`
+  request for `/json/version`), gives each one PASS / FAIL / SKIP, and combines
+  them as `FAIL > SKIP > PASS` so a skipped leg is never read as a pass (exit
+  `0` / `2` / `3`, `130` when interrupted). Two consecutive runs against the
+  same fixture page produced identical `judgement_sha256` values and
+  byte-identical PNGs (1640x1055, 33359 bytes, `61bb000a…`). The page,
+  PowerShell and combined failure surfaces were each provoked for real
+  (`no element matched the selector`, `targets=0, decoys=1`,
+  `HTTP Error 404: File not found`, `pwsh` exit `1` and exit `7`) and every one
+  returned FAIL with exit `2`. `--out` creates missing parents, reuses an
+  existing non-empty directory without deleting anything, refuses to overwrite
+  an existing receipt unless `--force` is passed, and fails cleanly (exit `2`,
+  no receipt) on a path that cannot be a directory. Receipts go `.tmp` ->
+  `os.replace` and captures go `.part` -> rename, so Ctrl+C / SIGBREAK leaves no
+  conclusion file (exit `130`, verdict `INTERRUPTED`); a hard kill cannot run
+  cleanup and can leave a verified PNG, but never a receipt.
 - **CDP states why it cannot give the viewport's screen corner.**
   `openeyes.backends.cdp.viewport_origin()` now exists and always raises
   `MissingViewportOrigin`: Chromium exposes the *window* (`screenX`/`screenY`,

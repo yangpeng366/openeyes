@@ -386,3 +386,206 @@ def test_shot_acceptance_result_content_rejects_multi_part_payloads():
 
     with pytest.raises(RuntimeError):
         module._result_content(result)
+
+
+# ===== verdict, PowerShell leg, --out, staging (real PNG bytes only) =====
+
+
+@pytest.mark.parametrize(
+    ("verdicts", "expected"),
+    [
+        pytest.param(("PASS", "PASS"), "PASS", id="both-pass"),
+        pytest.param(("FAIL", "PASS"), "FAIL", id="page-failed"),
+        pytest.param(("PASS", "FAIL"), "FAIL", id="powershell-failed"),
+        pytest.param(("FAIL", "FAIL"), "FAIL", id="both-failed"),
+        pytest.param(("SKIP", "PASS"), "SKIP", id="skip-is-not-a-pass"),
+        pytest.param(("SKIP", "FAIL"), "FAIL", id="fail-beats-skip"),
+    ],
+)
+def test_combine_verdicts_never_promotes_a_skip_or_hides_a_fail(verdicts, expected):
+    module = _load_module()
+
+    assert module._combine_verdicts(*verdicts) == expected
+
+
+def test_verdict_exit_codes_keep_pass_fail_and_skip_apart():
+    module = _load_module()
+
+    assert [module._verdict_exit_code("PASS"),
+            module._verdict_exit_code("FAIL"),
+            module._verdict_exit_code("SKIP")] == [0, 2, 3]
+    with pytest.raises(ValueError):
+        module._verdict_exit_code("green")
+
+
+def test_powershell_leg_passes_on_the_real_200_output_and_fails_on_a_real_exit():
+    module = _load_module()
+    passed = module._classify_powershell({
+        "returncode": 0, "stdout": "200\r\n", "stderr": "", "timed_out": False,
+        "unavailable": None, "executable": "pwsh.exe",
+    })
+    failed = module._classify_powershell({
+        "returncode": 1, "stdout": "", "timed_out": False, "unavailable": None,
+        "stderr": "The term 'C:\\nope\\missing-openeyes.exe' is not recognized as a "
+                  "name of a cmdlet, function, script file, or operable program.",
+    })
+    skipped = module._classify_powershell({
+        "returncode": None, "stdout": "", "stderr": "", "timed_out": False,
+        "unavailable": "pwsh-not-found",
+    })
+
+    assert passed["verdict"] == "PASS"
+    assert failed["verdict"] == "FAIL"
+    assert failed["reason"] == "powershell-exit-1"
+    assert skipped["verdict"] == "SKIP"
+    assert module._combine_verdicts(skipped["verdict"], "PASS") == "SKIP"
+
+
+def test_judgement_digest_is_stable_across_runs_and_sensitive_to_the_capture(tmp_path):
+    module = _load_module()
+    checks = [
+        {"check": "tabs", "ok": True, "detail": {"target_id": "AAA"}},
+        {"check": "capture-png", "ok": True},
+    ]
+    judgement = {
+        "viewport": {"width": 1280, "height": 800},
+        "dry_run": {"captured": False, "dry_run": True, "path_is_requested": True},
+        "error_kind": module.NO_PAGE_ERROR,
+        "error_matched": True,
+        "capture": {"width": 1280, "height": 800, "bytes": 4242, "sha256": "a" * 64},
+    }
+
+    first = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS", checks=checks, judgement=judgement,
+    )
+    second = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS",
+        checks=[{"check": "tabs", "ok": True, "detail": {"target_id": "BBB"}},
+                {"check": "capture-png", "ok": True}],
+        judgement=dict(judgement),
+    )
+    other_pixels = module._judgement_sha256(
+        probe=module.PROBE_NAME, verdict="PASS", page="PASS",
+        powershell="PASS", checks=checks,
+        judgement={**judgement, "capture": {**judgement["capture"], "sha256": "b" * 64}},
+    )
+
+    assert first == second
+    assert first != other_pixels
+
+
+def test_out_dir_creates_missing_parents_and_keeps_existing_files(tmp_path):
+    module = _load_module()
+    out = tmp_path / "round" / "one"
+    out.mkdir(parents=True)
+    keep = out / "earlier.png"
+    keep.write_bytes(_png_bytes(64, 64))
+
+    resolved = module._resolve_out_dir(str(out))
+
+    assert resolved == out.resolve()
+    assert keep.read_bytes() == _png_bytes(64, 64)
+    assert sorted(path.name for path in out.iterdir()) == ["earlier.png"]
+
+
+def test_out_dir_refuses_a_file_and_a_file_parent(tmp_path):
+    module = _load_module()
+    as_file = tmp_path / "evidence.png"
+    as_file.write_bytes(_png_bytes(32, 32))
+    parent = tmp_path / "blocked"
+    parent.write_text("file, not a directory", encoding="utf-8")
+
+    for out in (as_file, parent / "nested"):
+        with pytest.raises(module.OutDirError):
+            module._resolve_out_dir(str(out))
+
+
+def test_shot_evidence_collision_needs_force(tmp_path):
+    module = _load_module()
+    out = module._resolve_out_dir(str(tmp_path / "evidence"))
+    png = out / module.SHOT_NAME
+    png.write_bytes(_png_bytes(320, 200))
+
+    with pytest.raises(module.OutDirError) as excinfo:
+        module._require_free_evidence(out, [module.RECEIPT_NAME, module.SHOT_NAME])
+    assert "refusing to overwrite" in str(excinfo.value)
+
+    module._require_free_evidence(
+        out, [module.RECEIPT_NAME, module.SHOT_NAME], force=True
+    )
+    assert png.exists()
+
+
+def test_receipt_write_is_atomic_and_bom_free(tmp_path):
+    module = _load_module()
+    target = tmp_path / module.RECEIPT_NAME
+    payload = {"probe": module.PROBE_NAME, "verdict": "FAIL", "page": {"verdict": "FAIL"}}
+
+    module._write_receipt_atomic(target, payload)
+
+    raw = target.read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert json.loads(raw.decode("utf-8")) == payload
+    assert [path.name for path in tmp_path.iterdir()] == [module.RECEIPT_NAME]
+
+
+def test_capture_is_staged_until_its_bytes_are_verified(tmp_path):
+    """A killed run leaves ``.part`` - never a file named like evidence."""
+    module = _load_module()
+    final = tmp_path / module.SHOT_NAME
+    staged = module._staged(final)
+    staged.write_bytes(_png_bytes(320, 200))
+
+    assert staged.name == "browser-shot.png.part"
+    assert not final.exists()
+
+    detail = module._capture_check(
+        {"captured": True, "dry_run": False, "path": str(staged)},
+        out=str(staged),
+        region=(320, 200),
+    )
+    assert detail["sha256"] == module._file_sha256(staged)
+    assert detail["bytes"] == len(_png_bytes(320, 200))
+
+    module._finalize(staged, final)
+
+    assert final.is_file()
+    assert not staged.exists()
+
+
+def test_capture_check_rejects_bytes_that_are_not_the_requested_region(tmp_path):
+    module = _load_module()
+    staged = tmp_path / "browser-shot.png.part"
+    staged.write_bytes(_png_bytes(800, 600))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        module._capture_check(
+            {"captured": True, "dry_run": False, "path": str(staged)},
+            out=str(staged),
+            region=(1280, 800),
+        )
+
+    assert "800x600" in str(excinfo.value)
+
+
+def test_tabs_check_turns_a_cdp_error_payload_into_a_failure():
+    module = _load_module()
+
+    with pytest.raises(RuntimeError) as excinfo:
+        module._tabs_check({"error": "HTTP Error 404: Not Found", "tool": "browser_tabs"},
+                           "target-a")
+
+    assert "no tab list" in str(excinfo.value)
+
+
+def test_missing_judgement_stays_free_of_volatile_text():
+    module = _load_module()
+    error = ("no page target matched url_contains='missing-target'; available URLs: "
+             "'http://127.0.0.1:53100/acceptance-pages/target-a.html'")
+
+    judgement = module._missing_judgement(error)
+
+    assert judgement == {"error_kind": module.NO_PAGE_ERROR, "error_matched": True}
+    assert "53100" not in json.dumps(judgement)

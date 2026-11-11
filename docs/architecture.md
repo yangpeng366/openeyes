@@ -292,3 +292,82 @@ CLI 出口：
 eyes vision --detections det.json --pretty          # 检测结果 -> 元素
 eyes resolve --window 1234 --pretty                 # 谁答上来了 + 降级留痕
 ```
+## 浏览器写工具的验收：真机双跑、失败面与 `--out` 契约
+
+`examples/browser-type-acceptance.py` 与 `examples/browser-shot-acceptance.py`
+的判定不再只有「喂 payload」一层：两者都用**可见 Edge（非无头）**跑完整链路，
+并把结论写成回执。判定拆成两个互相独立的面，各自出 PASS / FAIL / SKIP：
+
+| 面 | 由什么决定 | PASS | FAIL | SKIP |
+| --- | --- | --- | --- | --- |
+| page | MCP `browser_tabs` / `browser_type` / `browser_shot` 的 payload | 全部检查通过 | 页面或元素不存在、CDP 报错、payload 违约 | CDP 端口无人监听 |
+| PowerShell | 真 `pwsh -NoProfile -Command` 问 `/json/version` | 退出 0 且 stdout 含 `200` | 非零退出、超时、退出 0 但没有 `200` | 找不到 `pwsh` |
+
+总判定由 `_combine_verdicts` 合并：**FAIL > SKIP > PASS**。SKIP 永远不等于
+PASS——「没有可判对象」和「跑过且对」是两件事。退出码：PASS `0`、FAIL `2`、
+SKIP `3`、收到中断 `130`。
+
+「正在监听但不是 CDP」与「没人监听」也分开：把 page 面指向 fixture HTTP
+端口时 `browser_tabs` 真报 `HTTP Error 404: File not found`，判 FAIL；端口根本
+没开时判 SKIP。
+
+失败面口径（本机实跑，2026-11-11，Edge 152.0.4191.19 / Windows 11）：
+
+| 注入 | 真实现象 | page | PowerShell | 总判定 | 退出码 |
+| --- | --- | --- | --- | --- | --- |
+| `--page-failure missing-element` | `browser_type` 返回 `no element matched the selector` | FAIL `page-matched-dry-run` | PASS | FAIL | 2 |
+| `--page-failure missing-page` | 只开 decoy，`tabs` 报 `targets=0, decoys=1` | FAIL `page-tabs` | PASS | FAIL | 2 |
+| `--page-failure cdp-error` | page 面指向 fixture 端口，`browser_tabs` 报 `HTTP Error 404` | FAIL `page-tabs` | PASS | FAIL | 2 |
+| `--ps-command "& 'C:\nope\missing-openeyes.exe'"` | `pwsh` 退出 1，`The term ... is not recognized` | PASS | FAIL `powershell-exit-1` | FAIL | 2 |
+| `--ps-command "exit 7"` | `pwsh` 退出 7，无输出 | PASS | FAIL `powershell-exit-7` | FAIL | 2 |
+| `--inject-failure both` | 元素缺失 + 缺 exe | FAIL `page-matched-dry-run` | FAIL `powershell-exit-1` | FAIL | 2 |
+
+失败面都是真失败：脚本没有把「没有输出」当通过，也没有把 SKIP 记成 PASS；
+`page` 与 `powershell` 两段结论在回执里分开落盘，组合结果另算一项。
+
+### 真机双跑
+
+同一条 fixture 页面（`--base-url` 固定端口，两轮 URL 逐字节相同）连续跑两轮，
+每轮把回执（type）或 PNG + 回执（shot）写进各自的 `--out` 目录：
+
+```powershell
+python examples\browser-type-acceptance.py --cdp-port 9333 ^
+  --base-url http://127.0.0.1:18471 --out examples\out\evidence\type-round1
+python examples\browser-type-acceptance.py --cdp-port 9333 ^
+  --base-url http://127.0.0.1:18471 --out examples\out\evidence\type-round2
+python examples\browser-shot-acceptance.py --cdp-port 9333 ^
+  --base-url http://127.0.0.1:18471 --out examples\out\evidence\shot-round1
+python examples\browser-shot-acceptance.py --cdp-port 9333 ^
+  --base-url http://127.0.0.1:18471 --out examples\out\evidence\shot-round2
+```
+
+实测两轮判定完全一致（`judgement_sha256` 只覆盖 verdict、各检查的 ok 与读回值，
+不含端口、时间戳、tab id 与路径）：
+
+| 探针 | 第一轮 | 第二轮 | `judgement_sha256` |
+| --- | --- | --- | --- |
+| browser-type | PASS（page PASS / ps PASS） | PASS（page PASS / ps PASS） | 两轮同为 `933554f6…659de2` |
+| browser-shot | PASS（page PASS / ps PASS） | PASS（page PASS / ps PASS） | 两轮同为 `beee0d8d…02bd4` |
+
+PNG 侧更硬：两轮 `browser-shot.png` 都是 1640x1055、33359 字节，SHA-256 都是
+`61bb000a…aad62`，即像素逐字节相同。回执文件的整体 SHA-256 两轮不同（只有
+`started_at`/`finished_at`、`target_id` 这类易变字段变了），所以「判定稳定」
+用 `judgement_sha256` 判定，而不是拿整份 JSON 的哈希当结论。
+
+### `--out` 与中断
+
+| 输入 | 期望行为 | 实测 |
+| --- | --- | --- |
+| 不存在的多级路径 | 逐级创建，然后写证据 | `deep\a\b\c` 被创建，PASS，PNG + 回执都在 |
+| 已存在且非空目录 | 复用；不删、不合并既有文件，只加自己的文件 | 目录里原有的 `earlier-note.txt` 原样保留，新增回执，PASS |
+| 不可写路径 | 明确 FAIL，退出 2，不写任何回执 | `--out` 指向已有文件 → `--out is not a directory`；父级是文件 → `[WinError 183]` |
+| 已有同名证据 | 默认拒绝覆盖（避免把旧回执读成本轮结论），`--force` 才替换 | `refusing to overwrite existing evidence [...]; pass --force`，退出 2 |
+
+中断分三步收紧：回执先写 `<name>.json.tmp` 再 `os.replace`；PNG 先写
+`<name>.png.part`，校验通过才改名；收到 Ctrl+C / SIGBREAK 时把这两类文件连同
+已定稿的 PNG 一起删掉。实测：
+
+- Ctrl+Break（新进程组）→ 退出 130、stdout `verdict=INTERRUPTED`、`--out` 为空；
+- `taskkill`（优雅终止，控制台事件）→ 进程以 `0xC000013A` 结束、`--out` 为空；
+- 硬杀（`TerminateProcess`）→ 清理代码没有机会运行：不会留下回执，但可能留下
+  一张已校验的 PNG；回执是唯一的结论文件，PNG 单独存在不构成「通过」。
