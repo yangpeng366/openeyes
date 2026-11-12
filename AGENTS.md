@@ -51,3 +51,56 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
 - 只有 Windows 的 UIA 后端真正可用；macOS / Linux 在路线图上。
 - 远程浏览器走 SSH 端口转发 + Host 头改写，隧道断了就是断了，不自动修。
 - vision backend 依赖外部模型权重，离线环境只到 uia / cdp 这层。
+
+## 实践与调试
+
+> 每条都是实测过的坑：症状 → 原因 → 对策。命令照仓库实情写，先说「跑什么、看什么」。
+
+**1. 中断与回执（四路验收探针）**：Ctrl+Break → exit 130 + verdict=INTERRUPTED，且 `--out`
+目录必须为空（不写回执）；`taskkill` 走 Windows `STATUS_CONTROL_C_EXIT`（0xC000013A）；
+`TerminateProcess` 硬杀 → exit 1 且无回执——**只存在 PNG 不算通过**，回执是唯一凭证。
+对策：探针一律用空的 `--out` 起步，跑完先看回执再看产物。
+
+**2. 控制台事件只打死 pwsh 的坑**：ps 腿退出码曾被误记成 `powershell-exit-3221225786` 并写出了
+回执（把中断当成了命令失败）。现在 `_acceptance_verdict.py` 识别 `STATUS_CONTROL_C_EXIT`
+（3221225786 / -1073741510）并走中断分支：删 `.tmp`/`.part`、exit 130、不写回执。
+
+**3. 清理要查干净**：msedge 进程数（区分自己开的 `--remote-debugging-port`）、目标端口是否还
+LISTEN、fixture server 是否已停、临时 profile 是否删除。实测提醒：`netstat` 曾只显示
+TIME_WAIT 而端口实际在听——用 pwsh 打一次 `http://127.0.0.1:9222/json/version` 验可达性更可靠。
+
+**4. 降级链 uia → cdp → vision**：每一步都要有可解释的原因，结果里带 `source`；结构化优先，
+能走无障碍树 / DOM 就不看像素。排查时先看 `source` 字段是谁给的，再决定往哪层查。
+
+**5. 远程浏览器隧道**：hosts 同名双映射时 Windows 只取第一条匹配；hosts 指向 `127.0.0.1` 会
+自环——解析结果必须滤掉 loopback 与私网；隧道断了就是断了，不自动修，重连要人工介入。
+
+**6. 验收要能判红**：浏览器四路探针（type / shot / scan / click）共用
+`examples/_acceptance_verdict.py` 一套 verdict 模型（FAIL > SKIP > PASS），双跑比对用真哈希
+（`judgement_sha256`）。判据必须「有可能失败」——写死判据等于没验。实测：本机 Edge CDP 在听
+（ps 腿 200 PASS），但 page 腿 FAIL/`page-unexpected`/error 空——MCP server 子进程缺
+`websocket-client` 起不来，整体 FAIL exit 2，这是探针在环境不完整时的正确判红。
+
+**7. 退出码语义（`eyes` CLI）**：0 成功 / 1 失败 / 2 参数错 / 3 没匹配到目标 / 4 后端不可达 /
+5 动作没生效。JSON 走 stdout，人读错误走 stderr。（探针自己另有一套：0 PASS / 2 FAIL /
+3 SKIP / 130 INTERRUPTED。）
+
+**8. 浏览器调试用可见窗口**：不用无头模式（真实 Edge profile）——headless 下 UIA / 截图行为
+与真机不一致，验收结果不可信。
+
+**本地自测怎么跑**（在仓库根，pwsh 7）：
+
+```powershell
+pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1022 passed / 7 skipped）
+pwsh -NoProfile -File examples\quality-gate.ps1 -SkipTests  # 只跑快的三项（不跑 pytest）
+python -m ruff check .
+python examples\bom-sweep.py
+python examples\mcp-stdio-probe.py
+python -m pytest tests/ -q
+python examples\browser-click-acceptance.py --out <空目录>    # 验收探针，见第 1/6 条
+```
+
+本机实测：Loomy 自带 python 3.13.13 缺 pytest / ruff / `websocket-client`，quality-gate 会在
+ruff 与 mcp-stdio-probe 两步报 `ModuleNotFoundError`（bom-sweep 通过，344 个文件无 BOM）。先
+`python -m pip install -e .[dev]`（或至少 `ruff websocket-client pytest pytest-asyncio`）再跑；
+装完用 mcp-stdio-probe 验证 MCP server 子进程能起来，再跑探针。

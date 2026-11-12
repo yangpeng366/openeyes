@@ -7,6 +7,8 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Windows](https://img.shields.io/badge/platform-windows-lightgrey)](https://github.com/yangpeng366/openeyes)
 [![M8ven Score](https://m8ven.ai/badge/mcp/yangpeng366-openeyes-181btc)](https://m8ven.ai/mcp/yangpeng366-openeyes-181btc)
+[![Release](https://img.shields.io/github/v/release/yangpeng366/openeyes.svg)](https://github.com/yangpeng366/openeyes/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/yangpeng366/openeyes/ci.yml?branch=main)](https://github.com/yangpeng366/openeyes/actions/workflows/ci.yml)
 
 GitHub: <https://github.com/yangpeng366/openeyes> · 中文 · [English](#english) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [License](#license)
 
