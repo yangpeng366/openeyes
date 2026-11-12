@@ -9,6 +9,7 @@
 [![M8ven Score](https://m8ven.ai/badge/mcp/yangpeng366-openeyes-181btc)](https://m8ven.ai/mcp/yangpeng366-openeyes-181btc)
 [![Release](https://img.shields.io/github/v/release/yangpeng366/openeyes.svg)](https://github.com/yangpeng366/openeyes/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/yangpeng366/openeyes/ci.yml?branch=main)](https://github.com/yangpeng366/openeyes/actions/workflows/ci.yml)
+[![skills.sh](https://skills.sh/b/yangpeng366/openeyes)](https://skills.sh/yangpeng366/openeyes)
 
 GitHub: <https://github.com/yangpeng366/openeyes> · 中文 · [English](#english) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [License](#license)
 
