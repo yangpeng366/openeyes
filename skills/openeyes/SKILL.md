@@ -1,6 +1,6 @@
 ---
 name: openeyes
-description: OpenEyes: computer-use / desktop automation layer for Windows, macOS, Linux (eyes CLI / openeyes / eyes-mcp). Use when an agent must drive a GUI: native Win32/UWP apps via UIA accessibility tree, Edge/Chrome via CDP structured DOM (no screenshot, no vision model), Vimium hints / 3x3 grid, Vision fallback (OmniParser v2), chain uia -> cdp -> vision. Focus, click, type, hotkey, drag, screenshot.
+description: "OpenEyes — computer-use / desktop automation layer for Windows, macOS, Linux (eyes CLI / openeyes / eyes-mcp). Use when an agent must drive a GUI: native Win32/UWP apps via UIA accessibility tree, Edge/Chrome via CDP structured DOM (no screenshot, no vision model), Vimium hints / 3x3 grid, Vision fallback (OmniParser v2), chain uia -> cdp -> vision. Focus, click, type, hotkey, drag, screenshot."
 ---
 
 # OpenEyes Skill
