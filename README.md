@@ -14,6 +14,19 @@ GitHub: <https://github.com/yangpeng366/openeyes> · 中文 · [English](#englis
 
 ---
 
+## 一键安装（面向 Agent）
+
+```bash
+npx skills add yangpeng366/openeyes          # 装 skill
+npx skills add yangpeng366/openeyes --list   # 不装，只查会收录什么
+```
+
+装好之后 agent 拿到的是 `skills/openeyes/SKILL.md` 这份指引：它负责判断什么时候该用 OpenEyes、以及怎么用（命令表、退出码、降级链）。本仓本体是 pip 包 `openeyes`（提供 `eyes` CLI 与 `eyes-mcp`），skill 只是说明书，不替代安装本体：
+
+```bash
+pip install openeyes
+```
+
 <a id="中文"></a>
 
 ## 中文

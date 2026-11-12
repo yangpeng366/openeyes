@@ -1,6 +1,6 @@
 ---
 name: openeyes
-description: Use OpenEyes (eyes CLI / openeyes Python package / openeyes-mcp server) to see and operate any desktop UI on Windows/macOS/Linux. Includes UIA-backed native apps (Win32/UWP), CDP-backed Chromium browser pages (Edge/Chrome via DevTools Protocol — no screenshot, no vision model, structured DOM), Vimium-style letter hints, Vimium-style 3x3 grid, focus/click/type/hotkey/drag/screenshot. Use when Codex needs to (a) drive a native app without an API or DOM, (b) drive a real browser session with login cookies / 2FA, or (c) read or write page elements (text input, button click) without spending image-budget. Browser path uses raw websocket-client on Chrome DevTools Protocol; a parsing-style Vision backend (OmniParser v2 compatible) covers canvas / image-only UIs, and a structured-first chain (uia -> cdp -> vision) picks the cheapest tier that answers. Coordinates are DPI-correct (per-monitor-v2 awareness) and clicks settle before they fire, so a click lands on the element that was found; the decision layer can run against a local System One node instead of a hosted key.
+description: OpenEyes: computer-use / desktop automation layer for Windows, macOS, Linux (eyes CLI / openeyes / eyes-mcp). Use when an agent must drive a GUI: native Win32/UWP apps via UIA accessibility tree, Edge/Chrome via CDP structured DOM (no screenshot, no vision model), Vimium hints / 3x3 grid, Vision fallback (OmniParser v2), chain uia -> cdp -> vision. Focus, click, type, hotkey, drag, screenshot.
 ---
 
 # OpenEyes Skill
@@ -262,6 +262,14 @@ hits = find_elements(elements, automation_id="KeepFreeAliveButton")
   cursor position because the window has not processed `WM_MOUSEMOVE` yet.
 - `click_xy` holds the button for `press_ms` - XAML/UWP controls can ignore a
   zero-duration click.
+- The actuator layer is importable when no CLI verb covers the motion:
+  `from openeyes import click_xy, move_to, drag, scroll, send_hotkey, type_text`.
+  `drag(from_xy, to_xy, duration_ms)` presses, moves in steps and releases;
+  `scroll(dx, dy, at_xy=None)` sends wheel deltas; `move_to` and `click_xy`
+  carry the settle knobs above. To raise a native Win32 / UWP window without
+  clicking it, call `openeyes.actuators.win32.focus_window(hwnd)` - it falls
+  back to a title-bar click when `set_focus()` is refused. These are raw
+  actuators with no dry-run gate: resolve first, then act.
 
 ## Act, then prove it worked
 

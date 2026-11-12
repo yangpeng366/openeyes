@@ -47,3 +47,10 @@ audit/.pytest_cache/
 examples/.edge-record-demo-profile/
 examples/out/
 examples/record-out/
+
+# Patrol status files leaked into the repo root (dsh-patrol runtime state)
+/last
+/last-message
+/last-message.md
+/last-round
+/last-round.md
