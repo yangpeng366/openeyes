@@ -6,6 +6,8 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
 ### Added
 - **`browser_scan` and `browser_click` acceptance probes, judged by one model.**
   `examples/browser-scan-acceptance.py` and `examples/browser-click-acceptance.py`
