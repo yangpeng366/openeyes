@@ -1,7 +1,7 @@
 """
 OpenEyes MCP server — exposes core primitives as MCP tools.
 
-Tools (20):
+Tools (22):
     list_windows()             -> [{hwnd, title, ...}, ...]
     capture_window(hwnd, out?, dry_run?) -> {path, size, captured}
     detect_elements(hwnd, restore?, depth?, name_contains?, control_type?, regex?)
@@ -36,6 +36,11 @@ Tools (20):
                                 -> {ok, state, action, hwnd, pid, ...}
     record_replay(trajectory_path, live?, retries?, timeout?, interval?)
                                 -> {ok, dry_run, actions, summary, failed_steps, ...}
+    anchor_probe(hwnd, names[], app?, store?, threshold?, scale_product?,
+                 color_theme?, roi_pad?)
+                                -> {ok, matched, missing, ambiguous, unreadable, state, frame}
+    anchor_wait(hwnd, names[], until?, timeout?, interval?, app?, store?, ...)
+                                -> {ok, satisfied, polls, elapsed_s, frame_changes, last}
 
 Run:
     eyes-mcp
@@ -665,6 +670,62 @@ async def list_tools() -> list[Tool]:
                                   "description": "App Paths entries to look for"},
                 },
                 "required": ["app"],
+            },
+        ),
+        Tool(
+            name="anchor_probe",
+            description="Judge several OpenCV template anchors against ONE "
+                        "window frame. Read-only, no clicking. Returns "
+                        "matched / ambiguous / missing / unreadable, a "
+                        "per-anchor state map and the frame sha256, so a "
+                        "running-vs-idle decision comes from one capture "
+                        "instead of N racing ones. A minimized window "
+                        "returns WINDOW_MINIMIZED instead of an all-missing "
+                        "verdict.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer"},
+                    "names": {"type": "array", "items": {"type": "string"},
+                              "description": "anchor names stored in the app profile"},
+                    "app": {"type": "string"},
+                    "store": {"type": "string",
+                              "description": "anchor store root (default ~/.codex-home/anchors)"},
+                    "threshold": {"type": "number", "default": 0.8},
+                    "scale_product": {"type": "number",
+                                      "description": "render scale of the capture; omit to infer from window DPI"},
+                    "color_theme": {"type": "string", "enum": ["light", "dark"]},
+                    "roi_pad": {"type": "integer",
+                                "description": "search only the stored rect plus this pad; "
+                                               "~20x faster, assumes the control has not moved"}
+                },
+                "required": ["hwnd", "names"]
+            },
+        ),
+        Tool(
+            name="anchor_wait",
+            description="Poll anchor_probe until every named anchor is "
+                        "present (until=present, the default) or all are "
+                        "gone (until=absent). Read-only; it never resends a "
+                        "task. Timeout is a verdict (ANCHOR_TIMEOUT), not "
+                        "an exception. Ambiguous counts as visible.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer"},
+                    "names": {"type": "array", "items": {"type": "string"}},
+                    "until": {"type": "string", "enum": ["present", "absent"],
+                              "default": "present"},
+                    "timeout": {"type": "number", "default": 60.0},
+                    "interval": {"type": "number", "default": 0.5},
+                    "app": {"type": "string"},
+                    "store": {"type": "string"},
+                    "threshold": {"type": "number", "default": 0.8},
+                    "scale_product": {"type": "number"},
+                    "color_theme": {"type": "string", "enum": ["light", "dark"]},
+                    "roi_pad": {"type": "integer"}
+                },
+                "required": ["hwnd", "names"]
             },
         ),
         Tool(
@@ -1321,6 +1382,39 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             return [TextContent(type="text", text=_to_json(
                 record_replay_payload(arguments)))]
+
+        if name == "anchor_probe":
+            from openeyes.backends import anchor as anchor_api
+
+            receipt = anchor_api.probe_anchors(
+                int(arguments["hwnd"]),
+                arguments.get("store") or str(anchor_api.default_store()),
+                arguments["names"],
+                app=arguments.get("app"),
+                threshold=float(arguments.get("threshold", 0.80)),
+                scale_product=arguments.get("scale_product"),
+                color_theme=arguments.get("color_theme"),
+                roi_pad=arguments.get("roi_pad"),
+            )
+            return [TextContent(type="text", text=_to_json(receipt))]
+
+        if name == "anchor_wait":
+            from openeyes.backends import anchor as anchor_api
+
+            receipt = anchor_api.wait_anchors(
+                int(arguments["hwnd"]),
+                arguments.get("store") or str(anchor_api.default_store()),
+                arguments["names"],
+                until=str(arguments.get("until", "present")),
+                timeout=float(arguments.get("timeout", 60.0)),
+                interval=float(arguments.get("interval", 0.5)),
+                app=arguments.get("app"),
+                threshold=float(arguments.get("threshold", 0.80)),
+                scale_product=arguments.get("scale_product"),
+                color_theme=arguments.get("color_theme"),
+                roi_pad=arguments.get("roi_pad"),
+            )
+            return [TextContent(type="text", text=_to_json(receipt))]
 
         return [TextContent(type="text", text=_to_json(
             {"error": f"unknown tool: {name}"}))]

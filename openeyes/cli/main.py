@@ -146,8 +146,11 @@ def _focus_exit_code(error_code: str | None) -> int:
                    "accepted so scripts can say it out loud")
 @click.option("--go", "go", is_flag=True,
               help="actually call the focus primitive. Default is dry-run.")
+@click.option("--restore", "restore", is_flag=True,
+              help="un-minimise the target before focusing (visible change)")
 @json_option
-def focus(hwnd: int, dry_run: bool, go: bool, as_json: bool) -> None:
+def focus(hwnd: int, dry_run: bool, go: bool, restore: bool,
+          as_json: bool) -> None:
     """Bring an existing top-level window to the foreground, verifiably.
 
     Dry-run by default. ``--go`` calls the existing OpenEyes focus
@@ -155,7 +158,10 @@ def focus(hwnd: int, dry_run: bool, go: bool, as_json: bool) -> None:
     when the target is observed in front; a primitive that returns true
     but loses the foreground is reported as FOCUS_STOLEN.
     """
-    report = focus_window_checked(hwnd, dry_run=not (go and not dry_run))
+
+    report = focus_window_checked(
+        hwnd, dry_run=not (go and not dry_run), restore=restore,
+    )
     if as_json or wants_json():
         emit_json(report)
     elif report["ok"]:
@@ -183,7 +189,8 @@ def focus(hwnd: int, dry_run: bool, go: bool, as_json: bool) -> None:
 
 def _anchor_exit_code(error_code: str | None, operation: str = "find") -> int:
     """Map an anchor receipt onto the CLI exit-code contract."""
-    if error_code in {"ANCHOR_NOT_FOUND", "ANCHOR_AMBIGUOUS", "ANCHOR_WEAK"}:
+    if error_code in {"ANCHOR_NOT_FOUND", "ANCHOR_AMBIGUOUS", "ANCHOR_WEAK",
+                     "ANCHOR_TIMEOUT"}:
         return 3
     if error_code == "INVALID_HWND":
         return 5 if operation == "click" else 3
@@ -309,6 +316,151 @@ def anchor_find(hwnd: int, image: str | None, anchor_name: str, store: str | Non
     click.echo(
         f"{anchor_name}: score={report['score']:.3f} "
         f"strength={report['strength']} center={report['center']}{screen}{frame}"
+    )
+
+
+@anchor.command("probe")
+@click.option("--window", "hwnd", type=int, default=0,
+              help="hwnd to capture live; omit when using --image")
+@click.option("--image", type=click.Path(exists=True, dir_okay=False), default=None,
+              help="match a saved screenshot instead of a live window")
+@click.option("--names", "names", required=True,
+              help="comma-separated anchor names to match against one frame")
+@click.option("--store", default=None)
+@click.option("--app", default=None)
+@click.option("--threshold", type=float, default=0.80, show_default=True)
+@click.option("--min-score", type=float, default=None)
+@click.option("--scale-product", type=float, default=None,
+              help="current system-scale x deviceScaleFactor x zoomLevel")
+@click.option("--color-theme", default=None)
+@click.option("--no-auto-scale", "no_auto_scale", is_flag=True,
+              help="do not use the window DPI as a scale-group hint")
+@click.option("--roi-pad", "roi_pad", type=int, default=None,
+              help="search only around the stored rect, plus this many pixels")
+@json_option
+def anchor_probe(hwnd: int, image: str | None, names: str, store: str | None,
+                 app: str | None, threshold: float, min_score: float | None,
+                 scale_product: float | None, color_theme: str | None,
+                 roi_pad: int | None, no_auto_scale: bool,
+                 as_json: bool) -> None:
+    """Match several anchors against ONE frame and report the scene.
+
+    A snapshot verb: it exits 0 when the frame was read, whatever the state
+    is. Read ``matched`` / ``missing`` / ``ambiguous`` / ``unreadable``, or
+    run ``anchor wait`` when a verdict is wanted.
+    """
+    from openeyes.backends import anchor as anchor_backend
+    from openeyes.core.anchors import AnchorUnavailable
+
+    if not hwnd and not image:
+        raise click.UsageError("anchor probe needs --window or --image")
+    wanted = [part.strip() for part in names.split(",") if part.strip()]
+    if not wanted:
+        raise click.UsageError("--names needs at least one anchor name")
+    root = store or str(anchor_backend.default_store())
+    try:
+        if image:
+            receipt = anchor_backend.probe_anchors_in_image(
+                image, root, wanted, app=app, threshold=threshold,
+                min_score=min_score, scale_product=scale_product,
+                color_theme=color_theme, roi_pad=roi_pad)
+        else:
+            receipt = anchor_backend.probe_anchors(
+                hwnd, root, wanted, app=app, threshold=threshold,
+                min_score=min_score, scale_product=scale_product,
+                color_theme=color_theme, auto_scale=not no_auto_scale,
+                roi_pad=roi_pad)
+    except AnchorUnavailable as exc:
+        emit_error(str(exc), code=4, hwnd=hwnd, anchors=wanted)
+        return
+    except Exception as exc:
+        emit_error(f"could not probe anchors {wanted}: {exc}", code=4,
+                   hwnd=hwnd, anchors=wanted)
+        return
+    if not receipt.get("ok"):
+        _anchor_payload_error(receipt, operation="probe")
+        return
+    if as_json or wants_json():
+        emit_json(receipt)
+        return
+    frame = receipt.get("frame") or {}
+    size = frame.get("size") or ["?", "?"]
+    click.echo(
+        f"frame {size[0]}x{size[1]} sha={frame.get('sha256')} "
+        f"scale={receipt.get('scale_product')}({receipt.get('scale_source')}) "
+        f"{len(receipt['matched'])} matched / {len(receipt['missing'])} missing"
+    )
+    for name in receipt["requested"]:
+        state = receipt["state"].get(name) or {}
+        if name in receipt["matched"]:
+            verdict = "matched"
+        elif name in receipt["ambiguous"]:
+            verdict = "ambiguous"
+        elif name in receipt["unreadable"]:
+            verdict = f"unreadable({state.get('error_code')})"
+        else:
+            verdict = "missing"
+        score = state.get("score")
+        score_text = f" score={score:.3f}" if isinstance(score, (int, float)) else ""
+        click.echo(
+            f"  {name}: {verdict}{score_text} "
+            f"center={state.get('center')} peaks={state.get('peaks')}"
+        )
+
+
+@anchor.command("wait")
+@click.option("--window", "hwnd", type=int, required=True)
+@click.option("--names", "names", required=True,
+              help="comma-separated anchor names to watch")
+@click.option("--until", type=click.Choice(["present", "absent"]),
+              default="present", show_default=True)
+@click.option("--timeout", type=float, default=60.0, show_default=True)
+@click.option("--interval", type=float, default=1.0, show_default=True)
+@click.option("--store", default=None)
+@click.option("--app", default=None)
+@click.option("--threshold", type=float, default=0.80, show_default=True)
+@click.option("--scale-product", type=float, default=None)
+@click.option("--color-theme", default=None)
+@click.option("--roi-pad", "roi_pad", type=int, default=None,
+              help="poll only around the stored rect, plus this many pixels")
+@json_option
+def anchor_wait(hwnd: int, names: str, until: str, timeout: float,
+                interval: float, store: str | None, app: str | None,
+                threshold: float, scale_product: float | None,
+                color_theme: str | None, roi_pad: int | None,
+                as_json: bool) -> None:
+    """Poll until the anchors are present (or absent). Exit 3 on timeout."""
+    from openeyes.backends import anchor as anchor_backend
+    from openeyes.core.anchors import AnchorUnavailable
+
+    wanted = [part.strip() for part in names.split(",") if part.strip()]
+    if not wanted:
+        raise click.UsageError("--names needs at least one anchor name")
+    root = store or str(anchor_backend.default_store())
+    try:
+        receipt = anchor_backend.wait_anchors(
+            hwnd, root, wanted, until=until, timeout=timeout,
+            interval=interval, app=app, threshold=threshold,
+            scale_product=scale_product, color_theme=color_theme,
+            roi_pad=roi_pad)
+    except AnchorUnavailable as exc:
+        emit_error(str(exc), code=4, hwnd=hwnd, anchors=wanted)
+        return
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+    except Exception as exc:
+        emit_error(f"could not wait for anchors {wanted}: {exc}", code=4,
+                   hwnd=hwnd, anchors=wanted)
+        return
+    if not receipt.get("ok"):
+        _anchor_payload_error(receipt, operation="wait")
+        return
+    if as_json or wants_json():
+        emit_json(receipt)
+        return
+    click.echo(
+        f"{','.join(wanted)} became {until} after "
+        f"{receipt['elapsed_s']:g}s ({receipt['polls']} polls)"
     )
 
 

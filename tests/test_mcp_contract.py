@@ -37,6 +37,8 @@ def test_mcp_exposes_stable_tool_set():
         "click_by_id",
         "act_and_verify",
         "native_surfaces",
+        "anchor_probe",
+        "anchor_wait",
         "record_replay",
     ]
 
@@ -606,3 +608,51 @@ def test_the_method_enum_is_part_of_the_mcp_contract():
         method = by_name[name].inputSchema["properties"]["method"]
         assert {"auto", "invoke", "pixel"} <= set(method["enum"])
         assert method["default"] == "auto"
+
+
+def test_anchor_probe_forwards_one_frame_request(monkeypatch, tmp_path):
+    from openeyes.backends import anchor as anchor_api
+
+    seen = {}
+    receipt = {"ok": True, "matched": ["send_button"], "state": {
+        "send_button": {"found": True}}}
+
+    def fake_probe(hwnd, store, names, **kwargs):
+        seen.update(hwnd=hwnd, store=store, names=names, **kwargs)
+        return receipt
+
+    monkeypatch.setattr(anchor_api, "probe_anchors", fake_probe)
+    result = _call("anchor_probe", {
+        "hwnd": 4242,
+        "names": ["send_button"],
+        "app": "trae",
+        "store": str(tmp_path),
+        "roi_pad": 48,
+    })
+
+    assert result == receipt
+    assert seen["hwnd"] == 4242
+    assert seen["names"] == ["send_button"]
+    assert seen["app"] == "trae"
+    assert seen["roi_pad"] == 48
+    assert seen["threshold"] == 0.80
+
+
+def test_anchor_wait_defaults_to_present_and_forwards_timeout(monkeypatch):
+    from openeyes.backends import anchor as anchor_api
+
+    seen = {}
+    verdict = {"ok": True, "satisfied": True, "polls": 2}
+
+    def fake_wait(hwnd, store, names, **kwargs):
+        seen.update(hwnd=hwnd, store=store, names=names, **kwargs)
+        return verdict
+
+    monkeypatch.setattr(anchor_api, "wait_anchors", fake_wait)
+    result = _call("anchor_wait", {
+        "hwnd": 4242, "names": ["send_button"], "timeout": 900,
+    })
+
+    assert result == verdict
+    assert seen["until"] == "present"
+    assert seen["timeout"] == 900.0

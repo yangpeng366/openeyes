@@ -42,8 +42,9 @@ names the cause.
 | `eyes webview describe` / `launch` | Reach the DOM inside a Tauri / Wails / Electron app |
 | `eyes native find <app>` | Find the application's own CLI / URL scheme / registered executable / Store AUMID |
 | `eyes record replay <file>` | Inspect a recorded trajectory |
-| `eyes focus --window H` | Verified foreground switch; dry-run unless `--go` |
+| `eyes focus --window H [--restore]` | Verified foreground switch; `--restore` un-minimizes; dry-run unless `--go` |
 | `eyes anchor list/find/capture/click` | OpenCV template anchors (see below); click is dry-run unless `--go` |
+| `eyes anchor probe/wait` | Scene probe: several anchors judged against ONE frame; read-only |
 
 ## Anchor tier (OpenCV templates)
 
@@ -60,6 +61,33 @@ eyes anchor find --image shot.png --app trae --name solo_badge --json   # offlin
 eyes anchor capture --window <hwnd> --app trae --name new_task_button --rect <measured-window-pixels> --scale-product 1.3021 --json
 eyes anchor click --window <hwnd> --app trae --name send_button --check-frame --go   # dry-run without --go
 ```
+
+### Scene probe (one frame, many verdicts)
+
+```powershell
+eyes anchor probe --window <hwnd> --app trae --names solo_badge,send_button --roi-pad 48 --json
+eyes anchor wait  --window <hwnd> --app trae --names send_button --until present --timeout 900 --roi-pad 48 --json
+eyes focus --window <hwnd> --restore --go --json   # un-minimize first, then verify and focus
+```
+
+- `probe` captures ONE frame and answers every name against it: `matched` /
+  `ambiguous` / `missing` / `unreadable`, plus `state[name]` with `score`,
+  `strength`, `center`, `screen_point` and `frame.sha256`. Use it for state
+  decisions (running vs idle, SOLO badge, sidebar status); `find` is for one
+  target and two finds are two frames, which can disagree while the UI moves.
+- Never probe a minimized window: the frame is a placeholder strip, so the call
+  returns `WINDOW_MINIMIZED`. Restore first with `eyes focus --window H --restore
+  --go`, which re-reads the window identity after `ShowWindow(SW_RESTORE)`.
+- `--roi-pad N` searches each template only near its stored rect +/- N px.
+  Measured on Trae (1886x1183 @ 1.3021): 3 anchors whole-window ~2.9 s,
+  `--roi-pad 48` ~0.12 s. The trade is positional: a control that moved farther
+  than the pad reads as `missing`, and a byte-identical look-alike outside the ROI
+  no longer causes a false `ambiguous`.
+- `wait` polls `probe` until all names are present (`--until present`, default)
+  or none are (`--until absent`). Timeout is a verdict (`ANCHOR_TIMEOUT`, with
+  `last` holding the final frame), not an exception. Waiting never sends input,
+  so it cannot resend a task by itself; pair it with the send receipt.
+- Read-only by construction: neither verb clicks, focuses or writes the store.
 
 - Store: `C:\Users\47037\.codex-home\anchors\<app>\` (`manifest.json` + `<name>.png`).
   Override with `--store` or `OPENEYES_ANCHOR_STORE`. PNGs are raw crops: no scaling,
@@ -125,6 +153,7 @@ eyes anchor click --window <hwnd> --app trae --name send_button --check-frame --
 | Capture passes but every find is ambiguous | capture proves stability, not uniqueness | Full-window offline find must return `peaks=1`; choose a text or uniquely textured region. |
 | Existing anchor still reports `used_group=false` | the caller's `--scale-product` matched no entry, or the entry stores an explicit `null` product | Pass the product used at capture (legacy `dpi_scale` counts as the group) and require `used_group=true`. |
 | Exit 4/5 is misdiagnosed | coarse exit codes mix causes | Read `error_code`: 3 means no target; 4 means store/template/capture setup; 5 includes safety refusals or a delivered action with no effect. |
+| A minimized window reports every anchor `missing` | the capture is a placeholder strip, not the UI | `probe`/`wait` refuse with `WINDOW_MINIMIZED`; run `eyes focus --window H --restore --go` first. |
 
 Consumer: `C:\Users\47037\.codex-home\lib\uix.py` (`find_template`) tries this store
 first, then falls back to local templates plus OCR - see the `trae-client` skill.
@@ -291,9 +320,11 @@ Login walls, measured on a real Feishu login:
 
 ## MCP server
 
-`eyes-mcp` exposes 20 primitives as MCP tools:
+`eyes-mcp` exposes 22 primitives as MCP tools:
 
-Anchor verbs are CLI-only; there are no `anchor*` MCP tools.
+`anchor_probe` and `anchor_wait` mirror the read-only scene probe. Anchor
+capture and `anchor click` stay CLI-only: capture needs a measured rect, and
+click carries the foreground / occlusion safety gates.
 
 **Lifecycle and verified action:**
 - `app_ensure`        --title_contains / --process_name / --aumid / --dry-run=false
@@ -301,6 +332,8 @@ Anchor verbs are CLI-only; there are no `anchor*` MCP tools.
 - `act_and_verify`    --hwnd / --automation_id / --expect / --retries / --timeout
 - `native_surfaces`   --app / --cli_names / --schemes / --exe_names
 - `record_replay`     --file
+- `anchor_probe`      --hwnd / --names / --roi_pad (read-only, one frame)
+- `anchor_wait`       --hwnd / --names / --until / --timeout (read-only)
 
 **Native (UIA):**
 - `list_windows`

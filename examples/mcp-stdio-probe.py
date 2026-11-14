@@ -38,6 +38,8 @@ EXPECTED_TOOLS = [
     "click_by_id",
     "act_and_verify",
     "native_surfaces",
+    "anchor_probe",
+    "anchor_wait",
     "record_replay",
 ]
 

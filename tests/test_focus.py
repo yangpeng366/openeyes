@@ -758,3 +758,49 @@ def test_occluded_title_bar_raises_a_structured_refusal_for_the_core(monkeypatch
     # The public bool entry point turns that same refusal into False.
     assert win32.focus_window(hwnd) is False
     assert clicks == []
+
+def test_restore_unminimises_before_focusing():
+    # probe #1 sees the minimised window, #2 confirms the restore, #3 is the
+    # pre-activation identity re-check.
+    probes = [_probe(minimized=True), _probe(), _probe()]
+    state = {"foreground": 99}
+    restored = []
+
+    def focuser(hwnd):
+        state["foreground"] = hwnd
+        return True
+
+    report = focus_window_checked(
+        42,
+        dry_run=False,
+        restore=True,
+        restorer=lambda hwnd: restored.append(hwnd),
+        focuser=focuser,
+        foreground=lambda: state["foreground"],
+        probe=lambda _hwnd: probes.pop(0),
+        dpi=lambda: "per-monitor-v2",
+        sleep=lambda _s: None,
+    )
+
+    assert restored == [42]
+    assert report["restored"] is True
+    assert report["ok"] is True
+    assert report["focused"] is True
+    assert report["foreground_after"] == 42
+
+
+def test_restore_is_opt_in():
+    report = focus_window_checked(
+        42,
+        dry_run=False,
+        restorer=_never_called,
+        focuser=_never_called,
+        foreground=lambda: 99,
+        probe=lambda _hwnd: _probe(minimized=True),
+        dpi=lambda: "per-monitor-v2",
+        sleep=lambda _s: None,
+    )
+
+    assert report["ok"] is False
+    assert report["error_code"] == ERROR_WINDOW_MINIMIZED
+    assert report["restored"] is False

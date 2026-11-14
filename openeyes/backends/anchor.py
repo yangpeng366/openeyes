@@ -34,6 +34,7 @@ ERROR_CAPTURE_FAILED = "CAPTURE_FAILED"
 ERROR_ANCHOR_VERIFY_FAILED = "ANCHOR_VERIFY_FAILED"
 ERROR_FRAME_UNSTABLE = "FRAME_UNSTABLE"
 ERROR_CLICK_FAILED = "CLICK_FAILED"
+ERROR_ANCHOR_TIMEOUT = "ANCHOR_TIMEOUT"
 
 VERIFY_SCORE = 0.92
 PROBE_HISTORY_WINDOW = 20
@@ -710,6 +711,24 @@ def _candidate_phases(
     return phases
 
 
+def _infer_scale_product(hwnd: int, entries: Sequence[Mapping[str, Any]]) -> float | None:
+    """Window DPI as a scale hint, but only when a stored entry uses it.
+
+    Returning a value that matches no entry would relabel a plain library
+    sweep as a failed group lookup, so the caller keeps ``None`` instead.
+    """
+    try:
+        inferred = float(_dpi_scale(hwnd))
+    except Exception:
+        return None
+    if inferred <= 0:
+        return None
+    if any(_same_scale_product(_entry_scale_product(entry), inferred)
+           for entry in entries):
+        return inferred
+    return None
+
+
 def find_anchor(
     hwnd: int,
     store: str | os.PathLike[str],
@@ -723,6 +742,7 @@ def find_anchor(
     check_frame: bool = False,
     scale_product: float | None = None,
     color_theme: str | None = None,
+    auto_scale: bool = False,
     record_probe: bool = False,
 ) -> dict[str, Any]:
     """Find one anchor in a live window and return a structured receipt.
@@ -730,6 +750,9 @@ def find_anchor(
     Same-name entries are grouped by ``scale_product`` when the caller knows
     the current product. A group miss falls back to the full library and is
     recorded in ``used_group`` / ``fell_back``.
+    ``auto_scale`` lets the window's own DPI stand in for a missing product,
+    but only when an entry already lives in that scale group; otherwise the
+    library sweep runs unchanged and ``scale_source`` says so.
     """
     from openeyes.core.anchors import decide as choose
     from openeyes.core.anchors import match, scale_scan
@@ -808,6 +831,14 @@ def find_anchor(
         report["reason"] = "anchor-not-in-manifest"
         return report
 
+    scale_source = "explicit" if scale_product is not None else "none"
+    if scale_product is None and auto_scale:
+        inferred = _infer_scale_product(hwnd, entries)
+        if inferred is not None:
+            scale_product = inferred
+            report["scale_product"] = round(float(inferred), 4)
+            scale_source = "window-dpi"
+    report["scale_source"] = scale_source
     phases = _candidate_phases(entries, scale_product, color_theme)
     report["candidates"] = [
         {"file": entry.get("file"), "scale_product": _entry_scale_product(entry),
@@ -1189,6 +1220,511 @@ def find_anchor_in_image(
     failure = preferred_failure or last_failure or dict(report)
     peaks = int(failure.get("peaks", 0))
     return finish_probe(failure, peaks)
+
+
+def _frame_digest(image: Any) -> str:
+    """Short digest of one frame, so two probes can be told apart."""
+    from PIL import Image
+
+    picture = image if isinstance(image, Image.Image) else _pil_image(image)
+    return hashlib.sha256(picture.convert("RGB").tobytes()).hexdigest()[:16]
+
+
+# Reasons that blame the material, not the screen: the probe could not
+# answer at all, so a caller must not read the miss as a UI state.
+PROBE_SETUP_REASONS = {
+    "anchor-not-in-manifest",
+    "app-unresolved",
+    "store-error",
+    "template-missing",
+    "invalid-template-path",
+    "capture-failed",
+    "image-invalid",
+}
+
+
+def _probe_state(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Compact, JSON-stable view of one anchor report for scene receipts."""
+    decision = report.get("decision") or {}
+    return {
+        "found": bool(report.get("found")),
+        "score": report.get("score"),
+        "strength": report.get("strength"),
+        "ambiguous": bool(decision.get("ambiguous")),
+        "bbox": report.get("bbox"),
+        "center": report.get("center"),
+        "screen_point": report.get("screen_point"),
+        "scale": report.get("scale"),
+        "peaks": int(report.get("peaks") or 0),
+        "error_code": report.get("error_code"),
+        "reason": report.get("reason"),
+        "used_group": bool(report.get("used_group")),
+        "fell_back": bool(report.get("fell_back")),
+        "scan_strategy": report.get("scan_strategy"),
+    }
+
+
+def _probe_tier(state: Mapping[str, Any]) -> str:
+    """matched / ambiguous / missing / unreadable for one anchor."""
+    code = str(state.get("error_code") or "")
+    if code in {ERROR_STORE_NOT_FOUND, ERROR_ANCHOR_TEMPLATE_MISSING,
+               ERROR_CAPTURE_FAILED}:
+        return "unreadable"
+    if code == ERROR_ANCHOR_NOT_FOUND and state.get("reason") in PROBE_SETUP_REASONS:
+        return "unreadable"
+    if state.get("ambiguous") or code == ERROR_ANCHOR_AMBIGUOUS:
+        return "ambiguous"
+    if state.get("found"):
+        return "matched"
+    return "missing"
+
+
+def _probe_failure(
+    hwnd: int,
+    store: str | os.PathLike[str],
+    names: Sequence[str],
+    app: str | None,
+    error_code: str,
+    error: str,
+) -> dict[str, Any]:
+    wanted = list(dict.fromkeys(str(name) for name in names))
+    return {
+        "ok": False,
+        "source": "window",
+        "hwnd": int(hwnd or 0),
+        "store": str(Path(store).expanduser()),
+        "app": app,
+        "requested": wanted,
+        "count": len(wanted),
+        "matched": [],
+        "ambiguous": [],
+        "missing": [],
+        "unreadable": list(wanted),
+        "satisfied": False,
+        "state": {},
+        "anchors": {},
+        "frame": None,
+        "scale_product": None,
+        "scale_source": "none",
+        "elapsed_ms": 0.0,
+        "error_code": error_code,
+        "error": error,
+    }
+
+
+def _roi_box(
+    store: str | os.PathLike[str],
+    app_name: str,
+    name: str,
+    scale_product: float | None,
+    pad: int,
+    frame_size: tuple[int, int],
+) -> tuple[int, int, int, int] | None:
+    """Stored rect (plus pad) as a search window, clamped to the frame.
+
+    An anchor records where it was captured. Searching only around that
+    place turns a full-frame sweep into a small one; it also means a
+    control that moved out of the box reads as missing, which is the
+    trade the caller opts into with ``roi_pad``.
+    """
+    try:
+        manifest = load_store(store, app_name)
+    except Exception:
+        return None
+    rects = []
+    for entry in _find_entries(manifest, name):
+        if (scale_product is not None
+                and not _same_scale_product(_entry_scale_product(entry), scale_product)):
+            continue
+        try:
+            rects.append(_normalize_rect(entry.get("rect_window")))
+        except Exception:
+            continue
+    if not rects:
+        return None
+    left = min(rect[0] for rect in rects) - pad
+    top = min(rect[1] for rect in rects) - pad
+    right = max(rect[0] + rect[2] for rect in rects) + pad
+    bottom = max(rect[1] + rect[3] for rect in rects) + pad
+    width, height = frame_size
+    left = max(0, int(left))
+    top = max(0, int(top))
+    right = min(int(width), int(right))
+    bottom = min(int(height), int(bottom))
+    if right - left <= 0 or bottom - top <= 0:
+        return None
+    return left, top, right - left, bottom - top
+
+
+def _shift_report(
+    report: dict[str, Any],
+    origin: tuple[int, int],
+    frame_size: tuple[int, int],
+    region: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Move a crop-local report back into full-frame coordinates."""
+    if region is not None:
+        report["search_region"] = region
+        report["image_size"] = [int(frame_size[0]), int(frame_size[1])]
+    dx, dy = origin
+    if not (dx or dy):
+        return report
+    hits = []
+    for hit in report.get("hits") or []:
+        moved = dict(hit)
+        moved["x"] = float(hit["x"]) + dx
+        moved["y"] = float(hit["y"]) + dy
+        hits.append(moved)
+    report["hits"] = hits
+    if report.get("bbox"):
+        report["bbox"] = {
+            "x": report["bbox"]["x"] + dx, "y": report["bbox"]["y"] + dy,
+            "w": report["bbox"]["w"], "h": report["bbox"]["h"],
+        }
+    if report.get("center"):
+        report["center"] = {
+            "x": report["center"]["x"] + dx,
+            "y": report["center"]["y"] + dy,
+        }
+    decision = report.get("decision")
+    if isinstance(decision, dict) and decision.get("chosen"):
+        chosen = dict(decision["chosen"])
+        chosen["x"] = float(chosen["x"]) + dx
+        chosen["y"] = float(chosen["y"]) + dy
+        decision["chosen"] = chosen
+    return report
+
+
+def probe_anchors_in_image(
+    image: Any,
+    store: str | os.PathLike[str],
+    names: Sequence[str],
+    app: str | None = None,
+    threshold: float = 0.80,
+    min_score: float | None = None,
+    *,
+    weak_support: bool = True,
+    require_unique: bool = True,
+    scale_product: float | None = None,
+    color_theme: str | None = None,
+    roi_pad: int | None = None,
+) -> dict[str, Any]:
+    """Match many anchors against ONE frame and report the scene.
+
+    ``roi_pad`` narrows each search to the stored rect plus that many
+    pixels, which turns the sweep into a local one: much faster for polling
+    loops, at the cost of seeing a control that moved far away as missing.
+
+    ``find`` answers "is this control here". A probe answers "which of
+    these state templates is on screen right now": every name is matched
+    against the same pixels, so two verdicts can never come from two
+    different frames. Read-only; it never clicks.
+    """
+    started = time.perf_counter()
+    wanted = [str(name) for name in names]
+    if not wanted:
+        raise ValueError("probe needs at least one anchor name")
+    if roi_pad is not None and int(roi_pad) < 0:
+        raise ValueError("roi_pad must be non-negative")
+    unique = list(dict.fromkeys(wanted))
+    receipt: dict[str, Any] = {
+        "ok": True,
+        "source": "image",
+        "hwnd": None,
+        "store": str(Path(store).expanduser()),
+        "app": app,
+        "requested": unique,
+        "count": len(unique),
+        "matched": [],
+        "ambiguous": [],
+        "missing": [],
+        "unreadable": [],
+        "satisfied": False,
+        "state": {},
+        "anchors": {},
+        "frame": None,
+        "scale_product": (round(float(scale_product), 4)
+                           if scale_product is not None else None),
+        "scale_source": "explicit" if scale_product is not None else "none",
+        "elapsed_ms": 0.0,
+        "error_code": None,
+        "error": None,
+    }
+    try:
+        source = _pil_image(image)
+    except Exception as exc:
+        receipt["ok"] = False
+        receipt["unreadable"] = list(unique)
+        receipt["error_code"] = ERROR_CAPTURE_FAILED
+        receipt["error"] = f"could not read the frame: {exc}"
+        receipt["elapsed_ms"] = round(
+            (time.perf_counter() - started) * 1000.0, 2)
+        return receipt
+
+    for name in unique:
+        app_name = app or receipt["app"]
+        region = None
+        origin = (0, 0)
+        target = source
+        if roi_pad is not None and app_name:
+            box = _roi_box(store, str(app_name), name, scale_product,
+                           int(roi_pad), source.size)
+            if box:
+                origin = (box[0], box[1])
+                target = source.crop((box[0], box[1],
+                                       box[0] + box[2], box[1] + box[3]))
+                region = {"origin": [box[0], box[1]],
+                          "size": [box[2], box[3]], "pad": int(roi_pad)}
+        try:
+            report = find_anchor_in_image(
+                target, store, name, app=app_name, threshold=threshold,
+                min_score=min_score, weak_support=weak_support,
+                require_unique=require_unique, scale_product=scale_product,
+                color_theme=color_theme,
+            )
+        except Exception as exc:
+            report = {
+                "ok": False, "found": False, "anchor": name,
+                "error_code": ERROR_CAPTURE_FAILED,
+                "error": f"{type(exc).__name__}: {exc}",
+                "reason": "capture-failed", "decision": None,
+            }
+        report = _shift_report(report, origin, source.size, region)
+        state = _probe_state(report)
+        tier = _probe_tier(state)
+        receipt["state"][name] = state
+        receipt["anchors"][name] = report
+        receipt[tier].append(name)
+        if report.get("app") and receipt["app"] is None:
+            receipt["app"] = report["app"]
+
+    receipt["satisfied"] = not (receipt["missing"] or receipt["ambiguous"]
+                              or receipt["unreadable"])
+    receipt["ok"] = not receipt["unreadable"]
+    if receipt["unreadable"]:
+        first = receipt["anchors"][receipt["unreadable"][0]]
+        receipt["error_code"] = first.get("error_code")
+        receipt["error"] = first.get("error")
+    elif receipt["ambiguous"]:
+        receipt["error_code"] = ERROR_ANCHOR_AMBIGUOUS
+        receipt["error"] = (", ".join(receipt["ambiguous"])
+                           + " matched more than once in this frame")
+    elif receipt["missing"]:
+        receipt["error_code"] = ERROR_ANCHOR_NOT_FOUND
+        receipt["error"] = ", ".join(receipt["missing"]) + " not found in this frame"
+    receipt["elapsed_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
+    return receipt
+
+
+def probe_anchors(
+    hwnd: int,
+    store: str | os.PathLike[str],
+    names: Sequence[str],
+    app: str | None = None,
+    threshold: float = 0.80,
+    min_score: float | None = None,
+    *,
+    weak_support: bool = True,
+    require_unique: bool = True,
+    scale_product: float | None = None,
+    color_theme: str | None = None,
+    roi_pad: int | None = None,
+    auto_scale: bool = True,
+    capture: Any = None,
+) -> dict[str, Any]:
+    """Capture one frame, then probe every anchor against it. Read-only.
+
+    This is the primitive a client script builds state decisions on: one
+    frame, N templates, one receipt with ``matched`` / ``missing`` /
+    ``ambiguous`` / ``unreadable`` lists and a per-anchor ``state`` map.
+    """
+    from openeyes.core.dpi import ensure_dpi_awareness
+
+    ensure_dpi_awareness()
+    hwnd = int(hwnd or 0)
+    grab = capture
+    if grab is None:
+        win32gui, _ = _require_windows()
+        if hwnd <= 0 or not win32gui.IsWindow(hwnd):
+            return _probe_failure(hwnd, store, names, app, ERROR_INVALID_HWND,
+                                  f"hwnd={hwnd} is not a valid window")
+        if win32gui.IsIconic(hwnd):
+            # A minimized window keeps a handle and a rect, but the frame
+            # is a placeholder strip; refusing is clearer than all-missing.
+            return _probe_failure(hwnd, store, names, app, ERROR_WINDOW_MINIMIZED,
+                                  "target window is minimized; restore it first")
+        grab = _capture_window
+    try:
+        image = grab(hwnd)
+    except Exception as exc:
+        return _probe_failure(hwnd, store, names, app, ERROR_CAPTURE_FAILED,
+                              f"could not capture window: {type(exc).__name__}: {exc}")
+
+    scale_source = "explicit" if scale_product is not None else "none"
+    if scale_product is None and auto_scale:
+        inferred = _infer_probe_scale(store, app, names, hwnd)
+        if inferred is not None:
+            scale_product = inferred
+            scale_source = "window-dpi"
+
+    receipt = probe_anchors_in_image(
+        image, store, names, app=app, threshold=threshold, min_score=min_score,
+        weak_support=weak_support, require_unique=require_unique,
+        scale_product=scale_product, color_theme=color_theme,
+        roi_pad=roi_pad,
+    )
+    window_rect = None
+    dpi_scale = None
+    try:
+        left, top, right, bottom = _window_rect(hwnd)
+        window_rect = [int(left), int(top), int(right), int(bottom)]
+        for name, state in receipt["state"].items():
+            center = state.get("center")
+            if center:
+                point = {"x": int(left) + int(center["x"]),
+                         "y": int(top) + int(center["y"])}
+                state["screen_point"] = point
+                receipt["anchors"][name]["screen_point"] = point
+    except Exception:
+        pass
+    try:
+        dpi_scale = round(float(_dpi_scale(hwnd)), 4)
+    except Exception:
+        dpi_scale = None
+    receipt.update({
+        "source": "window",
+        "hwnd": hwnd,
+        "scale_product": (round(float(scale_product), 4)
+                           if scale_product is not None else None),
+        "scale_source": scale_source,
+        "frame": {
+            "size": [image.width, image.height],
+            "sha256": _frame_digest(image),
+            "captured_at": _utc_now(),
+            "window_rect": window_rect,
+            "dpi_scale": dpi_scale,
+        },
+    })
+    return receipt
+
+
+def _infer_probe_scale(
+    store: str | os.PathLike[str],
+    app: str | None,
+    names: Sequence[str],
+    hwnd: int,
+) -> float | None:
+    """Window DPI, but only when one requested anchor is stored at that scale.
+
+    Reads the manifest directly: an unknown app or name simply keeps the
+    library sweep, and no probe should fail because of this hint.
+    """
+    try:
+        inferred = float(_dpi_scale(hwnd))
+    except Exception:
+        return None
+    if inferred <= 0:
+        return None
+    wanted = {str(name) for name in names}
+    root = Path(store).expanduser()
+    try:
+        apps = ([app] if app else
+                [path.name for path in root.iterdir()
+                 if path.is_dir() and (path / "manifest.json").is_file()])
+        for app_name in apps:
+            manifest = load_store(root, app_name)
+            for entry in manifest.get("anchors", []):
+                if (entry.get("name") in wanted
+                        and _same_scale_product(_entry_scale_product(entry), inferred)):
+                    return inferred
+    except Exception:
+        return None
+    return None
+
+
+def wait_anchors(
+    hwnd: int,
+    store: str | os.PathLike[str],
+    names: Sequence[str],
+    *,
+    until: str = "present",
+    timeout: float = 30.0,
+    interval: float = 0.5,
+    app: str | None = None,
+    threshold: float = 0.80,
+    scale_product: float | None = None,
+    color_theme: str | None = None,
+    roi_pad: int | None = None,
+    probe: Any = None,
+    sleeper: Any = None,
+    clock: Any = None,
+) -> dict[str, Any]:
+    """Poll a scene until the requested anchors appear or disappear.
+
+    ``until="present"`` needs every name visible; ``until="absent"`` needs
+    none of them visible. Ambiguous counts as visible, so a shaky template
+    never reads as "gone". Timeout is a verdict (``ANCHOR_TIMEOUT``), not
+    an exception: the last frame stays in the receipt as evidence.
+    """
+    target = str(until).strip().lower()
+    if target not in {"present", "absent"}:
+        raise ValueError("until must be 'present' or 'absent'")
+    if float(timeout) < 0:
+        raise ValueError("timeout must be non-negative")
+    if float(interval) <= 0:
+        raise ValueError("interval must be positive")
+    run = probe or probe_anchors
+    now = clock or time.monotonic
+    pause = sleeper or time.sleep
+    started = float(now())
+    polls = 0
+    frames: set[str] = set()
+    last: dict[str, Any] = {}
+    while True:
+        last = run(hwnd, store, names, app=app, threshold=threshold,
+                   scale_product=scale_product, color_theme=color_theme,
+                   roi_pad=roi_pad)
+        polls += 1
+        frame = (last.get("frame") or {}).get("sha256")
+        if frame:
+            frames.add(str(frame))
+        visible = set(last.get("matched") or []) | set(last.get("ambiguous") or [])
+        wanted = set(last.get("requested") or names)
+        done = (wanted <= visible if target == "present"
+                else not (wanted & visible))
+        elapsed = max(0.0, float(now()) - started)
+        if done:
+            return {
+                "ok": True,
+                "satisfied": True,
+                "until": target,
+                "names": list(names),
+                "timeout": float(timeout),
+                "interval": float(interval),
+                "polls": polls,
+                "elapsed_s": round(elapsed, 3),
+                "frame_changes": max(0, len(frames) - 1),
+                "error_code": None,
+                "error": None,
+                "last": last,
+            }
+        if elapsed >= float(timeout):
+            return {
+                "ok": False,
+                "satisfied": False,
+                "until": target,
+                "names": list(names),
+                "timeout": float(timeout),
+                "interval": float(interval),
+                "polls": polls,
+                "elapsed_s": round(elapsed, 3),
+                "frame_changes": max(0, len(frames) - 1),
+                "error_code": ERROR_ANCHOR_TIMEOUT,
+                "error": (f"{'/'.join(names)} did not become {target} "
+                          f"within {float(timeout):g}s ({polls} polls)"),
+                "last": last,
+            }
+        pause(float(interval))
 
 
 def _safety_checks(

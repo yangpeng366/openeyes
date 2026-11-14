@@ -17,7 +17,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
    任何一步都要有可解释的降级原因。
 3. **默认 dry-run**：所有改变状态的操作先 dry-run，显式 `--go` 才真执行。
    验收门禁据此判定「真跑了」还是「只是演练」。
-4. **MCP 优先**：20 个工具的契约是一份稳定接口，改内部不许改契约；
+4. **MCP 优先**：22 个工具的契约是一份稳定接口，改内部不许改契约；
    `examples/mcp-stdio-probe.py` 就是为了守住它。
 5. **Record & Replay 无需 vision**：录的是逻辑步骤（UIAEvent）而非原始事件流，
    回放翻译成 `openeyes.actuate()` 调用；backend 可注入（`auto` / `jev` 真模型 / `mock`），
@@ -30,9 +30,9 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
 
 ## 改动规矩
 
-- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 19 工具、pytest 全套。
+- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 22 工具、pytest 全套。
   CI 跑的是同一串步骤，别只跑局部。
-- 全量测试目前 1022 passed / 7 skipped；改到公共路径就把全量跑一遍。
+- 全量测试目前 1141 passed / 7 skipped；改到公共路径就把全量跑一遍。
 - 真机验收用可见窗口（真实 Edge profile），不用无头。
 - 源文件 UTF-8 无 BOM（`examples/bom-sweep.py` 会扫）。
 - 提交直接推 `origin main`（单人维护，不走 PR、不 force push）。
@@ -88,10 +88,19 @@ TIME_WAIT 而端口实际在听——用 pwsh 打一次 `http://127.0.0.1:9222/j
 **8. 浏览器调试用可见窗口**：不用无头模式（真实 Edge profile）——headless 下 UIA / 截图行为
 与真机不一致，验收结果不可信。
 
+**9. 场景探针（一帧多判）**：问「运行中还是空闲」时，别逐个 `anchor find`——每次 find 都是一次
+独立截图，UI 一动，两次结论就可能互相矛盾。改用 `eyes anchor probe --names a,b,c`：一帧、
+N 个模板、一份回执（`matched` / `ambiguous` / `missing` / `unreadable` + `frame.sha256`）。
+`--roi-pad N` 只在模板存档矩形附近搜：Trae 实测（1886x1183 @1.3021）三个锚点整窗约 2.9 s，
+`--roi-pad 48` 约 0.12 s；代价是控件挪动超过 pad 就读成 `missing`，ROI 外的同像素孪生体
+不再造成假 `ambiguous`。最小化窗口的截图是 207x35 的占位条，早期会把所有锚点误报成 `missing`，
+现由探针直接回 `WINDOW_MINIMIZED`；恢复用 `eyes focus --window H --restore --go`（ShowWindow
+(SW_RESTORE) 后重新读窗口身份再聚焦）。MCP 侧同名只读工具：`anchor_probe` / `anchor_wait`。
+
 **本地自测怎么跑**（在仓库根，pwsh 7）：
 
 ```powershell
-pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1022 passed / 7 skipped）
+pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1141 passed / 7 skipped）
 pwsh -NoProfile -File examples\quality-gate.ps1 -SkipTests  # 只跑快的三项（不跑 pytest）
 python -m ruff check .
 python examples\bom-sweep.py

@@ -44,6 +44,7 @@ _SETTLE_TOTAL_BUDGET_S = 1.0
 Probe = Callable[[int], dict[str, Any]]
 Foreground = Callable[[], int]
 Focuser = Callable[[int], bool]
+Restorer = Callable[[int], Any]
 DpiProbe = Callable[[], str]
 Sleeper = Callable[[float], None]
 Clock = Callable[[], float]
@@ -208,6 +209,21 @@ def _operability_failure(info: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+def _restore_window(hwnd: int) -> bool:
+    """Un-minimise a window; the only visible side effect this module has.
+
+    Callers opt in. Every read-only path in this module stays side-effect
+    free, so a probe or a dry run never moves a window.
+    """
+    if not sys.platform.startswith("win"):
+        return False
+    import win32con
+    import win32gui
+
+    win32gui.ShowWindow(int(hwnd), win32con.SW_RESTORE)
+    return True
+
+
 def focus_window_checked(
     hwnd: int,
     *,
@@ -218,9 +234,15 @@ def focus_window_checked(
     dpi: DpiProbe | None = None,
     sleep: Sleeper | None = None,
     clock: Clock | None = None,
+    restore: bool = False,
+    restorer: Restorer | None = None,
     settle_budget_s: float | None = None,
 ) -> dict[str, Any]:
     """Focus ``hwnd`` and report what actually happened.
+
+    ``restore`` un-minimises the target first. It is opt-in because
+    restoring is a visible side effect; without it a minimised window is
+    still refused with ``WINDOW_MINIMIZED`` instead of being touched.
 
     ``dry_run`` inspects the target and reads the foreground but never calls
     the focus primitive. With ``dry_run=False`` the result is success only
@@ -238,6 +260,7 @@ def focus_window_checked(
     focuser = focuser or _focus_with_existing_primitive
     sleep = sleep or time.sleep
     clock = clock or time.monotonic
+    restorer = restorer or _restore_window
     settle_budget_s = (_SETTLE_TOTAL_BUDGET_S if settle_budget_s is None
                        else settle_budget_s)
 
@@ -253,6 +276,7 @@ def focus_window_checked(
         "primitive": PRIMITIVE,
         "primitive_called": False,
         "primitive_result": None,
+        "restored": False,
         "error": None,
         "error_code": None,
         "reason": None,
@@ -301,6 +325,30 @@ def focus_window_checked(
                          f"window focus is not implemented on {info['platform']}")
         return _fail(report, ERROR_INVALID_HWND, detail)
 
+    if restore and info.get("minimized"):
+        identity_before_restore = (
+            info.get("pid"), info.get("title"), info.get("class_name"),
+        )
+        try:
+            restorer(hwnd)
+        except Exception as exc:
+            report["warnings"].append(f"restore failed: {exc}")
+        else:
+            sleep(0.2)
+            try:
+                info = probe(hwnd) or {}
+            except Exception as exc:
+                return _fail(report, ERROR_BACKEND_ERROR,
+                             f"could not re-inspect hwnd={hwnd} after restore: {exc}")
+            report["window"] = info
+            report["restored"] = True
+            if (
+                info.get("pid"), info.get("title"), info.get("class_name"),
+            ) != identity_before_restore:
+                return _fail(
+                    report, ERROR_WINDOW_IDENTITY_CHANGED,
+                    f"window identity changed while restoring hwnd={hwnd}",
+                )
     rejection = _operability_failure(info)
     if rejection:
         return _fail(report, *rejection)
