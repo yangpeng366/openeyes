@@ -54,6 +54,7 @@ OpenEyes 把这些能力合成一个 MIT 开源、跨平台、AI 友好的统一
 - **MCP 优先**：所有原语通过 MCP server 暴露给任何 agent
 - **结构化优先**：`uia -> cdp -> vision` 降级链，能走无障碍树 / DOM 就不看像素，截图只作最后手段
 - **解析式 vision backend**：OmniParser v2 兼容，屏幕先被解析成结构化元素再决策，不让模型对着像素点坐标
+- **文字场景层**：`eyes scene` 把窗口读成文字清单（无障碍树 → OCR → OpenCV 轮廓），不支持看图的 agent 也能知道页面上有什么、在哪里；窗口被别的窗口盖住时用 `PrintWindow` 读窗口自身
 - **Windows 优先**：当前只有 Windows（UIA）后端真正可用；macOS / Linux 在路线图上，尚未实现
 - **远程浏览器**：经 SSH 转发驱动另一台机器上的 Firefox（WebDriver BiDi），隧道与 Host 头一并处理
 - **会话恢复**：`recover_session` 把「掉线 → 拉起进程 → 重连 → 状态稳定」收进一个预算（默认 20 秒），报告带实际耗时，可断言、可 dry-run
@@ -104,6 +105,7 @@ OpenEyes fuses these into one MIT-licensed, AI-friendly platform for Windows des
 - **MCP-first** — every primitive exposed as an MCP tool to any agent
 - **Structured first** — a `uia -> cdp -> vision` degradation chain: prefer the accessibility tree or the DOM, treat pixels as the last resort
 - **Parsing-style vision backend** — OmniParser v2 compatible; the screen is parsed into structured elements before anything decides, never raw coordinate clicking
+- **Scene text tier** — `eyes scene` reads a window as a list of named elements (accessibility tree → OCR → OpenCV contours), so an agent that cannot look at a picture still knows what is on screen and where; `PrintWindow` reads the window itself even when something covers it
 - **Windows first** — the Windows (pywinauto/UIA) backend is the one that works today; macOS and Linux are on the roadmap, not in the box
 - **Remote browser** — drive a Firefox on another machine through an SSH forward (WebDriver BiDi); the tunnel and the Host header are handled for you
 - **Session recovery** — `recover_session` chases a dropped session (detect -> start the process -> reconnect -> settle) inside one budget (20 s by default) and reports the seconds it took, so the promise can be asserted instead of hoped for
@@ -373,6 +375,8 @@ openeyes/
 │   │   ├── capture.py     # PIL.ImageGrab wrapper
 │   │   ├── schema.py      # Element / WindowInfo dataclasses
 │   │   ├── selector.py    # element find / filter
+│   │   ├── scene.py      # window -> text scene (uia / ocr / opencv)
+│   │   ├── scene_text.py # scene -> compact text digest
 │   │   ├── actuator.py    # mouse / hotkey / type_text façade
 │   │   ├── tunnel.py      # SSH local forward to a remote browser
 │   │   └── hints.py       # Vimium-style letter hint overlay

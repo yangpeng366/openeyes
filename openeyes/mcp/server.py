@@ -729,6 +729,28 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="scene_describe",
+            description="Describe a window as text: elements with names and "
+                        "coordinates plus a text digest. Use it when the "
+                        "target has no usable accessibility tree (Electron / "
+                        "canvas apps) or when you cannot look at a picture. "
+                        "Read-only: it never clicks or types, and the "
+                        "window may sit behind other windows.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hwnd": {"type": "integer"},
+                    "source": {"type": "string",
+                              "enum": ["auto", "uia", "ocr"],
+                              "default": "auto"},
+                    "max_items": {"type": "integer", "default": 250},
+                    "include_shapes": {"type": "boolean", "default": True,
+                                       "description": "also report controls that carry no text"},
+                },
+                "required": ["hwnd"],
+            },
+        ),
+        Tool(
             name="record_replay",
             description="Replay a recorded trajectory (JSONL) and report, per "
                         "step, whether it was verified / unverified / failed. "
@@ -1415,6 +1437,19 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 roi_pad=arguments.get("roi_pad"),
             )
             return [TextContent(type="text", text=_to_json(receipt))]
+
+        if name == "scene_describe":
+            from openeyes.core.scene import describe_window
+            from openeyes.core.scene_text import render_scene
+
+            scene = describe_window(
+                int(arguments["hwnd"]),
+                source=str(arguments.get("source", "auto")),
+                include_shapes=bool(arguments.get("include_shapes", True)),
+                max_items=int(arguments.get("max_items", 250)),
+            )
+            scene["text_digest"] = render_scene(scene)
+            return [TextContent(type="text", text=_to_json(scene))]
 
         return [TextContent(type="text", text=_to_json(
             {"error": f"unknown tool: {name}"}))]

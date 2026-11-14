@@ -39,6 +39,7 @@ def test_mcp_exposes_stable_tool_set():
         "native_surfaces",
         "anchor_probe",
         "anchor_wait",
+        "scene_describe",
         "record_replay",
     ]
 
@@ -656,3 +657,28 @@ def test_anchor_wait_defaults_to_present_and_forwards_timeout(monkeypatch):
     assert result == verdict
     assert seen["until"] == "present"
     assert seen["timeout"] == 900.0
+
+
+def test_scene_describe_returns_the_scene_with_a_text_digest(monkeypatch):
+    """A scene is evidence about a window; it must never actuate."""
+    from openeyes.core import scene as scene_api
+
+    seen = {}
+    payload = {"ok": True, "source": "ocr", "elements": [
+        {"kind": "button", "text": "新任务", "bbox": {"x": 24, "y": 143, "w": 106, "h": 48},
+         "center": {"x": 77, "y": 167}, "score": 0.99}],
+        "window": {"title": "Trae", "size": [1886, 1183]}}
+
+    def fake_describe(hwnd, **kwargs):
+        seen.update(hwnd=hwnd, **kwargs)
+        return dict(payload)
+
+    monkeypatch.setattr(scene_api, "describe_window", fake_describe)
+    result = _call("scene_describe", {"hwnd": 4242, "max_items": 40})
+
+    assert result["ok"] is True
+    assert seen["hwnd"] == 4242
+    assert seen["max_items"] == 40
+    assert seen["source"] == "auto"
+    assert isinstance(result["text_digest"], str)
+    assert result["text_digest"]

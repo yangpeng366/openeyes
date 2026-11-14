@@ -40,6 +40,7 @@ EXPECTED_TOOLS = [
     "native_surfaces",
     "anchor_probe",
     "anchor_wait",
+    "scene_describe",
     "record_replay",
 ]
 

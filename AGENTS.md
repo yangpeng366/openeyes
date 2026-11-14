@@ -17,7 +17,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
    任何一步都要有可解释的降级原因。
 3. **默认 dry-run**：所有改变状态的操作先 dry-run，显式 `--go` 才真执行。
    验收门禁据此判定「真跑了」还是「只是演练」。
-4. **MCP 优先**：22 个工具的契约是一份稳定接口，改内部不许改契约；
+4. **MCP 优先**：23 个工具的契约是一份稳定接口，改内部不许改契约；
    `examples/mcp-stdio-probe.py` 就是为了守住它。
 5. **Record & Replay 无需 vision**：录的是逻辑步骤（UIAEvent）而非原始事件流，
    回放翻译成 `openeyes.actuate()` 调用；backend 可注入（`auto` / `jev` 真模型 / `mock`），
@@ -30,9 +30,9 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
 
 ## 改动规矩
 
-- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 22 工具、pytest 全套。
+- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 23 工具、pytest 全套。
   CI 跑的是同一串步骤，别只跑局部。
-- 全量测试目前 1141 passed / 7 skipped；改到公共路径就把全量跑一遍。
+- 全量测试目前 1185 passed / 7 skipped；改到公共路径就把全量跑一遍。
 - 真机验收用可见窗口（真实 Edge profile），不用无头。
 - 源文件 UTF-8 无 BOM（`examples/bom-sweep.py` 会扫）。
 - 提交直接推 `origin main`（单人维护，不走 PR、不 force push）。
@@ -97,10 +97,16 @@ N 个模板、一份回执（`matched` / `ambiguous` / `missing` / `unreadable` 
 现由探针直接回 `WINDOW_MINIMIZED`；恢复用 `eyes focus --window H --restore --go`（ShowWindow
 (SW_RESTORE) 后重新读窗口身份再聚焦）。MCP 侧同名只读工具：`anchor_probe` / `anchor_wait`。
 
+**10. 截图抓的是「屏幕上的那块」，不是「那个窗口」（2026-11-14 实测）**：`ImageGrab.grab(bbox=...)` 抓的是
+屏幕该矩形处的东西，被别的窗口盖住时，OCR 读回来的是**盖在上面的那个窗口**（实测在 Trae 窗口
+矩形上读到的是 Codex 自己的对话）。治法：`PrintWindow` + `PW_RENDERFULLCONTENT`（2）请窗口自画，
+Electron / Chromium 必须带 flag 2；实测 Trae CN 在后台也能读出真正的 SOLO 页面。失败时退回屏幕抓取，
+并用 `capture.method` 注明走的哪条路。
+
 **本地自测怎么跑**（在仓库根，pwsh 7）：
 
 ```powershell
-pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1141 passed / 7 skipped）
+pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1185 passed / 7 skipped）
 pwsh -NoProfile -File examples\quality-gate.ps1 -SkipTests  # 只跑快的三项（不跑 pytest）
 python -m ruff check .
 python examples\bom-sweep.py

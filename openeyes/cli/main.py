@@ -3,6 +3,7 @@
 Usage:
     eyes windows list [--title-contains <str>] [--class-name <str>] [--regex <re>]
     eyes focus  --window <hwnd> [--dry-run|--go] [--json]
+    eyes scene  --window <hwnd> [--source auto|uia|ocr] [--max-items N] [--json]
     eyes capture --window <hwnd>|--screen --out <png> [--json]
     eyes detect --window <hwnd> [--restore] [--pretty] [--name-contains <str>]
                 [--control-type <str>] [--regex <re>]
@@ -186,6 +187,56 @@ def focus(hwnd: int, dry_run: bool, go: bool, restore: bool,
 
 
 # ----- anchors --------------------------------------------------------------
+# ----- scene ----------------------------------------------------------------
+
+def _scene_exit_code(error_code: str | None) -> int:
+    """Map a scene receipt onto the CLI exit-code contract."""
+    if error_code == "INVALID_HWND":
+        return 3
+    if error_code in {"OCR_UNAVAILABLE", "CAPTURE_FAILED"}:
+        return 4
+    if error_code == "WINDOW_MINIMIZED":
+        return 5
+    return 4
+
+
+@cli.command()
+@click.option("--window", "hwnd", type=int, required=True,
+              help="target top-level hwnd (see `eyes windows list`)")
+@click.option("--source", type=click.Choice(["auto", "uia", "ocr"]),
+              default="auto", show_default=True,
+              help="auto = accessibility tree first, OCR as the fallback")
+@click.option("--max-items", "max_items", type=int, default=250,
+              show_default=True, help="cap on the elements reported")
+@click.option("--no-shapes", "no_shapes", is_flag=True,
+              help="skip the OpenCV shape pass")
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]),
+              default="text", show_default=True,
+              help="text digest (default) or the full scene")
+@json_option
+def scene(hwnd: int, source: str, max_items: int, no_shapes: bool, fmt: str,
+          as_json: bool) -> None:
+    """Describe a window as text, for agents that cannot see images.
+
+    Reads the accessibility tree when the app has one, OCR when it does not,
+    and OpenCV shapes for the controls that carry no text.  The answer is a
+    list of elements with names and coordinates - not a picture.  Read-only.
+    """
+    from openeyes.core.scene import describe_window
+    from openeyes.core.scene_text import render_scene
+
+    payload = describe_window(
+        hwnd, source=source, include_shapes=not no_shapes, max_items=max_items,
+    )
+    payload["text_digest"] = render_scene(payload)
+    if as_json or wants_json() or fmt == "json":
+        emit_json(payload)
+    else:
+        _safe_echo(payload["text_digest"])
+    if not payload.get("ok", True):
+        sys.exit(_scene_exit_code(payload.get("error_code")))
+
+
 
 def _anchor_exit_code(error_code: str | None, operation: str = "find") -> int:
     """Map an anchor receipt onto the CLI exit-code contract."""

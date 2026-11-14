@@ -45,8 +45,41 @@ names the cause.
 | `eyes focus --window H [--restore]` | Verified foreground switch; `--restore` un-minimizes; dry-run unless `--go` |
 | `eyes anchor list/find/capture/click` | OpenCV template anchors (see below); click is dry-run unless `--go` |
 | `eyes anchor probe/wait` | Scene probe: several anchors judged against ONE frame; read-only |
+| `eyes scene --window H` | Read a window as text (UIA + OCR + OpenCV shapes); for agents that cannot see images |
 
 ## Anchor tier (OpenCV templates)
+
+## Scene text tier (a window, read as text)
+
+For an agent that cannot look at a picture - or an app whose accessibility tree is
+just a window shell (Electron / canvas) - `eyes scene` reads the window and
+answers with a list of elements, not an image:
+
+```powershell
+eyes scene --window 21174116                       # text digest (default)
+eyes scene --window 21174116 --json               # full scene + text_digest
+eyes scene --window 21174116 --source ocr         # skip the accessibility tree
+```
+
+```
+窗口 Trae CN 1886x1183 来源=ocr 元素=42
+[按钮] 新任务 @(77,167) 0.99
+[文本] SOLO @(47,98) 0.99
+```
+
+- Degradation chain `uia -> ocr -> opencv`: the accessibility tree first (it carries
+  real names), OCR for the text of a canvas app, OpenCV contours for the controls that
+  carry no text at all.  OCR text that lands on a UIA element is dropped, so one place is
+  never reported twice.
+- The frame is taken with `PrintWindow` when the app allows it, so the window may sit
+  behind other windows (verified on Trae CN); otherwise it falls back to a screen grab,
+  which copies whatever is on top.  `capture.method` in the JSON says which path ran.
+- Read-only: it never clicks, types or focuses.  The coordinates are window-relative;
+  `eyes click --window H --x N --y N --go` is the acting counterpart.
+- Shape detection stops at `panel / square / checkbox / icon / bar`.  It is evidence, not
+  meaning: what a thing *is* stays the model's call.
+- OCR needs the optional `rapidocr-onnxruntime` package (`pip install -e ".[ocr]"`); without
+  it the scene degrades to the accessibility tree and says so in `notes`.
 
 For apps with no usable UIA tree and no CDP page (Electron / VSCode forks such as
 Trae CN), OpenEyes keeps a persistent template library and a guarded pixel click.
@@ -321,7 +354,7 @@ Login walls, measured on a real Feishu login:
 
 ## MCP server
 
-`eyes-mcp` exposes 22 primitives as MCP tools:
+`eyes-mcp` exposes 23 primitives as MCP tools:
 
 `anchor_probe` and `anchor_wait` mirror the read-only scene probe. Anchor
 capture and `anchor click` stay CLI-only: capture needs a measured rect, and
@@ -335,6 +368,7 @@ click carries the foreground / occlusion safety gates.
 - `record_replay`     --file
 - `anchor_probe`      --hwnd / --names / --roi_pad (read-only, one frame)
 - `anchor_wait`       --hwnd / --names / --until / --timeout (read-only)
+- `scene_describe`   --hwnd / --source / --max_items (read-only, returns text)
 
 **Native (UIA):**
 - `list_windows`

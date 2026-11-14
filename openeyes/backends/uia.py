@@ -70,6 +70,67 @@ def capture_window(hwnd: int) -> Image.Image:
     return ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
 
 
+class _BitmapInfoHeader(ctypes.Structure):
+    _fields_ = [
+        ("biSize", ctypes.c_uint32), ("biWidth", ctypes.c_int32),
+        ("biHeight", ctypes.c_int32), ("biPlanes", ctypes.c_uint16),
+        ("biBitCount", ctypes.c_uint16), ("biCompression", ctypes.c_uint32),
+        ("biSizeImage", ctypes.c_uint32), ("biXPelsPerMeter", ctypes.c_int32),
+        ("biYPelsPerMeter", ctypes.c_int32), ("biClrUsed", ctypes.c_uint32),
+        ("biClrImportant", ctypes.c_uint32),
+    ]
+
+
+def capture_window_printwindow(hwnd: int) -> Image.Image | None:
+    """Ask the window to render itself, even when something covers it.
+
+    ``ImageGrab`` copies whatever is on screen at that rectangle, so an
+    overlapping window silently becomes the picture.  ``PrintWindow`` with
+    ``PW_RENDERFULLCONTENT`` asks the window to paint into a memory DC; that
+    is what Electron / Chromium windows need.  Verified on Trae CN: the real
+    SOLO page came back while another app was in front.
+
+    Returns None when the window refuses to paint (some apps do), so the
+    caller can fall back to a screen grab.
+    """
+    import numpy as np
+    import win32gui
+
+    ensure_dpi_awareness()
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    width, height = int(right - left), int(bottom - top)
+    if width <= 0 or height <= 0:
+        return None
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    hwnd_dc = user32.GetWindowDC(hwnd)
+    mem_dc = gdi32.CreateCompatibleDC(hwnd_dc)
+    bitmap = gdi32.CreateCompatibleBitmap(hwnd_dc, width, height)
+    if not hwnd_dc or not mem_dc or not bitmap:
+        return None
+    try:
+        gdi32.SelectObject(mem_dc, bitmap)
+        painted = user32.PrintWindow(hwnd, mem_dc, 2)
+        header = _BitmapInfoHeader()
+        header.biSize = ctypes.sizeof(_BitmapInfoHeader)
+        header.biWidth = width
+        header.biHeight = -height  # top-down
+        header.biPlanes = 1
+        header.biBitCount = 32
+        header.biCompression = 0
+        buffer = ctypes.create_string_buffer(width * height * 4)
+        lines = gdi32.GetDIBits(mem_dc, bitmap, 0, height, buffer,
+                                ctypes.byref(header), 0)
+    finally:
+        gdi32.DeleteObject(bitmap)
+        gdi32.DeleteDC(mem_dc)
+        user32.ReleaseDC(hwnd, hwnd_dc)
+    if not painted or not lines:
+        return None
+    array = np.frombuffer(buffer, dtype=np.uint8).reshape(height, width, 4)
+    return Image.fromarray(array[:, :, :3].copy())
+
+
 def _call(x):
     """pywinauto's rect.left etc. may be int property or callable — normalize."""
     return int(x() if callable(x) else x)
