@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import ctypes
 import time
+from ctypes import wintypes
 
 import win32api
 import win32con
@@ -24,6 +25,35 @@ VK = {
     "ctrl": win32con.VK_CONTROL, "alt": win32con.VK_MENU, "shift": win32con.VK_SHIFT,
     "win": win32con.VK_LWIN,
 }
+
+
+# SendInput keyboard packets. Unicode packets (wVk=0, wScan=code unit) arrive
+# as WM_CHAR, which is what lets typing skip the IME entirely.
+INPUT_KEYBOARD = 1
+KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_UNICODE = 0x0004
+
+
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = (
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    )
+
+
+class _INPUT(ctypes.Structure):
+    class _Union(ctypes.Union):
+        _fields_ = (("ki", _KEYBDINPUT),)
+
+    _anonymous_ = ("u",)
+    _fields_ = (("type", wintypes.DWORD), ("u", _Union))
+
+
+user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int)
+user32.SendInput.restype = wintypes.UINT
 
 
 def _move(x: int, y: int) -> None:
@@ -131,8 +161,42 @@ def _vk_for_char(ch: str) -> tuple[int, bool] | None:
     return vk, shift
 
 
-def type_text(text: str, interval: float = 0.0) -> None:
-    """Type a literal string through the active keyboard layout.
+def _utf16_units(ch: str) -> list[int]:
+    """UTF-16 code units for one character (astral chars become two)."""
+    raw = ch.encode("utf-16-le")
+    return [int.from_bytes(raw[i:i + 2], "little") for i in range(0, len(raw), 2)]
+
+
+def _send_unicode_text(text: str, interval: float) -> int:
+    """Inject text as WM_CHAR-level Unicode packets; returns chars inserted.
+
+    ``SendInput`` reports how many events it inserted; anything short of
+    two per code unit means the target refused synthetic input (UIPI), and
+    the caller should fall back to the keyboard-layout path.
+    """
+    inserted = 0
+    for ch in text:
+        units = _utf16_units(ch)
+        events = (_INPUT * (2 * len(units)))()
+        for i, unit in enumerate(units):
+            down, up = events[2 * i], events[2 * i + 1]
+            down.type = INPUT_KEYBOARD
+            up.type = INPUT_KEYBOARD
+            down.ki.wScan = unit
+            up.ki.wScan = unit
+            down.ki.dwFlags = KEYEVENTF_UNICODE
+            up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP
+        sent = user32.SendInput(len(events), events, ctypes.sizeof(_INPUT))
+        if sent != len(events):
+            break
+        inserted += 1
+        if interval:
+            time.sleep(interval)
+    return inserted
+
+
+def _type_by_layout(text: str, interval: float) -> None:
+    """Type through the active keyboard layout (the pre-Unicode path).
 
     Shift is pressed when the character needs it, so "a@b.com" arrives
     as written. A character the layout cannot produce raises ValueError -
@@ -153,6 +217,109 @@ def type_text(text: str, interval: float = 0.0) -> None:
             user32.keybd_event(win32con.VK_SHIFT, 0, win32con.KEYEVENTF_KEYUP, 0)
         if interval:
             time.sleep(interval)
+
+
+# IME conversion flags / notifications (imm.h).
+IME_CMODE_ALPHANUMERIC = 0x0000
+IME_CMODE_NATIVE = 0x0001
+IME_CMODE_KATAKANA = 0x0002
+IME_CMODE_FULLSHAPE = 0x0008
+NI_CLOSECANDIDATE = 0x0004
+
+
+def _imm32():
+    """imm32 with 64-bit-safe prototypes (HIMC is a pointer, not an int)."""
+    imm = ctypes.WinDLL("imm32")
+    imm.ImmGetContext.argtypes = (wintypes.HWND,)
+    imm.ImmGetContext.restype = wintypes.HANDLE
+    imm.ImmReleaseContext.argtypes = (wintypes.HWND, wintypes.HANDLE)
+    imm.ImmReleaseContext.restype = wintypes.BOOL
+    imm.ImmGetConversionStatus.argtypes = (
+        wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    imm.ImmGetConversionStatus.restype = wintypes.BOOL
+    imm.ImmSetConversionStatus.argtypes = (
+        wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
+    )
+    imm.ImmSetConversionStatus.restype = wintypes.BOOL
+    imm.ImmGetOpenStatus.argtypes = (wintypes.HANDLE,)
+    imm.ImmGetOpenStatus.restype = wintypes.BOOL
+    imm.ImmSetOpenStatus.argtypes = (wintypes.HANDLE, wintypes.BOOL)
+    imm.ImmSetOpenStatus.restype = wintypes.BOOL
+    imm.ImmNotifyIME.argtypes = (
+        wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+    )
+    imm.ImmNotifyIME.restype = wintypes.BOOL
+    return imm
+
+
+@contextlib.contextmanager
+def _ascii_ime_guard():
+    """Force the foreground window's IME into English for the block.
+
+    Only the layout fallback needs this: Unicode packets never reach an
+    IME, but per-key events do, and a Chinese IME in native mode swallows
+    ``https://`` into a pinyin composition. The previous conversion mode
+    and open state are restored even when typing raises.
+    """
+    try:
+        imm = _imm32()
+    except OSError:  # pragma: no cover - imm32 is present on Windows
+        yield
+        return
+    hwnd = 0
+    himc = None
+    previous = None
+    try:
+        hwnd = win32gui.GetForegroundWindow()
+        himc = imm.ImmGetContext(hwnd)
+        if himc:
+            conv = wintypes.DWORD()
+            sent = wintypes.DWORD()
+            if imm.ImmGetConversionStatus(
+                    himc, ctypes.byref(conv), ctypes.byref(sent)):
+                previous = (
+                    conv.value, sent.value,
+                    bool(imm.ImmGetOpenStatus(himc)),
+                )
+                if conv.value & (IME_CMODE_NATIVE | IME_CMODE_KATAKANA
+                                 | IME_CMODE_FULLSHAPE):
+                    imm.ImmSetConversionStatus(
+                        himc, IME_CMODE_ALPHANUMERIC, sent.value)
+                    imm.ImmNotifyIME(himc, NI_CLOSECANDIDATE, 0, 0)
+        yield
+    finally:
+        if himc:
+            try:
+                if previous is not None:
+                    conv, sent, was_open = previous
+                    imm.ImmSetConversionStatus(himc, conv, sent)
+                    imm.ImmSetOpenStatus(himc, was_open)
+            finally:
+                imm.ImmReleaseContext(hwnd, himc)
+
+
+def type_text(text: str, interval: float = 0.0) -> None:
+    """Type a literal string, independent of the active input method.
+
+    Characters go in as ``KEYEVENTF_UNICODE`` packets, so a Chinese IME
+    left in native mode cannot capture ASCII into a pinyin composition.
+    That capture is what used to empty address bars: ``Ctrl+L`` followed
+    by ``eyes type`` produced no text while the IME showed candidates,
+    and only switching the IME to English by hand made URLs arrive.
+
+    Non-ASCII text works too - the packets carry code points directly -
+    so the old "clipboard paste for CJK" workaround is no longer needed.
+    """
+    if not text:
+        return
+    if _send_unicode_text(text, interval) == len(text):
+        return
+    # Fallback: a target that refuses synthetic input still gets the old
+    # layout path, with the IME pinned to English for the duration.
+    with _ascii_ime_guard():
+        _type_by_layout(text, interval)
 
 
 def drag(from_xy: tuple[int, int], to_xy: tuple[int, int],
@@ -182,14 +349,57 @@ def scroll(dx: int, dy: int, at_xy: tuple[int, int] | None = None) -> None:
         win32api.mouse_event(win32con.MOUSEEVENTF_HWHEEL, 0, 0, dx * 120, 0)
 
 
-def focus_window(hwnd: int) -> bool:
-    """Bring the window to foreground (best-effort). Returns True on success.
+# Keep in sync with openeyes.core.focus.ERROR_FOCUS_OCCLUDED. The actuator
+# owns the refusal but the core layer owns the public error code.
+FOCUS_OCCLUDED = "FOCUS_OCCLUDED"
+
+
+class FocusRefused(RuntimeError):
+    """A structured refusal from :func:`_focus_window_impl`.
+
+    ``focus_error_code`` is read (duck-typed) by ``openeyes.core.focus`` so
+    that module never has to import this pywin32-backed one at import time.
+    The public :func:`focus_window` turns it into a plain ``False`` to keep
+    the bool contract every other caller relies on.
+    """
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.focus_error_code = code
+
+
+def _point_belongs_to(point_hwnd: int, target_hwnd: int) -> bool:
+    """Whether the window owning a screen point is the target or its child.
+
+    ``WindowFromPoint`` returns the deepest window at the coordinates, so a
+    point on the target's title bar can legitimately be a child window. A hit
+    belongs to the target when it is the target itself, or when its root
+    ancestor (GA_ROOT) is the target. Anything else covers the point and the
+    click must not be delivered there.
+    """
+    if not point_hwnd:
+        return False
+    point_hwnd = int(point_hwnd)
+    target_hwnd = int(target_hwnd)
+    if point_hwnd == target_hwnd:
+        return True
+    try:
+        return int(win32gui.GetAncestor(point_hwnd, win32con.GA_ROOT)) == target_hwnd
+    except Exception:
+        return False
+
+
+def _focus_window_impl(hwnd: int) -> bool:
+    """Bring the window to foreground; raise FocusRefused on an unsafe point.
 
     UWP / Windows Store apps are tricky: ``set_focus()`` often silently fails
     because the actual content lives inside a child CoreWindow of an
     ApplicationFrameWindow. If the first attempt does not bring the window
     to the foreground (verified via GetForegroundWindow), we click the title
-    bar as a fallback — that usually forces Windows to give us focus.
+    bar as a fallback - but only when that point actually belongs to the
+    target. When another window covers the title bar, the point belongs to
+    that occluder; clicking it would hit someone else's content area, so we
+    refuse instead of clicking.
     """
     d = Desktop(backend="uia")
     w = d.window(handle=hwnd)
@@ -201,14 +411,44 @@ def focus_window(hwnd: int) -> bool:
             return True
     except Exception:
         return False
-    # Fallback: click the title bar (top-center, 20px down from window top).
+    # Fallback: click the title bar (top-center, 20px down from window top),
+    # but guard the point first with WindowFromPoint.
     try:
         left, top, right, _ = win32gui.GetWindowRect(hwnd)
-        title_x = (left + right) // 2
-        title_y = top + 20
+    except Exception:
+        return False
+    title_x = (left + right) // 2
+    title_y = top + 20
+    try:
+        hit = win32gui.WindowFromPoint((title_x, title_y))
+    except Exception:
+        return False
+    if not _point_belongs_to(hit, hwnd):
+        raise FocusRefused(
+            FOCUS_OCCLUDED,
+            f"title-bar point ({title_x},{title_y}) belongs to "
+            f"hwnd={int(hit or 0)}, not target hwnd={hwnd}",
+        )
+    try:
         click_xy(title_x, title_y)
         time.sleep(0.2)
         fg = win32gui.GetForegroundWindow()
         return fg == hwnd
     except Exception:
+        return False
+
+
+def focus_window(hwnd: int) -> bool:
+    """Bring the window to foreground (best-effort). Returns True on success.
+
+    The plain bool contract is preserved for every caller (``eyes click
+    --focus-titlebar``, the uia click ladder, ...). When the title-bar
+    fallback point is occluded by another window, the structured
+    :class:`FocusRefused` raised by :func:`_focus_window_impl` is turned into
+    ``False`` here; the core focus layer calls ``_focus_window_impl`` directly
+    so it can report that case under its own ``FOCUS_OCCLUDED`` code.
+    """
+    try:
+        return _focus_window_impl(hwnd)
+    except FocusRefused:
         return False

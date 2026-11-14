@@ -17,7 +17,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
    任何一步都要有可解释的降级原因。
 3. **默认 dry-run**：所有改变状态的操作先 dry-run，显式 `--go` 才真执行。
    验收门禁据此判定「真跑了」还是「只是演练」。
-4. **MCP 优先**：19 个工具的契约是一份稳定接口，改内部不许改契约；
+4. **MCP 优先**：20 个工具的契约是一份稳定接口，改内部不许改契约；
    `examples/mcp-stdio-probe.py` 就是为了守住它。
 5. **Record & Replay 无需 vision**：录的是逻辑步骤（UIAEvent）而非原始事件流，
    回放翻译成 `openeyes.actuate()` 调用；backend 可注入（`auto` / `jev` 真模型 / `mock`），

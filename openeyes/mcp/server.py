@@ -334,7 +334,9 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="type_text",
-            description="Type a literal string. ASCII only for now.",
+            description="Type a literal string verbatim. Characters are sent as "
+                        "Unicode packets, so an active Chinese IME cannot swallow "
+                        "a URL into pinyin composition.",
             inputSchema={
                 "type": "object",
                 "properties": {

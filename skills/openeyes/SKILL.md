@@ -42,13 +42,100 @@ names the cause.
 | `eyes webview describe` / `launch` | Reach the DOM inside a Tauri / Wails / Electron app |
 | `eyes native find <app>` | Find the application's own CLI / URL scheme / registered executable / Store AUMID |
 | `eyes record replay <file>` | Inspect a recorded trajectory |
+| `eyes focus --window H` | Verified foreground switch; dry-run unless `--go` |
+| `eyes anchor list/find/capture/click` | OpenCV template anchors (see below); click is dry-run unless `--go` |
+
+## Anchor tier (OpenCV templates)
+
+For apps with no usable UIA tree and no CDP page (Electron / VSCode forks such as
+Trae CN), OpenEyes keeps a persistent template library and a guarded pixel click.
+An anchor is structural evidence - "this patch of pixels appears here" - not
+understanding; treat it as one tier, not as truth.
+
+```powershell
+eyes anchor list [--app trae] [--json]
+eyes anchor find --window <hwnd> --app trae --name solo_badge --scale-product 1.3021 --check-frame --json
+eyes anchor find --window <hwnd> --app trae --name solo_badge --scale-product 1.3021 --color-theme dark --json
+eyes anchor find --image shot.png --app trae --name solo_badge --json   # offline read-only; no frame/safety gates
+eyes anchor capture --window <hwnd> --app trae --name new_task_button --rect <measured-window-pixels> --scale-product 1.3021 --json
+eyes anchor click --window <hwnd> --app trae --name send_button --check-frame --go   # dry-run without --go
+```
+
+- Store: `C:\Users\47037\.codex-home\anchors\<app>\` (`manifest.json` + `<name>.png`).
+  Override with `--store` or `OPENEYES_ANCHOR_STORE`. PNGs are raw crops: no scaling,
+  no thresholding, no alpha.
+- Match: grayscale `TM_CCOEFF_NORMED`. The default sweep is 0.80-1.25 in 0.05 steps,
+  multi-peak per scale, NMS `IoU > 0.3`. A known `scale_product` narrows the search
+  to a +/-10% band around the expected ratio in 0.02 steps. A 150% DPI setup is near
+  1.5 and lies outside the default sweep, so capture and find with the same explicit
+  `--scale-product`. A missing or wrong value falls back to a coarse or wrong band.
+- Confidence: `strong` >= 0.92, `weak` 0.80-0.92, `miss` < 0.80 (never clicks).
+  A weak winner needs `--weak-support` and uniqueness; there is no extra
+  corroboration step.
+- Ambiguity: every hit >= 0.80 competes, whatever its tier. A rival within 0.06 of
+  the best blocks the click (`ANCHOR_AMBIGUOUS`). `--threshold` / `--min-score` are an
+  acceptance floor on the winner only: candidates are still searched down to
+  `search_floor = min(threshold, 0.80)`, and a winner below the floor comes back as
+  `ANCHOR_NOT_FOUND` with `score` / `hits` kept as evidence, plus
+  `decision.candidate` and `below_acceptance: true`. Raising the threshold
+  therefore cannot hide a rival.
+- One control seen at several sweep scales is one hit: `nms()` keeps IoU
+  suppression inside one scale step and merges across steps by centre
+  distance (<= 0.5 w/h) plus size ratio <= 1.35, as connected components.
+  Two copies that sit apart remain two hits and still read `ANCHOR_AMBIGUOUS`.
+- Frame stability is live-only and opt-in with `--check-frame`: it compares the
+  matched bbox across frames and reports `pixel_stable` and `template_stable`.
+  Offline `--image` never performs this check: `--check-frame` with `--image` is a
+  usage error, and the offline receipt carries
+  `frame_stability: "not-applicable-offline"` and `actionable: false`: an offline match
+  never justifies a click on its own.
+  It proves "this crop did not change", not "this is the normal, non-hover state".
+- Render context: entries carry `scale_product` (system scale x deviceScaleFactor x
+  zoomLevel), `color_theme` and `theme`. Pass them when known; same-name entries are
+  grouped by `scale_product`. `--color-theme` only orders candidates inside that group,
+  it is not a filter. The OS app theme is not necessarily the application's own theme.
+  Legacy manifests that carry only `dpi_scale` are still grouped: an entry's
+  `scale_product` wins when the key exists, otherwise `dpi_scale` is used. An explicit
+  `scale_product: null` means "captured without a known product" and is never grouped.
+- Click gates, actual order: find resolves uniqueness/weak support first; click then
+  requires foreground hwnd, valid window, not minimized, and `WindowFromPoint` root
+  ownership. The last check is root-level only, so a same-window overlay, dropdown or
+  tooltip can still swallow the click. This build has no hung-window probe; `IsWindow`
+  means a valid handle, not an un-hung application.
+- Failure codes: `ANCHOR_NOT_FOUND`, `ANCHOR_AMBIGUOUS`, `ANCHOR_WEAK`, `FRAME_UNSTABLE`,
+  `FOREGROUND_MISMATCH`, `WINDOW_MINIMIZED`, `TARGET_OCCLUDED`, `INVALID_HWND`, `CLICK_FAILED`,
+  plus `ANCHOR_TEMPLATE_MISSING`, `ANCHOR_STORE_NOT_FOUND`, `CAPTURE_FAILED`,
+  `ANCHOR_VERIFY_FAILED` for setup problems. Exit 4 is a configuration/material
+  failure, not necessarily an unreachable backend. Exit 5 includes safety refusals
+  that never clicked. Parse `error_code`; do not blindly retry on 4 or 5.
+- Capture discipline: park the pointer away from the control; capture one entry per
+  scale and theme with a freshly measured rect; require three stable frames; then run a
+  full-window offline find and keep the anchor only when `peaks=1`. Low-variance crops
+  (grayscale std < 1.0) are rejected at match time and may surface as `CAPTURE_FAILED`.
+
+### Anchor field rules
+
+| Symptom | Cause | Rule |
+| --- | --- | --- |
+| 150% DPI always misses | default sweep tops out at 1.25 | Capture and find with an explicit `--scale-product 1.5`; require `scan_strategy.mode=scale-prior`, `used_group=true`, `fell_back=false`. |
+| Old anchor dies after a theme change | grayscale correlation inverts; theme only reorders | Keep one template per theme; verify the matching screenshot scores >= 0.92 and the opposite theme misses. |
+| A hover/pressed icon gets clicked | frame stability detects motion, not a static wrong state | Park the pointer away, wait out the animation, capture the normal state; use `--check-frame` for spinners and carets, not as proof of semantics. |
+| A same-app overlay eats the click | `WindowFromPoint` checks only the root window | Cross-check `eyes detect` or `document.elementFromPoint` at the target point; close known overlays; keep the anchor as a fallback. |
+| Wrong app or wrong window matched | app omitted, or a screen grab includes an overlapping window | Always pass `--app`; keep the target foreground and unobstructed; re-run find after any move or resize. |
+| Capture passes but every find is ambiguous | capture proves stability, not uniqueness | Full-window offline find must return `peaks=1`; choose a text or uniquely textured region. |
+| Existing anchor still reports `used_group=false` | the caller's `--scale-product` matched no entry, or the entry stores an explicit `null` product | Pass the product used at capture (legacy `dpi_scale` counts as the group) and require `used_group=true`. |
+| Exit 4/5 is misdiagnosed | coarse exit codes mix causes | Read `error_code`: 3 means no target; 4 means store/template/capture setup; 5 includes safety refusals or a delivered action with no effect. |
+
+Consumer: `C:\Users\47037\.codex-home\lib\uix.py` (`find_template`) tries this store
+first, then falls back to local templates plus OCR - see the `trae-client` skill.
 
 ## For AI agents
 
 1. **Always pass `--json`** when you intend to parse the result.
-2. **Check the exit code** - 0 is success; 3 means "no target matched",
-   4 means "the backend could not be reached", 5 means "the action did
-   not take effect".
+2. **Check the exit code and `error_code`** - 0 is success; 3 means "no
+   target matched"; 4 is a backend or configuration/material failure; 5
+   is a safety refusal or an action that did not take effect. For anchors,
+   trust `error_code` over the coarse exit class.
 3. **Read the error message** - it names the cause and the parameters
    that were in play. It is written to be actionable on its own.
 4. **Verify the output exists** after a write; a command that exits 0
@@ -204,7 +291,16 @@ Login walls, measured on a real Feishu login:
 
 ## MCP server
 
-`eyes-mcp` exposes 18 primitives as MCP tools:
+`eyes-mcp` exposes 20 primitives as MCP tools:
+
+Anchor verbs are CLI-only; there are no `anchor*` MCP tools.
+
+**Lifecycle and verified action:**
+- `app_ensure`        --title_contains / --process_name / --aumid / --dry-run=false
+- `click_by_id`       --hwnd / --automation_id
+- `act_and_verify`    --hwnd / --automation_id / --expect / --retries / --timeout
+- `native_surfaces`   --app / --cli_names / --schemes / --exe_names
+- `record_replay`     --file
 
 **Native (UIA):**
 - `list_windows`
@@ -742,7 +838,7 @@ pwsh -NoProfile -File examples\quality-gate.ps1
 ```
 
 Lint (ruff), the encoding sweep (no UTF-8 BOM), the MCP stdio contract
-(15 tools) and the test suite - the same four steps CI runs on every push to
+(20 tools) and the test suite - the same four steps CI runs on every push to
 `main`. A skipped test is not a passing test.
 
 ## Repository stewardship (codex is authorized)
@@ -761,7 +857,7 @@ As of 2026-08-25 the user has granted **full delegation** on this repo:
 ### Red lines
 - **No force push** to `main`. Rebase / amend only on the same local branch before the push lands.
 - **No push of `.codex/`** — local round artifacts; keep on disk, do not `git add`. Add `.codex/` to `.gitignore` as a follow-up commit if it is not already ignored.
-- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (18 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
+- **No destructive public-surface changes** in a single push. Removing or renaming an MCP tool, a CLI command, or breaking the documented MCP tool contract (20 tools as of v0.2.0) requires a feature branch + PR with rationale in the body.
 - **No secrets** in commits. The repo has no secrets today; if any are ever needed, use env vars and document in the PR.
 
 ### Push workaround (Windows host)

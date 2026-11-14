@@ -2,6 +2,7 @@
 
 Usage:
     eyes windows list [--title-contains <str>] [--class-name <str>] [--regex <re>]
+    eyes focus  --window <hwnd> [--dry-run|--go] [--json]
     eyes capture --window <hwnd>|--screen --out <png> [--json]
     eyes detect --window <hwnd> [--restore] [--pretty] [--name-contains <str>]
                 [--control-type <str>] [--regex <re>]
@@ -35,6 +36,7 @@ from openeyes.cli.output import emit_error, emit_json, render_table, wants_json
 from openeyes.core.actuator import click_xy, send_hotkey, type_text
 from openeyes.core.capture import capture_screen, capture_window
 from openeyes.core.coords import to_screen_point
+from openeyes.core.focus import focus_window_checked
 from openeyes.core.selector import detect_elements, find_elements
 from openeyes.core.windows import find_window, foreground_window
 
@@ -123,6 +125,301 @@ def windows_list(title_contains: str | None, class_name: str | None,
         [[w.hwnd, w.title, w.class_name, w.pid, w.x, w.y, w.w, w.h]
          for w in wins],
     )
+
+
+# ----- focus ---------------------------------------------------------------
+
+def _focus_exit_code(error_code: str | None) -> int:
+    """Map a structured focus failure onto the CLI's exit-code contract."""
+    if error_code == "INVALID_HWND":
+        return 3
+    if error_code in ("BACKEND_ERROR", "UNSUPPORTED_PLATFORM"):
+        return 4
+    return 5
+
+
+@cli.command()
+@click.option("--window", "hwnd", type=int, required=True,
+              help="target top-level hwnd (see `eyes windows list`)")
+@click.option("--dry-run", "dry_run", is_flag=True,
+              help="inspect and report without taking focus (the default); "
+                   "accepted so scripts can say it out loud")
+@click.option("--go", "go", is_flag=True,
+              help="actually call the focus primitive. Default is dry-run.")
+@json_option
+def focus(hwnd: int, dry_run: bool, go: bool, as_json: bool) -> None:
+    """Bring an existing top-level window to the foreground, verifiably.
+
+    Dry-run by default. ``--go`` calls the existing OpenEyes focus
+    primitive, then reads the foreground again. ``focused`` is true only
+    when the target is observed in front; a primitive that returns true
+    but loses the foreground is reported as FOCUS_STOLEN.
+    """
+    report = focus_window_checked(hwnd, dry_run=not (go and not dry_run))
+    if as_json or wants_json():
+        emit_json(report)
+    elif report["ok"]:
+        if report["reason"] == "dry-run":
+            click.echo(
+                f"[dry-run] would focus hwnd={hwnd} "
+                f"(foreground_before={report['foreground_before']}, "
+                f"target_already_focused={str(report['focused']).lower()})"
+            )
+        elif report["reason"] == "already-foreground":
+            click.echo(f"hwnd={hwnd} is already foreground")
+        else:
+            click.echo(
+                f"focused hwnd={hwnd} "
+                f"(foreground {report['foreground_before']} -> "
+                f"{report['foreground_after']})"
+            )
+    else:
+        click.echo(f"error: {report['error']}", err=True)
+    if not report["ok"]:
+        sys.exit(_focus_exit_code(report["error_code"]))
+
+
+# ----- anchors --------------------------------------------------------------
+
+def _anchor_exit_code(error_code: str | None, operation: str = "find") -> int:
+    """Map an anchor receipt onto the CLI exit-code contract."""
+    if error_code in {"ANCHOR_NOT_FOUND", "ANCHOR_AMBIGUOUS", "ANCHOR_WEAK"}:
+        return 3
+    if error_code == "INVALID_HWND":
+        return 5 if operation == "click" else 3
+    if error_code in {"FOREGROUND_MISMATCH", "WINDOW_MINIMIZED",
+                     "TARGET_OCCLUDED", "CLICK_FAILED"}:
+        return 5
+    if error_code == "FRAME_UNSTABLE":
+        return 5
+    if error_code in {"ANCHOR_STORE_NOT_FOUND", "ANCHOR_TEMPLATE_MISSING",
+                     "CAPTURE_FAILED"}:
+        return 4
+    return 5 if operation == "click" else 4
+
+
+def _anchor_payload_error(payload: dict, *, operation: str) -> None:
+    """Emit a structured anchor failure, preserving checks and hits."""
+    message = payload.get("error") or payload.get("reason") or "anchor operation failed"
+    extra = {key: value for key, value in payload.items()
+             if key not in {"ok", "error"}}
+    emit_error(str(message), code=_anchor_exit_code(payload.get("error_code"), operation),
+               **extra)
+
+
+@cli.group()
+def anchor() -> None:
+    """Persistent OpenCV template anchors."""
+
+
+@anchor.command("list")
+@click.option("--store", default=None,
+              help="anchor store root (default: $OPENEYES_ANCHOR_STORE or ~/.codex-home/anchors)")
+@click.option("--app", default=None, help="app profile; omit to list every app")
+@json_option
+def anchor_list(store: str | None, app: str | None, as_json: bool) -> None:
+    """List anchor entries from one or all app profiles."""
+    from openeyes.backends import anchor as anchor_backend
+
+    root = store or str(anchor_backend.default_store())
+    try:
+        entries = anchor_backend.list_anchors(root, app)
+    except (anchor_backend.AnchorStoreError, ValueError) as exc:
+        emit_error(f"could not read anchor store {root}: {exc}", code=4, store=root)
+        return
+    payload = {"ok": True, "store": root, "app": app,
+               "count": len(entries), "anchors": entries}
+    if as_json or wants_json():
+        emit_json(payload)
+        return
+    render_table(
+        ["app", "name", "score", "strength", "rect", "theme", "file"],
+        [[item.get("app"), item.get("name"), item.get("score"),
+          item.get("strength"), item.get("rect_window"), item.get("theme"),
+          item.get("file")] for item in entries],
+    )
+
+
+@anchor.command("find")
+@click.option("--window", "hwnd", type=int, default=0,
+              help="hwnd to capture live; omit when using --image")
+@click.option("--image", type=click.Path(exists=True, dir_okay=False), default=None,
+              help="match a saved screenshot instead of a live window")
+@click.option("--name", "anchor_name", required=True, help="anchor name in the manifest")
+@click.option("--store", default=None)
+@click.option("--app", default=None)
+@click.option("--threshold", type=float, default=0.80, show_default=True)
+@click.option("--min-score", type=float, default=None,
+              help="raise the acceptance floor above --threshold")
+@click.option("--weak-support", is_flag=True,
+              help="accept a unique 0.80-0.92 hit as weak evidence")
+@click.option("--check-frame", "check_frame", is_flag=True,
+              help="require three consecutive frames to agree before matching")
+@click.option("--scale-product", type=float, default=None,
+              help="current system-scale x deviceScaleFactor x zoomLevel")
+@click.option("--color-theme", default=None,
+              help="prefer anchors captured with this color theme")
+@json_option
+def anchor_find(hwnd: int, image: str | None, anchor_name: str, store: str | None,
+                app: str | None, threshold: float, min_score: float | None,
+                weak_support: bool, check_frame: bool,
+                scale_product: float | None, color_theme: str | None,
+                as_json: bool) -> None:
+    """Find an anchor in a live window or a saved screenshot. Read-only."""
+    from openeyes.backends import anchor as anchor_backend
+    from openeyes.core.anchors import AnchorUnavailable
+
+    if not hwnd and not image:
+        raise click.UsageError("anchor find needs --window or --image")
+    if image and check_frame:
+        raise click.UsageError(
+            "--check-frame needs a live window; frame stability is not "
+            "applicable to --image"
+        )
+    root = store or str(anchor_backend.default_store())
+    try:
+        if image:
+            report = anchor_backend.find_anchor_in_image(
+                image, root, anchor_name, app=app, threshold=threshold,
+                min_score=min_score, weak_support=weak_support,
+                scale_product=scale_product, color_theme=color_theme)
+        else:
+            report = anchor_backend.find_anchor(
+                hwnd, root, anchor_name, app=app, threshold=threshold,
+                min_score=min_score, weak_support=weak_support,
+                check_frame=check_frame, scale_product=scale_product,
+                color_theme=color_theme)
+    except AnchorUnavailable as exc:
+        emit_error(str(exc), code=4, hwnd=hwnd, anchor=anchor_name)
+        return
+    except Exception as exc:
+        emit_error(f"could not find anchor {anchor_name!r}: {exc}", code=4,
+                   hwnd=hwnd, anchor=anchor_name)
+        return
+    if not report.get("ok"):
+        _anchor_payload_error(report, operation="find")
+        return
+    if as_json or wants_json():
+        emit_json(report)
+        return
+    screen = (f" screen={report['screen_point']}"
+              if report.get("screen_point") else "")
+    frame = (" frame_stability=not-applicable-offline"
+             if report.get("frame_stability") == "not-applicable-offline" else "")
+    click.echo(
+        f"{anchor_name}: score={report['score']:.3f} "
+        f"strength={report['strength']} center={report['center']}{screen}{frame}"
+    )
+
+
+@anchor.command("capture")
+@click.option("--window", "hwnd", type=int, required=True)
+@click.option("--name", "anchor_name", required=True)
+@click.option("--rect", "rect", required=True,
+              help="window-relative crop x,y,w,h")
+@click.option("--store", default=None)
+@click.option("--app", required=True)
+@click.option("--theme", default=None)
+@click.option("--scale-product", type=float, default=None)
+@click.option("--device-scale-factor", type=float, default=None)
+@click.option("--zoom-level", type=float, default=None)
+@click.option("--color-theme", default=None)
+@click.option("--icon-theme", default=None)
+@click.option("--layout-signature", default=None)
+@json_option
+def anchor_capture(hwnd: int, anchor_name: str, rect: str, store: str | None,
+                   app: str, theme: str | None, scale_product: float | None,
+                   device_scale_factor: float | None, zoom_level: float | None,
+                   color_theme: str | None, icon_theme: str | None,
+                   layout_signature: str | None, as_json: bool) -> None:
+    """Capture a crop, verify it against a second capture, and save it."""
+    from openeyes.backends import anchor as anchor_backend
+    from openeyes.core.anchors import AnchorUnavailable
+
+    root = store or str(anchor_backend.default_store())
+    try:
+        report = anchor_backend.capture_anchor(
+            hwnd, anchor_name, rect, root, app, theme=theme,
+            scale_product=scale_product, device_scale_factor=device_scale_factor,
+            zoom_level=zoom_level, color_theme=color_theme,
+            icon_theme=icon_theme, layout_signature=layout_signature)
+    except anchor_backend.FrameUnstableError as exc:
+        emit_error(str(exc), code=5, hwnd=hwnd, anchor=anchor_name,
+                   error_code=anchor_backend.ERROR_FRAME_UNSTABLE,
+                   frame_stability=exc.stability)
+        return
+    except anchor_backend.AnchorVerificationError as exc:
+        emit_error(str(exc), code=5, hwnd=hwnd, anchor=anchor_name,
+                   error_code=anchor_backend.ERROR_ANCHOR_VERIFY_FAILED)
+        return
+    except (AnchorUnavailable, anchor_backend.AnchorStoreError,
+            FileNotFoundError, OSError) as exc:
+        emit_error(f"could not capture anchor {anchor_name!r}: {exc}", code=4,
+                   hwnd=hwnd, anchor=anchor_name)
+        return
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+    if as_json or wants_json():
+        emit_json(report)
+        return
+    click.echo(
+        f"captured {report['app']}/{report['anchor']} "
+        f"score={report['score']:.3f} -> {report['path']}"
+    )
+
+
+@anchor.command("click")
+@click.option("--window", "hwnd", type=int, required=True)
+@click.option("--name", "anchor_name", required=True)
+@click.option("--store", default=None)
+@click.option("--app", default=None)
+@click.option("--threshold", type=float, default=0.80, show_default=True)
+@click.option("--min-score", type=float, default=None)
+@click.option("--weak-support", is_flag=True)
+@click.option("--check-frame", "check_frame", is_flag=True,
+              help="require stable frames before clicking")
+@click.option("--scale-product", type=float, default=None)
+@click.option("--color-theme", default=None)
+@click.option("--button", type=click.Choice(["left", "right", "middle"]),
+              default="left")
+@click.option("--double", is_flag=True)
+@click.option("--dry-run", "dry_run", is_flag=True,
+              help="inspect and run the four safety checks without clicking (default)")
+@click.option("--go", "go", is_flag=True, help="actually click after every check passes")
+@json_option
+def anchor_click(hwnd: int, anchor_name: str, store: str | None, app: str | None,
+                threshold: float, min_score: float | None, weak_support: bool,
+                check_frame: bool, scale_product: float | None,
+                color_theme: str | None, button: str, double: bool,
+                dry_run: bool, go: bool,
+                as_json: bool) -> None:
+    """Click an anchor only after the foreground / window / occlusion gates."""
+    from openeyes.backends import anchor as anchor_backend
+    from openeyes.core.anchors import AnchorUnavailable
+
+    root = store or str(anchor_backend.default_store())
+    try:
+        receipt = anchor_backend.click_anchor(
+            hwnd, root, anchor_name, app=app, threshold=threshold,
+            min_score=min_score, dry_run=not (go and not dry_run),
+            weak_support=weak_support, check_frame=check_frame,
+            scale_product=scale_product, color_theme=color_theme,
+            button=button, double=double)
+    except AnchorUnavailable as exc:
+        emit_error(str(exc), code=4, hwnd=hwnd, anchor=anchor_name)
+        return
+    except Exception as exc:
+        emit_error(f"could not click anchor {anchor_name!r}: {exc}", code=5,
+                   hwnd=hwnd, anchor=anchor_name)
+        return
+    if not receipt.get("ok"):
+        _anchor_payload_error(receipt, operation="click")
+        return
+    if as_json or wants_json():
+        emit_json(receipt)
+        return
+    action = "would click" if receipt["dry_run"] else "clicked"
+    click.echo(f"{action} {anchor_name} at {receipt['target']['screen_point']}")
 
 
 # ----- capture --------------------------------------------------------------
@@ -562,7 +859,8 @@ def type(text: str, interval: float, as_json: bool) -> None:
     try:
         type_text(text, interval=interval)
     except ValueError as exc:
-        emit_error(str(exc), code=4, hint="use clipboard paste for non-ASCII text")
+        emit_error(str(exc), code=4,
+                   hint="the target may refuse synthetic input; try clipboard paste")
         return
     if as_json:
         emit_json({"ok": True, "typed_chars": len(text)})

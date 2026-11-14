@@ -1,6 +1,6 @@
 # OpenEyes MCP capability contract
 
-This contract describes the 19 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, the two act-then-prove tools `click_by_id` / `act_and_verify`, and the read-only `native_surfaces` discovery tool). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
+This contract describes the 20 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, the two act-then-prove tools `click_by_id` / `act_and_verify`, the read-only `native_surfaces` discovery tool, and `record_replay`). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
 
 ## Safety classes
 

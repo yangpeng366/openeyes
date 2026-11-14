@@ -391,7 +391,7 @@ openeyes/
 │   │   ├── generator.py    # Path B: prompt → trajectory (LLM-driven)
 │   │   ├── prompt_template.py
 │   │   └── export/         # codex_skill / action_receipt / opencua exporters
-│   └── mcp/               # MCP server — 19 tools (7 native + 6 browser + 2 structured-first + 1 lifecycle + 2 act-then-prove + 1 discovery)
+│   └── mcp/               # MCP server — 20 tools (7 native + 6 browser + 2 structured-first + 1 lifecycle + 2 act-then-prove + 1 discovery + 1 record-replay)
 │       └── server.py
 ├── docs/
 │   ├── architecture.md
