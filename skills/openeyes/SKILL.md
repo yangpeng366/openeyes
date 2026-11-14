@@ -88,6 +88,7 @@ eyes focus --window <hwnd> --restore --go --json   # un-minimize first, then ver
   `last` holding the final frame), not an exception. Waiting never sends input,
   so it cannot resend a task by itself; pair it with the send receipt.
 - Read-only by construction: neither verb clicks, focuses or writes the store.
+- One widget, two states: capture the same control in each state (Trae: arrow = idle, filled square = running). The two anchors are mutually exclusive, so one frame settles the question without reading small labels.
 
 - Store: `C:\Users\47037\.codex-home\anchors\<app>\` (`manifest.json` + `<name>.png`).
   Override with `--store` or `OPENEYES_ANCHOR_STORE`. PNGs are raw crops: no scaling,
