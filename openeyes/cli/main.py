@@ -190,12 +190,20 @@ def focus(hwnd: int, dry_run: bool, go: bool, restore: bool,
 # ----- scene ----------------------------------------------------------------
 
 def _scene_exit_code(error_code: str | None) -> int:
-    """Map a scene receipt onto the CLI exit-code contract."""
-    if error_code == "INVALID_HWND":
+    """Map a scene receipt onto the CLI exit-code contract.
+
+    2 = the caller's arguments are wrong, 3 = nothing to read there,
+    4 = this machine could not read it, 5 = the window is not in a state
+    that can be read (minimised, behind another window).
+    """
+    if error_code in {"INVALID_SOURCE", "INVALID_REGION"}:
+        return 2
+    if error_code in {"INVALID_HWND", "UIA_EMPTY", "SCENE_FILTERED_EMPTY",
+                     "UIA_UNAVAILABLE"}:
         return 3
     if error_code in {"OCR_UNAVAILABLE", "CAPTURE_FAILED"}:
         return 4
-    if error_code == "WINDOW_MINIMIZED":
+    if error_code in {"WINDOW_MINIMIZED", "UNVERIFIED_FRAME"}:
         return 5
     return 4
 
@@ -205,11 +213,12 @@ def _scene_exit_code(error_code: str | None) -> int:
               help="target top-level hwnd (see `eyes windows list`)")
 @click.option("--source", type=click.Choice(["auto", "uia", "ocr"]),
               default="auto", show_default=True,
-              help="auto = accessibility tree first, OCR as the fallback")
+              help="auto = accessibility tree plus OCR; uia = tree only (never OCR); "
+                   "ocr = pixels only")
 @click.option("--max-items", "max_items", type=int, default=250,
               show_default=True, help="cap on the elements reported")
 @click.option("--no-shapes", "no_shapes", is_flag=True,
-              help="skip the OpenCV shape pass")
+              help="skip the OpenCV shape pass (and the capture it would need)")
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]),
               default="text", show_default=True,
               help="text digest (default) or the full scene")
@@ -221,6 +230,20 @@ def scene(hwnd: int, source: str, max_items: int, no_shapes: bool, fmt: str,
     Reads the accessibility tree when the app has one, OCR when it does not,
     and OpenCV shapes for the controls that carry no text.  The answer is a
     list of elements with names and coordinates - not a picture.  Read-only.
+
+    Every bbox/center is window-relative physical pixels, in the grid
+    `window.size` describes (always the window rectangle; a frame captured at
+    another pixel density is resampled into it); the digest header prints the
+    window's screen origin so a centre can be turned into an absolute point by
+    adding it once.  `--source uia`
+    reads the accessibility tree only: OCR is never initialised, not even as
+    a screen-grab fallback, and no frame is grabbed or OpenCV shape reported -
+    visual features belong to a pixel tier.  `--source ocr` reads pixels only
+    and never quietly switches to the tree.  A screen
+    grab that cannot be proven to be this window is never read (its OCR is
+    suppressed), and a failure prints `失败 <error_code>: <reason>` and exits
+    non-zero (2 bad arguments, 3 nothing there, 4 cannot read, 5 window
+    state).
     """
     from openeyes.core.scene import describe_window
     from openeyes.core.scene_text import render_scene

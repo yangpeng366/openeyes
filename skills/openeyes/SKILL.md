@@ -62,10 +62,17 @@ eyes scene --window 21174116 --source ocr         # skip the accessibility tree
 ```
 
 ```
-窗口 Trae CN 1886x1183 来源=ocr 元素=42
+窗口 Trae CN 1886x1183 @(59,80) 来源=ocr 像素=printwindow 可信=是 元素=42
 [按钮] 新任务 @(77,167) 0.99
 [文本] SOLO @(47,98) 0.99
 ```
+
+The header carries the three coordinate facts: `1886x1183` is the grid every `bbox` /
+`center` is measured in (always the window rectangle, never the frame's own density),
+`@(59,80)` is where that grid sits on screen, and `像素=` /
+`可信=` say which capture path ran and whether its pixels could be proven to be this
+window's. A failed read prints a second line `失败 <error_code>: <reason>` instead of a
+silently empty list.
 
 - Degradation chain `uia -> ocr -> opencv`: the accessibility tree first (it carries
   real names), OCR for the text of a canvas app, OpenCV contours for the controls that
@@ -73,13 +80,43 @@ eyes scene --window 21174116 --source ocr         # skip the accessibility tree
   never reported twice.
 - The frame is taken with `PrintWindow` when the app allows it, so the window may sit
   behind other windows (verified on Trae CN); otherwise it falls back to a screen grab,
-  which copies whatever is on top.  `capture.method` in the JSON says which path ran.
-- Read-only: it never clicks, types or focuses.  The coordinates are window-relative;
-  `eyes click --window H --x N --y N --go` is the acting counterpart.
-- Shape detection stops at `panel / square / checkbox / icon / bar`.  It is evidence, not
-  meaning: what a thing *is* stays the model's call.
+  which copies whatever is on top.  `capture.method` in the JSON says which path ran.  A
+  frame is only taken when a pixel tier (`auto` / `ocr`) will read it, so `--source uia`
+  captures nothing at all, whatever `--no-shapes` says.  `capture.size` is the frame's own
+  pixel size; when it differs from `window.size` the frame's boxes (OCR / OpenCV) are
+  resampled into the window grid, so one button is not reported twice at two scales.
+- A screen grab is read only when it can be proven to be this window's pixels: on screen,
+  in the foreground, *and* a 6x6 `WindowFromPoint` probe finds no other window covering
+  it.  Foreground alone is not proof - a topmost panel can cover a foreground window.  If
+  the probe cannot run, the frame counts as unproven.  Otherwise the frame is dropped,
+  OCR / OpenCV results are suppressed (`capture.verified=false`,
+  `capture.suppressed=["ocr","opencv"]`) and the read fails with
+  `error_code=UNVERIFIED_FRAME` - a background window's neighbour is never reported as
+  this page.  The same check gates the automatic PrintWindow-to-screen fallback.
+- `--source uia` reads the accessibility tree and nothing else: no OCR, no capture, no
+  OpenCV shapes (a requested shape pass only adds a `shapes-skipped` note), and an
+  unreadable `PrintWindow` frame does not authorise a screen-OCR fallback.  Ask for
+  `--source auto` / `ocr` when visual features are wanted.
+  `--source ocr` is the mirror image: pixels only, no hidden UIA fallback - when the OCR
+  engine is missing it reports `ok=false` / `error_code=OCR_UNAVAILABLE` instead of quietly
+  switching tiers.
+- Read-only: it never clicks, types or focuses.  A `bbox` / `center` is window-relative
+  pixels; the header's `@(x,y)` is the one window origin to add, and `eyes click --window H
+  --x X --y Y --go` wants absolute screen pixels - so pass `origin.x + center.x` /
+  `origin.y + center.y`.  Adding the origin a second time (the old bug: the backend also
+  returned absolute pixels) lands the click one whole window away.
+- Shape detection reports `bar / panel / checkbox / icon / caret`. It is evidence, not
+  meaning: what a thing *is* stays the model's call, and an `opencv` element is always
+  `interactive=false` - a contour proves geometry, not clickability.
+- Failures are named, not merged: `INVALID_SOURCE` / `INVALID_REGION` (bad arguments),
+  `UIA_EMPTY` (no tree content), `SCENE_FILTERED_EMPTY` (tree nodes all filtered),
+  `UIA_UNAVAILABLE` (tree cannot be read), `CAPTURE_FAILED` (no frame), `OCR_UNAVAILABLE`
+  (no engine), `UNVERIFIED_FRAME` (pixels not provably this window), `WINDOW_MINIMIZED` /
+  `INVALID_HWND`.  `eyes scene` exits 2 / 3 / 4 / 5 accordingly.
 - OCR needs the optional `rapidocr-onnxruntime` package (`pip install -e ".[ocr]"`); without
-  it the scene degrades to the accessibility tree and says so in `notes`.
+  it a `--source auto` scene keeps whatever the accessibility tree gave and notes
+  `ocr-unavailable`, while `--source ocr` fails with `error_code=OCR_UNAVAILABLE` (no
+  silent fallback).
 
 For apps with no usable UIA tree and no CDP page (Electron / VSCode forks such as
 Trae CN), OpenEyes keeps a persistent template library and a guarded pixel click.

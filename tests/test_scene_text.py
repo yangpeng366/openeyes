@@ -51,9 +51,33 @@ def test_header_and_first_element_line_are_exact():
     label = _element("label", "SOLO", 30, 90, w=34, h=16, score=0.99,
                      center={"x": 47, "y": 98})
     lines = render_scene(_scene(button, label)).splitlines()
-    assert lines[0] == "窗口 Trae CN 1886x1183 来源=ocr 元素=2"
+    assert lines[0] == "窗口 Trae CN 1886x1183 来源=ocr 像素=无 元素=2"
     assert lines[1] == "[文本] SOLO @(47,98) 0.99"
     assert lines[2] == "[按钮] 新任务 @(77,167) 0.99"
+
+
+def test_header_carries_the_window_screen_origin():
+    """A bbox is window-relative; the header names the one origin to add."""
+    scene = _scene(_element("label", "SOLO", 30, 90),
+                   window={"title": "Trae CN", "size": [800, 600],
+                           "rect": [59, 80, 859, 680]})
+
+    assert render_scene(scene).splitlines()[0] == (
+        "窗口 Trae CN 800x600 @(59,80) 来源=ocr 像素=无 元素=1")
+
+
+def test_header_names_the_capture_path_and_its_occlusion():
+    scene = _scene(_element("label", "SOLO", 30, 90),
+                   capture={"method": "printwindow", "occluded": False,
+                            "verified": True})
+
+    assert "像素=printwindow 可信=是" in render_scene(scene).splitlines()[0]
+
+    screen = _scene(_element("label", "SOLO", 30, 90),
+                    capture={"method": "screen", "occluded": True,
+                             "verified": False})
+    header = render_scene(screen).splitlines()[0]
+    assert "像素=screen 遮挡=是 可信=否" in header
 
 
 def test_kind_names_cover_all_eight_categories():
@@ -83,12 +107,36 @@ def test_whitespace_only_text_is_treated_as_empty():
 
 
 def test_empty_scene_does_not_raise():
-    assert render_scene({}) == "窗口 元素=0"
+    assert render_scene({}) == "窗口 像素=无 元素=0"
 
 
 def test_missing_fields_fall_back_to_class_name_and_no_size():
     scene = {"window": {"class_name": "Notepad"}, "elements": None}
-    assert render_scene(scene) == "窗口 Notepad 元素=0"
+    assert render_scene(scene) == "窗口 Notepad 像素=无 元素=0"
+
+
+def test_a_failure_shows_its_code_and_reason():
+    scene = {
+        "ok": False,
+        "source": "",
+        "window": {"title": "Trae CN", "size": [800, 600],
+                   "rect": [59, 80, 859, 680]},
+        "capture": {"method": None, "occluded": False, "verified": None},
+        "elements": [],
+        "error_code": "CAPTURE_FAILED",
+        "reason": "capture-failed: RuntimeError: boom",
+    }
+    lines = render_scene(scene).splitlines()
+
+    assert lines[0] == "窗口 Trae CN 800x600 @(59,80) 像素=无 元素=0"
+    assert lines[1] == "失败 CAPTURE_FAILED: capture-failed: RuntimeError: boom"
+
+
+def test_a_failure_without_a_reason_still_names_the_code():
+    scene = {"window": {"size": [10, 10]}, "elements": [],
+             "error_code": "UIA_EMPTY"}
+
+    assert render_scene(scene).splitlines()[1] == "失败 UIA_EMPTY"
 
 
 def test_elements_are_sorted_by_bbox_top_then_left():

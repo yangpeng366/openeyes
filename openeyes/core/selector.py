@@ -52,11 +52,19 @@ def _window_origin(hwnd: int) -> tuple[int, int]:
     The UIA backend measures *inside* the window; ``click_xy`` speaks
     absolute screen pixels. Reading the rectangle is the only way back
     across that gap, and it is read here - at the click - rather than
-    cached from a capture that may be stale by now.
+    cached from a capture that may be stale by now.  An unreadable
+    rectangle raises ``WindowOriginUnavailable``: guessing (0, 0) would
+    click one whole window away.
     """
-    import win32gui
-    left, top, _right, _bottom = win32gui.GetWindowRect(hwnd)
-    return int(left), int(top)
+    from openeyes.backends.uia import WindowOriginUnavailable, window_origin
+
+    origin = window_origin(hwnd)
+    if origin is None:
+        raise WindowOriginUnavailable(
+            f"GetWindowRect failed for hwnd={hwnd}; the window-relative "
+            "element centre cannot be turned into a screen point"
+        )
+    return origin
 
 
 def click_by_selector(hwnd: int, *, name_contains: str | None = None,

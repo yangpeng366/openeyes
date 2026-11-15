@@ -136,8 +136,46 @@ def _call(x):
     return int(x() if callable(x) else x)
 
 
+class WindowOriginUnavailable(RuntimeError):
+    """The window rectangle could not be read.
+
+    Element coordinates are window-relative by contract, so without the
+    window's screen origin the subtraction cannot be done.  Returning
+    absolute pixels and calling them relative (or silently subtracting
+    (0, 0), which is the same thing) would put every consumer one window
+    away; the walk therefore refuses instead.
+    """
+
+
+def window_origin(hwnd: int) -> tuple[int, int] | None:
+    """The window's top-left corner in absolute screen pixels.
+
+    UI Automation rectangles are absolute screen pixels, while the element
+    schema (``openeyes.core.schema.Element.bbox``) and
+    ``openeyes.core.coords`` both define the uia backend's space as
+    window-relative.  Reading the corner once per walk is what reconciles
+    the two; skipping it makes every consumer that adds the origin back
+    (the CLI and ``click_by_selector``) add it twice.
+
+    ``None`` when Windows cannot report the rectangle: callers must treat
+    that as "coordinates unavailable", never as an origin of (0, 0).
+    """
+    try:
+        import win32gui
+
+        left, top, _right, _bottom = win32gui.GetWindowRect(int(hwnd))
+        return int(left), int(top)
+    except Exception:
+        return None
+
+
 def _walk(node, depth: int, max_depth: int, out: list[Element],
           ox: int = 0, oy: int = 0, parent_types: list[str] | None = None) -> None:
+    """Collect elements below *node*, in window-relative pixels.
+
+    ``ox``/``oy`` are the window origin on screen; every absolute UIA
+    rectangle is shifted by them exactly once here.
+    """
     if depth > max_depth:
         return
     name = (node.name or "").strip()
@@ -188,8 +226,14 @@ def detect_elements(hwnd: int, *, restore: bool = False,
             pass
     d = Desktop(backend="uia")
     w = d.window(handle=hwnd)
+    origin = window_origin(hwnd)
+    if origin is None:
+        raise WindowOriginUnavailable(
+            f"GetWindowRect failed for hwnd={hwnd}; element coordinates "
+            "cannot be made window-relative"
+        )
     out: list[Element] = []
-    _walk(w.element_info, 0, max_depth, out)
+    _walk(w.element_info, 0, max_depth, out, origin[0], origin[1])
     return out
 
 

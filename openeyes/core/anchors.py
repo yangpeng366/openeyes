@@ -32,7 +32,6 @@ AMBIGUITY_MARGIN = 0.06
 # templates, so the chain limit is 1.35; a 1.4x box is a different instance
 # and stays separate.
 CROSS_SCALE_SIZE_RATIO = 1.35
-CROSS_SCALE_SIZE_RATIO = 1.35
 # Centre tolerance across scale steps, as a fraction of the smaller box.
 CROSS_SCALE_CENTRE_FRACTION = 0.25
 
@@ -111,7 +110,19 @@ def _as_rgb_array(image: Any) -> np.ndarray:
 def _gray(image: Any) -> np.ndarray:
     cv2 = _cv2()
     rgb = _as_rgb_array(image)
-    return cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+
+
+def _bounded(result: np.ndarray) -> np.ndarray:
+    """Clamp matchTemplate output to the NCC range [-1, 1].
+
+    TM_CCOEFF_NORMED is bounded by [-1, 1] in theory, but zero-variance
+    source windows produce NaN, and numerical overflow can yield Inf.
+    Non-finite values are invalid correlation evidence and are mapped to a
+    neutral zero rather than being promoted to a perfect match.
+    """
+    cleaned = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.clip(cleaned, -1.0, 1.0)
 
 
 def _scale_values(scales: Sequence[float] | float) -> list[float]:
@@ -256,14 +267,22 @@ def match(
         interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
         resized = cv2.resize(target, (width, height), interpolation=interpolation)
         result = cv2.matchTemplate(source, resized, cv2.TM_CCOEFF_NORMED)
-        ys, xs = np.where(np.isfinite(result) & (result >= float(threshold)))
+        # Local-maxima suppression: keep only peak pixels, not every
+        # above-threshold pixel.  Collapses each match cluster before
+        # the Python-level NMS runs, cutting O(n^2) dedup work.
+        result_clean = _bounded(result)
+        dilated = cv2.dilate(
+            result_clean, np.ones((3, 3), dtype=np.float32))
+        peaks = ((result_clean == dilated)
+                 & (result_clean >= float(threshold)))
+        ys, xs = np.where(peaks)
         for y, x in zip(ys.tolist(), xs.tolist(), strict=True):
             candidates.append({
                 "x": int(x),
                 "y": int(y),
                 "w": int(width),
                 "h": int(height),
-                "score": float(result[y, x]),
+                "score": float(np.clip(result_clean[y, x], -1.0, 1.0)),
                 "scale": round(float(scale), 2),
             })
     return nms(candidates, iou_threshold=nms_iou)
@@ -293,9 +312,8 @@ def _best_match_score(
         interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
         resized = cv2.resize(target, (width, height), interpolation=interpolation)
         result = cv2.matchTemplate(source, resized, cv2.TM_CCOEFF_NORMED)
-        finite = result[np.isfinite(result)]
-        if finite.size:
-            best = max(best, float(np.max(finite)))
+        _, max_val, _, _ = cv2.minMaxLoc(_bounded(result))
+        best = max(best, float(np.clip(max_val, -1.0, 1.0)))
     return best
 
 

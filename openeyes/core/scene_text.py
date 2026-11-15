@@ -52,6 +52,12 @@ def _window(scene: dict[str, Any]) -> dict[str, Any]:
     return window if isinstance(window, dict) else {}
 
 
+def _capture(scene: dict[str, Any]) -> dict[str, Any]:
+    """The scene's capture receipt, or an empty one when it is missing."""
+    capture = scene.get("capture")
+    return capture if isinstance(capture, dict) else {}
+
+
 def _title(window: dict[str, Any]) -> str:
     """The window title, falling back to the class name, else empty."""
     for key in ("title", "class_name"):
@@ -72,8 +78,49 @@ def _size(window: dict[str, Any]) -> str:
     return ""
 
 
+def _origin(window: dict[str, Any]) -> str:
+    """The window's top-left corner on screen, as ``@(<x>,<y>)``.
+
+    A bbox in the scene is window-relative, so this is the one number a
+    reader needs to turn a centre into an absolute screen point - and the
+    only origin that may be added; adding a second one is how a click miss.
+    """
+    rect = window.get("rect")
+    if not isinstance(rect, (list, tuple)) or len(rect) < 2:
+        return ""
+    left = _number(rect[0])
+    top = _number(rect[1])
+    if left is None or top is None:
+        return ""
+    return f"@({_integer(left)},{_integer(top)})"
+
+
+def _pixel_parts(scene: dict[str, Any]) -> list[str]:
+    """Where the pixels came from and whether they can be trusted.
+
+    ``像素`` names the capture path; ``遮挡`` is only meaningful for a screen
+    grab (the path that copies whatever is on top); ``可信`` is false when the
+    frame could not be proven to be this window, in which case its text was
+    suppressed rather than reported as this page.
+    """
+    capture = _capture(scene)
+    method = capture.get("method")
+    if not isinstance(method, str) or not method.strip():
+        return ["像素=无"]
+    name = method.strip()
+    parts = [f"像素={name}"]
+    if name == "screen":
+        parts.append("遮挡=" + ("是" if capture.get("occluded") else "否"))
+    verified = capture.get("verified")
+    if verified is True:
+        parts.append("可信=是")
+    elif verified is False:
+        parts.append("可信=否")
+    return parts
+
+
 def _header(scene: dict[str, Any], count: int) -> str:
-    """Build the first line describing the window and element count."""
+    """Build the first line: window, screen origin, source, pixels, count."""
     window = _window(scene)
     parts = ["窗口"]
     title = _title(window)
@@ -82,11 +129,25 @@ def _header(scene: dict[str, Any], count: int) -> str:
     size = _size(window)
     if size:
         parts.append(size)
+    origin = _origin(window)
+    if origin:
+        parts.append(origin)
     source = scene.get("source")
     if isinstance(source, str) and source.strip():
         parts.append(f"来源={source.strip()}")
+    parts.extend(_pixel_parts(scene))
     parts.append(f"元素={count}")
     return " ".join(parts)
+
+
+def _failure_line(scene: dict[str, Any]) -> str | None:
+    """The ``失败 <code>: <reason>`` line, or None for a readable scene."""
+    code = scene.get("error_code")
+    if not isinstance(code, str) or not code.strip():
+        return None
+    reason = scene.get("reason")
+    detail = reason.strip() if isinstance(reason, str) else ""
+    return f"失败 {code.strip()}" + (f": {detail}" if detail else "")
 
 
 def _elements(scene: dict[str, Any]) -> list[dict[str, Any]]:
@@ -179,17 +240,23 @@ def render_scene(scene: dict[str, Any], *, max_lines: int = 200,
                  max_chars: int = 6000) -> str:
     """Render ``scene`` as a compact, text-only digest.
 
-    The first line describes the window; each following line describes one
-    element in reading order ``(y, x)``. ``max_lines`` bounds the header
-    plus element lines and ``max_chars`` bounds their joined length; when
-    either is exceeded the remaining elements are dropped and one extra
-    line reports how many lines and characters were omitted. A malformed
-    or empty scene still produces a readable header.
+    The first line describes the window: title, size, the window's origin on
+    screen, the tier and the capture path, plus whether the pixels could be
+    trusted. Each following line describes one element in reading order
+    ``(y, x)``. When the scene failed, the second line is
+    ``失败 <error_code>: <reason>``. ``max_lines`` bounds the header plus
+    element lines and ``max_chars`` bounds their joined length; when either
+    is exceeded the remaining elements are dropped and one extra line reports
+    how many lines and characters were omitted. A malformed or empty scene
+    still produces a readable header.
     """
     if not isinstance(scene, dict):
         scene = {}
     elements = _elements(scene)
     lines = [_header(scene, len(elements))]
+    failure = _failure_line(scene)
+    if failure:
+        lines.append(failure)
     limit_lines = max(1, max_lines)
     limit_chars = max(1, max_chars)
     ordered = sorted(elements, key=_sort_key)

@@ -734,18 +734,38 @@ async def list_tools() -> list[Tool]:
                         "coordinates plus a text digest. Use it when the "
                         "target has no usable accessibility tree (Electron / "
                         "canvas apps) or when you cannot look at a picture. "
-                        "Read-only: it never clicks or types, and the "
-                        "window may sit behind other windows.",
+                        "Every bbox/center is window-relative physical "
+                        "pixels in the grid window.size describes, so a "
+                        "center is a valid click point inside the window; "
+                        "the text digest prints the window's screen origin "
+                        "(@x,y), so absolute = origin + center, added once. "
+                        "source=uia reads the accessibility tree only and "
+                        "never runs OCR; source=ocr reads pixels only; auto "
+                        "blends both. capture.verified=false means the frame "
+                        "could not be proven to be this window, so its OCR "
+                        "and OpenCV results were suppressed; a failed read "
+                        "carries error_code and reason (INVALID_SOURCE, "
+                        "INVALID_REGION, CAPTURE_FAILED, OCR_UNAVAILABLE, "
+                        "UIA_EMPTY, SCENE_FILTERED_EMPTY, UNVERIFIED_FRAME). "
+                        "Read-only: it never clicks or types, "
+                        "and the window may sit behind other windows.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "hwnd": {"type": "integer"},
                     "source": {"type": "string",
                               "enum": ["auto", "uia", "ocr"],
-                              "default": "auto"},
+                              "default": "auto",
+                              "description": "uia = accessibility tree "
+                                             "only: no OCR, no capture, no "
+                                             "OpenCV shapes"},
                     "max_items": {"type": "integer", "default": 250},
                     "include_shapes": {"type": "boolean", "default": True,
-                                       "description": "also report controls that carry no text"},
+                                       "description": "also report controls "
+                                                      "that carry no text; needs "
+                                                      "a pixel tier (auto/ocr), "
+                                                      "since source=uia reads "
+                                                      "no pixels"},
                 },
                 "required": ["hwnd"],
             },
