@@ -6,6 +6,17 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Anchor capture trims the detector's padding and proves it before clicking.**
+  `eyes anchor capture --box-pad N` treats the outer `N` px of the supplied box as
+  context, drops flat border lines back to the control's real boundary
+  (`core.anchors.trim_padding`), verifies and stores the trimmed rect, and records
+  the requested pad as `box_pad` in the manifest. `eyes anchor click` now re-matches
+  the stored template on a fresh frame immediately before clicking
+  (`click_residual`): a same-window overlay leaves every hwnd gate green but breaks
+  the pixels, and that mismatch refuses the click as `TARGET_OCCLUDED`
+  (`--no-verify-residual` opts out; library callers keep the check off by default).
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

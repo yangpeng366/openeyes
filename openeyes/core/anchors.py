@@ -34,6 +34,12 @@ AMBIGUITY_MARGIN = 0.06
 CROSS_SCALE_SIZE_RATIO = 1.35
 # Centre tolerance across scale steps, as a fraction of the smaller box.
 CROSS_SCALE_CENTRE_FRACTION = 0.25
+# A padded capture is trimmed back to the control by dropping outer lines that
+# are flat and within this per-channel distance of that side's own border
+# colour. Larger values eat anti-aliased edges; smaller ones leave halo rings.
+BORDER_TRIM_TOLERANCE = 12
+# Never trim a side past this many pixels of remaining crop.
+BORDER_TRIM_MIN_SIDE = 4
 
 
 class AnchorUnavailable(RuntimeError):
@@ -123,6 +129,107 @@ def _bounded(result: np.ndarray) -> np.ndarray:
     """
     cleaned = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
     return np.clip(cleaned, -1.0, 1.0)
+
+
+def _flat_reference(line: np.ndarray, tolerance: int) -> np.ndarray | None:
+    """Mean border colour, or None when the outer line is not flat.
+
+    A line that varies along its own length is content (an icon touching the
+    edge), so that side is left untouched instead of being trimmed on a
+    guess.
+    """
+    values = line.reshape(-1, 3).astype(np.int16)
+    if int(np.max(values.max(axis=0) - values.min(axis=0))) > int(tolerance):
+        return None
+    return values.mean(axis=0)
+
+
+def _matches_reference(line: np.ndarray, reference: np.ndarray,
+                       tolerance: int) -> bool:
+    values = line.reshape(-1, 3).astype(np.int16)
+    if int(np.max(values.max(axis=0) - values.min(axis=0))) > int(tolerance):
+        return False
+    return int(np.max(np.abs(values - reference))) <= int(tolerance)
+
+
+def trim_padding(
+    image: Any,
+    pad: int,
+    *,
+    tolerance: int = BORDER_TRIM_TOLERANCE,
+    min_side: int = BORDER_TRIM_MIN_SIDE,
+) -> dict[str, Any]:
+    """Trim up to ``pad`` background pixels off each side of a padded crop.
+
+    The caller detected a control box and padded it, so the outer ``pad``
+    pixels are context, not control. Each side is trimmed one line at a time
+    while that line is flat and matches the colour of the side's own border
+    line, capped at ``pad`` and never below ``min_side``. Trimming therefore
+    stops at the control's real boundary instead of at the requested pad.
+
+    Returns the per-side trim in crop pixels plus the surviving
+    ``rect`` (``x, y, w, h`` relative to the crop), so the caller can move the
+    window-relative rect by the same offsets.
+    """
+    budget = int(pad)
+    if budget < 0:
+        raise ValueError("pad must be non-negative")
+    array = _as_rgb_array(image)
+    height, width = array.shape[:2]
+    result: dict[str, Any] = {
+        "pad": budget,
+        "left": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "rect": [0, 0, int(width), int(height)],
+        "trimmed": False,
+        "source": "no-pad" if budget == 0 else "border-flat",
+    }
+    if budget == 0 or height == 0 or width == 0:
+        return result
+
+    left, top, right, bottom = 0, 0, int(width), int(height)
+    for side in ("left", "top", "right", "bottom"):
+        if side == "left":
+            line = array[top:bottom, left]
+        elif side == "right":
+            line = array[top:bottom, right - 1]
+        elif side == "top":
+            line = array[top, left:right]
+        else:
+            line = array[bottom - 1, left:right]
+        reference = _flat_reference(line, tolerance)
+        if reference is None:
+            continue
+        for _ in range(budget):
+            if right - left <= min_side or bottom - top <= min_side:
+                break
+            if side == "left":
+                candidate = array[top:bottom, left]
+            elif side == "right":
+                candidate = array[top:bottom, right - 1]
+            elif side == "top":
+                candidate = array[top, left:right]
+            else:
+                candidate = array[bottom - 1, left:right]
+            if not _matches_reference(candidate, reference, tolerance):
+                break
+            if side == "left":
+                left += 1
+            elif side == "right":
+                right -= 1
+            elif side == "top":
+                top += 1
+            else:
+                bottom -= 1
+            result[side] += 1
+
+    result["rect"] = [int(left), int(top),
+                      int(right - left), int(bottom - top)]
+    result["trimmed"] = bool(result["left"] or result["top"]
+                             or result["right"] or result["bottom"])
+    return result
 
 
 def _scale_values(scales: Sequence[float] | float) -> list[float]:

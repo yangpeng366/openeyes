@@ -1277,3 +1277,192 @@ def test_cli_anchor_find_image_failure_json_marks_frame_stability(tmp_path):
     assert result.exit_code == 3, result.output
     payload = json.loads(result.stdout)
     assert payload["frame_stability"] == "not-applicable-offline"
+
+
+def test_trim_padding_stops_at_the_control_boundary():
+    from openeyes.core.anchors import trim_padding
+
+    control = np.stack([_texture(seed=81, height=16, width=16)] * 3, axis=-1)
+    crop = np.zeros((24, 24, 3), dtype=np.uint8)
+    crop[:, :] = (32, 34, 38)
+    crop[4:20, 4:20] = control
+
+    trim = trim_padding(Image.fromarray(crop), 4)
+
+    assert trim["left"] == trim["top"] == trim["right"] == trim["bottom"] == 4
+    assert trim["rect"] == [4, 4, 16, 16]
+    assert trim["trimmed"] is True
+    assert trim["pad"] == 4
+
+
+def test_trim_padding_stops_before_the_declared_budget():
+    """The detector may over-report its pad; the flat border ends the trim."""
+    from openeyes.core.anchors import trim_padding
+
+    control = np.stack([_texture(seed=83, height=20, width=20)] * 3, axis=-1)
+    crop = np.zeros((26, 26, 3), dtype=np.uint8)
+    crop[:, :] = (18, 20, 24)
+    crop[3:23, 3:23] = control
+
+    trim = trim_padding(Image.fromarray(crop), 6)
+
+    assert trim["rect"] == [3, 3, 20, 20]
+    assert trim["pad"] == 6
+
+
+def test_trim_padding_does_not_eat_a_flat_control_interior():
+    """A solid-fill control is flat too; only the border colour is trimable."""
+    from openeyes.core.anchors import trim_padding
+
+    crop = np.zeros((26, 26, 3), dtype=np.uint8)
+    crop[:, :] = (18, 20, 24)
+    crop[3:23, 3:23] = (70, 70, 70)
+
+    trim = trim_padding(Image.fromarray(crop), 6)
+
+    assert trim["rect"] == [3, 3, 20, 20]
+    assert trim["left"] == trim["top"] == 3
+
+
+def test_trim_padding_without_a_declared_pad_is_a_no_op():
+    from openeyes.core.anchors import trim_padding
+
+    crop = np.zeros((10, 12, 3), dtype=np.uint8)
+    crop[:, :] = (18, 20, 24)
+
+    trim = trim_padding(Image.fromarray(crop), 0)
+
+    assert trim["trimmed"] is False
+    assert trim["source"] == "no-pad"
+    assert trim["rect"] == [0, 0, 12, 10]
+
+
+def test_save_anchor_records_the_declared_box_pad(tmp_path):
+    entry = anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge",
+        Image.fromarray(_texture(seed=85)), [10, 12, 42, 34],
+        score=1.0, box_pad=3,
+    )
+
+    manifest = anchor_backend.load_store(tmp_path, "trae")
+    assert entry["box_pad"] == 3
+    assert manifest["anchors"][0]["box_pad"] == 3
+
+
+def test_capture_anchor_trims_the_pad_before_it_saves(monkeypatch, tmp_path):
+    template = _texture(seed=87, height=16, width=20)
+    first = np.full((100, 160), 30, dtype=np.uint8)
+    _paste(first, template, 44, 34)
+    _patch_live_window(monkeypatch, [
+        Image.fromarray(first), Image.fromarray(first), Image.fromarray(first)
+    ])
+
+    report = anchor_backend.capture_anchor(
+        4242, "solo_badge", [40, 30, 28, 24], tmp_path, "trae", box_pad=4
+    )
+
+    assert report["ok"] is True
+    assert report["padding_trim"]["left"] == 4
+    assert report["padding_trim"]["right"] == 4
+    assert report["rect_window"] == [44, 34, 20, 16]
+    manifest = anchor_backend.load_store(tmp_path, "trae")
+    assert manifest["anchors"][0]["rect_window"] == [44, 34, 20, 16]
+    assert manifest["anchors"][0]["box_pad"] == 4
+    assert report["frame_stability"]["stable"] is True
+
+
+@requires_cv2
+def test_click_residual_accepts_the_same_control():
+    template = _texture(seed=89, height=20, width=40)
+    frame = np.full((120, 200), 25, dtype=np.uint8)
+    _paste(frame, template, 30, 40)
+
+    residual = anchor_backend.click_residual(
+        Image.fromarray(frame), {"x": 30, "y": 40, "w": 40, "h": 20},
+        Image.fromarray(template), scale=1.0, min_score=0.92,
+    )
+
+    assert residual["checked"] is True
+    assert residual["ok"] is True
+    assert residual["reason"] == "template-agrees"
+    assert residual["overlap"] >= 0.5
+
+
+@requires_cv2
+def test_click_residual_refuses_an_in_window_overlay():
+    """A same-window popover keeps every hwnd gate green but breaks the pixels."""
+    template = _texture(seed=91, height=20, width=40)
+    frame = np.full((120, 200), 25, dtype=np.uint8)
+    _paste(frame, template, 30, 40)
+    frame[38:60, 28:60] = 240
+
+    residual = anchor_backend.click_residual(
+        Image.fromarray(frame), {"x": 30, "y": 40, "w": 40, "h": 20},
+        Image.fromarray(template), scale=1.0, min_score=0.92,
+    )
+
+    assert residual["checked"] is True
+    assert residual["ok"] is False
+    assert residual["reason"] != "template-agrees"
+
+
+@requires_cv2
+def test_click_anchor_refuses_when_the_residual_check_fails(monkeypatch, tmp_path):
+    template = _texture(seed=93, height=20, width=40)
+    template_path = tmp_path / "solo_badge.png"
+    Image.fromarray(template).save(template_path)
+    frame = np.full((120, 200), 25, dtype=np.uint8)
+    _paste(frame, template, 10, 20)
+    frame[18:42, 8:52] = 250
+
+    hwnd = 4242
+    _install_fake_windows(monkeypatch)
+    report = dict(_found_report(hwnd), threshold=0.92,
+                  template_file=str(template_path), scale=1.0)
+    monkeypatch.setattr(
+        anchor_backend, "find_anchor", lambda *args, **kwargs: report)
+    calls = []
+
+    receipt = anchor_backend.click_anchor(
+        hwnd, "store", "solo_badge", dry_run=False,
+        foreground=hwnd, window_from_point=lambda x, y: hwnd,
+        verify_residual=True,
+        residual_capture=lambda h: Image.fromarray(frame),
+        clicker=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert receipt["ok"] is False
+    assert receipt["clicked"] is False
+    assert receipt["error_code"] == anchor_backend.ERROR_TARGET_OCCLUDED
+    assert receipt["residual_checked"] is True
+    assert calls == []
+
+
+@requires_cv2
+def test_click_anchor_clicks_after_the_residual_check_agrees(monkeypatch, tmp_path):
+    template = _texture(seed=95, height=20, width=40)
+    template_path = tmp_path / "solo_badge.png"
+    Image.fromarray(template).save(template_path)
+    frame = np.full((120, 200), 25, dtype=np.uint8)
+    _paste(frame, template, 10, 20)
+
+    hwnd = 4242
+    _install_fake_windows(monkeypatch)
+    report = dict(_found_report(hwnd), threshold=0.92,
+                  template_file=str(template_path), scale=1.0)
+    monkeypatch.setattr(
+        anchor_backend, "find_anchor", lambda *args, **kwargs: report)
+    calls = []
+
+    receipt = anchor_backend.click_anchor(
+        hwnd, "store", "solo_badge", dry_run=False,
+        foreground=hwnd, window_from_point=lambda x, y: hwnd,
+        verify_residual=True,
+        residual_capture=lambda h: Image.fromarray(frame),
+        clicker=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert receipt["ok"] is True
+    assert receipt["clicked"] is True
+    assert receipt["residual"]["ok"] is True
+    assert calls == [((400, 300), {"button": "left", "double": False})]

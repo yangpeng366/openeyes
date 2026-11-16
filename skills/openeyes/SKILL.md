@@ -128,9 +128,18 @@ eyes anchor list [--app trae] [--json]
 eyes anchor find --window <hwnd> --app trae --name solo_badge --scale-product 1.3021 --check-frame --json
 eyes anchor find --window <hwnd> --app trae --name solo_badge --scale-product 1.3021 --color-theme dark --json
 eyes anchor find --image shot.png --app trae --name solo_badge --json   # offline read-only; no frame/safety gates
-eyes anchor capture --window <hwnd> --app trae --name new_task_button --rect <measured-window-pixels> --scale-product 1.3021 --json
+eyes anchor capture --window <hwnd> --app trae --name new_task_button --rect <measured-window-pixels> --box-pad 4 --scale-product 1.3021 --json
 eyes anchor click --window <hwnd> --app trae --name send_button --check-frame --go   # dry-run without --go
 ```
+
+- `--box-pad N`: pass the detector's padded box in `--rect` and say how many px of
+  it are context. Capture drops flat border lines back to the control's real edge
+  (capped at `N`, never below 4 px), verifies that trimmed crop, and stores it; the
+  requested pad stays on record as `box_pad`. Without it `--rect` is taken literally.
+- `click` re-matches the stored template on a fresh frame right before clicking.
+  A same-window overlay (tooltip, popover, drop shadow) leaves the hwnd gates green
+  but breaks the pixels; that mismatch refuses the click as `TARGET_OCCLUDED` with
+  `residual.reason` naming the cause. `--no-verify-residual` opts out.
 
 ### Scene probe (one frame, many verdicts)
 

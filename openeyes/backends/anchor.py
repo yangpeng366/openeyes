@@ -38,6 +38,10 @@ ERROR_ANCHOR_TIMEOUT = "ANCHOR_TIMEOUT"
 
 VERIFY_SCORE = 0.92
 PROBE_HISTORY_WINDOW = 20
+# Fresh-frame residual check: search the matched box plus this margin, and
+# require the re-found box to overlap the matched one this much.
+RESIDUAL_ROI_PAD = 8
+RESIDUAL_MIN_OVERLAP = 0.5
 
 
 class AnchorStoreError(RuntimeError):
@@ -331,16 +335,22 @@ def save_anchor(
     exe_name: str | None = None,
     captured_at: str | None = None,
     dpi_awareness: str | None = None,
+    box_pad: int = 0,
 ) -> dict[str, Any]:
     """Save or replace one anchor image and its manifest entry.
 
     The image is written first and the manifest is replaced atomically. The
-    SHA-256 describes the exact PNG bytes on disk.
+    SHA-256 describes the exact PNG bytes on disk. ``box_pad`` records how
+    many pixels of the caller's detected box were context rather than control;
+    :func:`capture_anchor` trims them off and stores the trimmed rect, so the
+    number is audit evidence, not an instruction for later matching.
     """
     from openeyes.core.anchors import classify
 
     app_name = _token(app, "app")
     anchor_name = _anchor_name(name)
+    if int(box_pad) < 0:
+        raise ValueError("box_pad must be non-negative")
     rect = _normalize_rect(rect_window)
     picture = _pil_image(image)
 
@@ -383,6 +393,7 @@ def save_anchor(
         "icon_theme": icon_theme,
         "layout_signature": layout_signature,
         "sha256": digest,
+        "box_pad": int(box_pad),
     }
     if existing is None:
         manifest: dict[str, Any] = {
@@ -985,6 +996,7 @@ def find_anchor(
                         "score": float(chosen["score"]),
                         "strength": decision["strength"],
                         "scale": float(chosen["scale"]),
+                        "template_file": str(template_path),
                         "reason": decision["reason"],
                     })
                     return finish_probe(dict(report, **update), peaks)
@@ -1777,6 +1789,96 @@ def _first_gate_failure(checks: Mapping[str, bool]) -> tuple[str, str]:
     return "", ""
 
 
+def click_residual(
+    image: Any,
+    bbox: Mapping[str, Any],
+    template: Any,
+    *,
+    scale: float = 1.0,
+    min_score: float = 0.92,
+    roi_pad: int = RESIDUAL_ROI_PAD,
+    min_overlap: float = RESIDUAL_MIN_OVERLAP,
+) -> dict[str, Any]:
+    """Re-match the stored template on the frame that is about to be clicked.
+
+    The window-point gate proves the pixel belongs to the target *window*; it
+    cannot see an in-window overlay (a tooltip, popover, drop shadow or a
+    same-process dialog) drawn on top of the control. This check is the second
+    piece of evidence: crop the matched box plus a small margin out of the
+    fresh frame, re-match the stored template inside it, and require the same
+    score floor and the same location. A control that moved is one anchor
+    miss, not a click target.
+    """
+    from openeyes.core.anchors import match
+
+    picture = _pil_image(image)
+    pad = max(0, int(roi_pad))
+    x, y = int(bbox["x"]), int(bbox["y"])
+    width, height = int(bbox["w"]), int(bbox["h"])
+    if width <= 0 or height <= 0:
+        return {"checked": False, "ok": False,
+                "reason": "empty-bbox", "scale": float(scale)}
+    left = max(0, x - pad)
+    top = max(0, y - pad)
+    right = min(picture.width, x + width + pad)
+    bottom = min(picture.height, y + height + pad)
+    if right - left < width or bottom - top < height:
+        return {"checked": False, "ok": False,
+                "reason": "target-outside-frame", "scale": float(scale)}
+    region = [int(left), int(top), int(right - left), int(bottom - top)]
+    try:
+        hits = match(picture.crop((left, top, right, bottom)), template,
+                     threshold=0.0, scales=[float(scale)])
+    except Exception as exc:
+        return {"checked": False, "ok": False, "roi": region,
+                "reason": f"residual-unavailable: {exc}",
+                "scale": float(scale)}
+    best = max(hits, key=lambda hit: float(hit.get("score", 0.0)), default=None)
+    if best is None:
+        return {"checked": True, "ok": False, "score": None, "bbox": None,
+                "overlap": 0.0, "roi": region, "scale": float(scale),
+                "min_score": float(min_score),
+                "reason": "no-residual-match"}
+    found = {"x": int(left + best["x"]), "y": int(top + best["y"]),
+             "w": int(best["w"]), "h": int(best["h"])}
+    overlap = _box_overlap(found, bbox)
+    score = float(best.get("score", 0.0))
+    if score < float(min_score):
+        reason = "residual-below-floor"
+    elif overlap < float(min_overlap):
+        reason = "residual-moved-off-target"
+    else:
+        reason = "template-agrees"
+    return {
+        "checked": True,
+        "ok": reason == "template-agrees",
+        "score": score,
+        "min_score": float(min_score),
+        "bbox": found,
+        "overlap": overlap,
+        "roi": region,
+        "scale": float(scale),
+        "reason": reason,
+    }
+
+
+def _box_overlap(first: Mapping[str, Any], second: Mapping[str, Any]) -> float:
+    """Intersection over the union of two pixel boxes."""
+    ax1, ay1 = int(first["x"]), int(first["y"])
+    ax2, ay2 = ax1 + int(first["w"]), ay1 + int(first["h"])
+    bx1, by1 = int(second["x"]), int(second["y"])
+    bx2, by2 = bx1 + int(second["w"]), by1 + int(second["h"])
+    inter_w = max(0, min(ax2, bx2) - max(ax1, bx1))
+    inter_h = max(0, min(ay2, by2) - max(ay1, by1))
+    intersection = inter_w * inter_h
+    if not intersection:
+        return 0.0
+    union = (max(0, ax2 - ax1) * max(0, ay2 - ay1)
+             + max(0, bx2 - bx1) * max(0, by2 - by1)
+             - intersection)
+    return intersection / union if union else 0.0
+
+
 def click_anchor(
     hwnd: int,
     store: str | os.PathLike[str],
@@ -1797,8 +1899,17 @@ def click_anchor(
     is_window: bool | None = None,
     is_minimized: bool | None = None,
     window_from_point: Any = None,
+    verify_residual: bool = False,
+    residual_capture: Any = None,
 ) -> dict[str, Any]:
-    """Click a matched anchor, but only after all four safety gates pass."""
+    """Click a matched anchor, but only after all four safety gates pass.
+
+    ``verify_residual`` adds a second, pixel-level occlusion check on a fresh
+    frame right before the click: an in-window overlay that leaves the window
+    point intact still breaks the template, and that mismatch refuses the
+    click as ``TARGET_OCCLUDED``. It is off by default so library callers keep
+    their own capture budget; the CLI turns it on.
+    """
     find = find_anchor(
         hwnd,
         store,
@@ -1843,6 +1954,8 @@ def click_anchor(
         "ambiguous_rate": find.get("ambiguous_rate"),
         "scan_strategy": find.get("scan_strategy"),
         "frame_stability": find.get("frame_stability"),
+        "residual": None,
+        "residual_checked": False,
         "reason": None,
         "error_code": None,
         "error": None,
@@ -1866,6 +1979,45 @@ def click_anchor(
     if dry_run:
         receipt["ok"] = True
         return receipt
+
+    if verify_residual:
+        bbox = find.get("bbox")
+        template = find.get("template_file")
+        if not bbox or not template:
+            receipt["reason"] = "residual-unverified"
+            receipt["error_code"] = ERROR_ANCHOR_VERIFY_FAILED
+            receipt["error"] = ("residual check needs the matched bbox and template; "
+                                "refusing to click without that evidence")
+            return receipt
+        capture = residual_capture or _capture_window
+        try:
+            frame = capture(int(hwnd))
+        except Exception as exc:
+            receipt["reason"] = "capture-failed"
+            receipt["error_code"] = ERROR_CAPTURE_FAILED
+            receipt["error"] = f"could not recapture for the residual check: {exc}"
+            return receipt
+        residual = click_residual(
+            frame, bbox, template,
+            scale=float(find.get("scale") or 1.0),
+            min_score=float(find.get("threshold") or threshold),
+        )
+        receipt["residual"] = residual
+        receipt["residual_checked"] = bool(residual.get("checked"))
+        if not residual.get("ok"):
+            if residual.get("checked"):
+                receipt["reason"] = "residual-occluded"
+                receipt["error_code"] = ERROR_TARGET_OCCLUDED
+                receipt["error"] = (
+                    "the control changed between match and click "
+                    f"({residual.get('reason')}, score={residual.get('score')}, "
+                    f"overlap={residual.get('overlap')}); refusing to click")
+            else:
+                receipt["reason"] = "residual-unverified"
+                receipt["error_code"] = ERROR_ANCHOR_VERIFY_FAILED
+                receipt["error"] = ("residual check could not run: "
+                                    f"{residual.get('reason')}")
+            return receipt
 
     if clicker is None:
         from openeyes.core.actuator import click_xy
@@ -1899,9 +2051,16 @@ def capture_anchor(
     color_theme: str | None = None,
     icon_theme: str | None = None,
     layout_signature: str | None = None,
+    box_pad: int = 0,
 ) -> dict[str, Any]:
-    """Capture a crop, prove it with a second capture, then persist it."""
-    from openeyes.core.anchors import classify
+    """Capture a crop, trim its declared padding, prove it, then persist it.
+
+    ``rect`` is the padded box: ``box_pad`` pixels on each side are context
+    the detector added. They are trimmed back to the control's flat border
+    before the stability proof, so the stored rect and template describe the
+    control itself, and the requested pad stays on record as ``box_pad``.
+    """
+    from openeyes.core.anchors import classify, trim_padding
     from openeyes.core.dpi import ensure_dpi_awareness
 
     win32gui, _ = _require_windows()
@@ -1918,7 +2077,19 @@ def capture_anchor(
         raise ValueError(
             f"rect {[x, y, width, height]} lies outside the {first.width}x{first.height} window"
         )
-    template = first.crop((x, y, x + width, y + height))
+    if int(box_pad) < 0:
+        raise ValueError("box_pad must be non-negative")
+    padded = first.crop((x, y, x + width, y + height))
+    trim = trim_padding(padded, int(box_pad))
+    if trim["trimmed"]:
+        x += trim["left"]
+        y += trim["top"]
+        width = trim["rect"][2]
+        height = trim["rect"][3]
+        template = padded.crop((trim["left"], trim["top"],
+                                trim["left"] + width, trim["top"] + height))
+    else:
+        template = padded
     stability = anchor_frame_stability(
         hwnd, [x, y, width, height], capture=_capture_window, initial=first)
     if not stability["stable"] or float(stability["min_score"]) < VERIFY_SCORE:
@@ -1956,6 +2127,7 @@ def capture_anchor(
         window_class=class_name,
         exe_name=exe_name,
         dpi_awareness=ensure_dpi_awareness(),
+        box_pad=int(box_pad),
     )
     return {
         "ok": True,
@@ -1968,6 +2140,8 @@ def capture_anchor(
         "score": entry["score"],
         "strength": entry["strength"],
         "sha256": entry["sha256"],
+        "box_pad": entry["box_pad"],
+        "padding_trim": trim,
         "dpi_scale": entry["dpi_scale"],
         "scale_product": entry["scale_product"],
         "color_theme": entry["color_theme"],

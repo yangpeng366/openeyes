@@ -552,12 +552,16 @@ def anchor_wait(hwnd: int, names: str, until: str, timeout: float,
 @click.option("--color-theme", default=None)
 @click.option("--icon-theme", default=None)
 @click.option("--layout-signature", default=None)
+@click.option("--box-pad", "box_pad", type=int, default=0, show_default=True,
+              help="context pixels the detector added on each side; trimmed off "
+                   "at the control's flat border and recorded in the manifest")
 @json_option
 def anchor_capture(hwnd: int, anchor_name: str, rect: str, store: str | None,
                    app: str, theme: str | None, scale_product: float | None,
                    device_scale_factor: float | None, zoom_level: float | None,
                    color_theme: str | None, icon_theme: str | None,
-                   layout_signature: str | None, as_json: bool) -> None:
+                   layout_signature: str | None, box_pad: int,
+                   as_json: bool) -> None:
     """Capture a crop, verify it against a second capture, and save it."""
     from openeyes.backends import anchor as anchor_backend
     from openeyes.core.anchors import AnchorUnavailable
@@ -568,7 +572,8 @@ def anchor_capture(hwnd: int, anchor_name: str, rect: str, store: str | None,
             hwnd, anchor_name, rect, root, app, theme=theme,
             scale_product=scale_product, device_scale_factor=device_scale_factor,
             zoom_level=zoom_level, color_theme=color_theme,
-            icon_theme=icon_theme, layout_signature=layout_signature)
+            icon_theme=icon_theme, layout_signature=layout_signature,
+            box_pad=box_pad)
     except anchor_backend.FrameUnstableError as exc:
         emit_error(str(exc), code=5, hwnd=hwnd, anchor=anchor_name,
                    error_code=anchor_backend.ERROR_FRAME_UNSTABLE,
@@ -609,6 +614,10 @@ def anchor_capture(hwnd: int, anchor_name: str, rect: str, store: str | None,
 @click.option("--button", type=click.Choice(["left", "right", "middle"]),
               default="left")
 @click.option("--double", is_flag=True)
+@click.option("--verify-residual/--no-verify-residual", "verify_residual",
+              default=True, show_default=True,
+              help="re-match the template on a fresh frame right before clicking; "
+                   "an in-window overlay refuses the click as TARGET_OCCLUDED")
 @click.option("--dry-run", "dry_run", is_flag=True,
               help="inspect and run the four safety checks without clicking (default)")
 @click.option("--go", "go", is_flag=True, help="actually click after every check passes")
@@ -617,6 +626,7 @@ def anchor_click(hwnd: int, anchor_name: str, store: str | None, app: str | None
                 threshold: float, min_score: float | None, weak_support: bool,
                 check_frame: bool, scale_product: float | None,
                 color_theme: str | None, button: str, double: bool,
+                verify_residual: bool,
                 dry_run: bool, go: bool,
                 as_json: bool) -> None:
     """Click an anchor only after the foreground / window / occlusion gates."""
@@ -630,7 +640,8 @@ def anchor_click(hwnd: int, anchor_name: str, store: str | None, app: str | None
             min_score=min_score, dry_run=not (go and not dry_run),
             weak_support=weak_support, check_frame=check_frame,
             scale_product=scale_product, color_theme=color_theme,
-            button=button, double=double)
+            button=button, double=double,
+            verify_residual=verify_residual)
     except AnchorUnavailable as exc:
         emit_error(str(exc), code=4, hwnd=hwnd, anchor=anchor_name)
         return
