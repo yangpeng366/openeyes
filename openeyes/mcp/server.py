@@ -796,6 +796,15 @@ async def list_tools() -> list[Tool]:
                         "description": "false = plan only and send nothing; "
                                        "true = send real input and verify",
                     },
+                    "activate": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "live only: bring each step's window "
+                                       "to the foreground before delivering. "
+                                       "Real input lands on whatever is in "
+                                       "front, so without it a background "
+                                       "target fails. Steals focus.",
+                    },
                     "retries": {"type": "integer", "default": 2,
                                 "description": "attempts per step when the "
                                                "expectation is judged"},

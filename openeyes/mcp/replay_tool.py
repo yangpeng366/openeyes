@@ -17,6 +17,10 @@ outcome readable without walking the action list:
 ``live`` is opt-in and defaults to False. A dry run sends no input and claims
 nothing; only ``live=true`` actuates the desktop. Per step,
 ``sent=True`` means delivered, never "the action took effect".
+
+``activate`` (only meaningful with ``live``) brings each step's window to the
+foreground before delivering, because real input lands on whatever is in
+front. It is opt-in: it steals focus and un-minimises the target.
 """
 from __future__ import annotations
 
@@ -60,6 +64,7 @@ def record_replay_payload(arguments: dict[str, Any]) -> dict[str, Any]:
         retries=_positive_int(arguments, "retries", 2),
         timeout=_positive_float(arguments, "timeout", 2.0),
         interval=_positive_float(arguments, "interval", 0.1),
+        activate=live and bool(arguments.get("activate", False)),
     ).replay(trajectory)
 
     payload = report.to_dict()

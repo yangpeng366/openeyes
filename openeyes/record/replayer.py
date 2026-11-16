@@ -381,6 +381,15 @@ class OpenEyesBackend:
     def drag(self, from_xy: tuple[int, int], to_xy: tuple[int, int]):
         return self._oe.drag(from_xy, to_xy)
 
+    def activate(self, hwnd: int) -> dict[str, Any]:
+        """Bring ``hwnd`` to the foreground and verify it really got there.
+
+        Uses the checked primitive: ``ok`` is only true when the foreground is
+        *observed* to be the target afterwards, and a recycled hwnd is refused.
+        """
+        from openeyes.core.focus import focus_window_checked
+        return focus_window_checked(int(hwnd), dry_run=False, restore=True)
+
     # -- observation --
 
     def probe(self, spec: dict[str, Any], *, hwnd: int = 0) -> dict[str, Any]:
@@ -447,13 +456,17 @@ class Replayer:
 
     def __init__(self, dry_run: bool = True, fail_on_unknown: bool = False,
                  backend: Any | None = None, retries: int = 2,
-                 timeout: float = 2.0, interval: float = 0.1):
+                 timeout: float = 2.0, interval: float = 0.1,
+                 activate: bool = False):
         self.dry_run = dry_run
         self.fail_on_unknown = fail_on_unknown
         self.backend = backend
         self.retries = max(1, int(retries))
         self.timeout = max(0.0, float(timeout))
         self.interval = max(0.0, float(interval))
+        self.activate = bool(activate)
+        # hwnd -> activation error (None = the window was observed in front).
+        self._activated: dict[int, str | None] = {}
 
     # -- public --
 
@@ -520,6 +533,16 @@ class Replayer:
             entry["error"] = error
             entry["reason"] = error
             return entry
+
+        if self.activate:
+            # Live input lands on whatever is foreground: activating first is
+            # what makes an activation-dependent verdict honest.
+            error = self._activate(backend, plan, entry)
+            if error:
+                entry["status"] = STATUS_FAILED
+                entry["error"] = error
+                entry["reason"] = f"target window not activated: {error}"
+                return entry
 
         if spec is None:
             delivered, error = self._deliver(backend, plan, ladder, entry)
@@ -596,6 +619,7 @@ class Replayer:
             "elapsed": 0.0,
             "last_observed": None,
             "preexisting": False,
+            "activation": None,
             "sent": False,
             "text_typed": False,
             "reason": None,
@@ -666,6 +690,44 @@ class Replayer:
                 entry["text_typed"] = True
             return True, None
         return False, last_error
+
+    def _activate(self, backend, plan: dict[str, Any],
+                  entry: dict[str, Any]) -> str | None:
+        """Bring the step's window to the foreground before sending input.
+
+        Opt-in (``activate=True``) because it steals focus from the user and
+        un-minimises the target. One call per hwnd per replay: re-activating
+        before every step would fight a user who moved a window between steps
+        and would hide the very state change we are trying to observe. A
+        failed activation refuses to deliver - input would go elsewhere.
+        """
+        hwnd = int(plan.get("hwnd") or 0)
+        if not hwnd:
+            return None
+        if hwnd in self._activated:
+            error = self._activated[hwnd]
+            entry["activation"] = {"ok": error is None, "hwnd": hwnd}
+            return error
+
+        activator = getattr(backend, "activate", None)
+        if activator is None:
+            self._activated[hwnd] = "backend has no activate()"
+            entry["activation"] = {"ok": False, "hwnd": hwnd,
+                                   "error": self._activated[hwnd]}
+            return self._activated[hwnd]
+
+        try:
+            receipt = activator(hwnd) or {}
+        except Exception as e:  # noqa: BLE001 - reported, not swallowed
+            receipt = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        entry["activation"] = receipt
+        if receipt.get("ok"):
+            self._activated[hwnd] = None
+            return None
+        error = str(receipt.get("error") or receipt.get("error_code")
+                    or "foreground is not the target window")
+        self._activated[hwnd] = error
+        return error
 
     def _focus(self, backend, plan: dict[str, Any], path: str) -> None:
         if path == "selector":

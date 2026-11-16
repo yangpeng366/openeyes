@@ -1116,8 +1116,11 @@ def record() -> None:
 @click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("--live", is_flag=True,
               help="send real input and judge each step (default: plan only)")
+@click.option("--activate", is_flag=True,
+              help="with --live: bring each step's window to the foreground first")
 @click.option("--json", "as_json", is_flag=True, help="emit the replay report as JSON")
-def record_replay(trajectory_path: str, live: bool, as_json: bool) -> None:
+def record_replay(trajectory_path: str, live: bool, activate: bool,
+                  as_json: bool) -> None:
     """Preview replay actions, or replay them for real with --live.
 
     Without --live nothing is sent: the report only holds the planned calls
@@ -1126,6 +1129,12 @@ def record_replay(trajectory_path: str, live: bool, as_json: bool) -> None:
     'sent' in the report means delivered - it is not proof of effect, so a
     live step with no recorded expectation stays 'unverified'.
 
+    Real input goes to whatever window is in front, so a replay against a
+    background target delivers the click to the wrong place and honestly
+    reports 'failed'. ``--activate`` focuses each step's window first (opt-in:
+    it steals focus and un-minimises); when focus cannot be taken the step is
+    not delivered at all and says so.
+
     The exit code is 0 when no step failed, 1 when any step failed. A bad
     invocation (missing file, unknown option) still exits 2 through click.
     """
@@ -1133,7 +1142,7 @@ def record_replay(trajectory_path: str, live: bool, as_json: bool) -> None:
     from openeyes.record.replayer import STATUS_FAILED, Replayer
 
     trajectory = Trajectory.load(trajectory_path)
-    report = Replayer(dry_run=not live).replay(trajectory)
+    report = Replayer(dry_run=not live, activate=activate and live).replay(trajectory)
     counts = report.counts()
 
     if as_json:
