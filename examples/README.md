@@ -285,6 +285,26 @@ only renamed after every check passed:
 python examples\browser-shot-acceptance.py --cdp-port 9222 --out examples\out\shot
 ```
 
+### vision-live-acceptance.py
+
+End-to-end contract for the vision tier's **endpoint** mode: the claim "an
+OmniParser-style service can feed the vision backend" now has a probe that can
+fail. Three modes, three different verdicts:
+
+```powershell
+python examples\vision-live-acceptance.py --serve-fixture   # local stub -> PASS
+python examples\vision-live-acceptance.py --endpoint http://127.0.0.1:8080/parse
+python examples\vision-live-acceptance.py                  # nothing configured -> SKIP
+```
+
+`--serve-fixture` proves the arithmetic: the sha256 of the base64 image the
+stub received equals the sha256 of the PNG on disk, and detections in image
+pixels become window-relative elements (`bbox - origin`) with the expected
+control types. `--inject-failure endpoint|parse` makes one surface red for
+real (HTTP 500 / empty detections), so FAIL here is demonstrated, not assumed.
+A configured-but-broken service is FAIL, never SKIP. `OPENEYES_VISION_ENDPOINT`
+supplies the endpoint when `--endpoint` is omitted.
+
 ### 真机双跑（browser-type / browser-shot）
 
 Both write-tool probes now judge two independent surfaces and write a receipt
