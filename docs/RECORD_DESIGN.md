@@ -154,6 +154,67 @@ unverified 都为 0」时为 `true`；dry-run 下该字段为 `null`（没有任
 `intent` 是自然语言，`input_text` 只是按键内容（掩码框、焦点被抢、输入法都会
 让「文本已输入」失真），这些都不作为期望。
 
+### 写法：把 expect 写进轨迹
+
+录制时把期望放进该步的 `meta`，其余产物（JSONL / 5 种 export / DAG）不变：
+
+```python
+rec = Recorder()
+rec.start(name="open-file-menu", app_name="Notepad")
+
+# 期望 = 点完之后才出现的东西。清单里的名字要能在动作前被证明「不存在」，
+# 否则只能算 unverified（见上文 preexisting 规则）。
+rec.record_click(
+    hwnd=hwnd, element=file_menu_item, window_title=win.title,
+    intent="打开文件菜单",
+    meta={"expect": {"element": {"name_contains": "保存"}, "timeout": 3.0}},
+)
+
+# 没有期望的动作：会投递，但只能报 unverified
+rec.record_hotkey("esc", intent="关闭菜单")
+traj = rec.stop()
+traj.save("trajectory.jsonl")
+```
+
+可用的期望形状（`normalize_expectation` 归一化，无法证伪的 payload 一律
+降级为 `unverified` 并写明原因）：
+
+| payload | 等价含义 |
+|---|---|
+| `"保存"` | 元素名包含该字符串 |
+| `{"element": {"name_contains": "保存", "control_type": "MenuItem"}}` | 带控件类型过滤 |
+| `{"element": {...}, "present": False}` / `{"absent": True}` | 期望该元素**消失** |
+| `{"window_title_contains": "*"}` | 窗口标题发生变化 |
+| `meta={"expect_window_title": "*无标题 - 记事本"}` | 标题期望的简写 |
+| `meta={"verify": ...}` | `expect` 的别名 |
+
+`timeout` / `interval` / `retries` 写在 payload 里即只覆盖该步。
+
+可跑样例：`python examples/record_demo_expect.py [--live] [--with-failure]`。
+它先读一次真实窗口、点开一个菜单、用 Esc 复位，把「点开后新出现的名字」
+写进 `meta.expect`，因此 `--live` 能拿到真的 `verified`；`--with-failure`
+再追加一步不可能的期望，用来演示 `failed` 与退出码 1。
+
+### 前车之鉴：`--live` 的输入只到前台窗口
+
+`click_selector` / `click_xy` 走的是真实鼠标坐标，**不会先把目标窗口提到
+前台**（`restore_window` 有意用 `SW_SHOWNOACTIVATE`，不抢焦点）。所以当
+目标窗口在后台时，点击会落到前台那个窗口上，期望自然不成立，回放报
+`failed`——这是「输入没送到」，不是「界面没变」。
+
+实测同一份 3 步轨迹：
+
+- 窗口在前台 → `0: verified / 1: unverified / 2: failed(deliberate)`，退出码 1；
+- 窗口被抢到后台 → `0: failed / 1: unverified / 2: failed`，退出码 1。
+
+要稳定复现 `verified`，先激活目标窗口再回放：
+
+```powershell
+eyes focus --window <hwnd> --go
+eyes record replay trajectory.jsonl --live --json
+```
+
+
 ### CLI 退出码与输出
 
 - 无 `failed` → `0`；有 `failed` → `1`（stderr 另打一行 `error: N of M steps failed`）；
