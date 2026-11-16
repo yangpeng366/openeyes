@@ -35,8 +35,23 @@ EDGE_CANDIDATES = (
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 )
 
-EDGE_USER_DATA_LIVE = Path(os.environ.get("LOCALAPPDATA")) / "Microsoft" / "Edge" / "User Data"
-DEFAULT_USER_DIR = Path(os.environ.get("TEMP")) / "openeyes-edge"
+def _env_path(var: str, default: Path) -> Path:
+    """Read a directory from the environment, tolerating a stripped env.
+
+    Sandboxes, CI runners and some launchers inherit an environment where
+    LOCALAPPDATA / TEMP are absent. `Path(None)` raises TypeError at import
+    time, which used to take down every consumer of this module (including
+    the MCP server) before it could run a single command.
+    """
+    raw = (os.environ.get(var) or "").strip()
+    return Path(raw) if raw else default
+
+
+EDGE_USER_DATA_LIVE = (
+    _env_path("LOCALAPPDATA", Path.home() / "AppData" / "Local")
+    / "Microsoft" / "Edge" / "User Data"
+)
+DEFAULT_USER_DIR = _env_path("TEMP", Path(tempfile.gettempdir())) / "openeyes-edge"
 
 
 class CDPError(RuntimeError):
