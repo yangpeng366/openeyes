@@ -45,7 +45,13 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 import openeyes  # noqa: E402 - sys.path is bootstrapped above
+from openeyes.core.focus import focus_window_checked  # noqa: E402
 from openeyes.record import Recorder, Replayer, Trajectory  # noqa: E402
+
+
+def _activate(hwnd: int) -> dict:
+    """Bring the window to the foreground and report what really happened."""
+    return focus_window_checked(int(hwnd), dry_run=False, restore=True)
 
 
 def _safe(text: str) -> None:
@@ -82,15 +88,23 @@ def pick_anchor(elements):
     def kind(elem) -> str:
         return (elem.control_type or "").lower()
 
-    named_menu_items = [e for e in elements
-                        if kind(e) == "menuitem" and (e.name or "").strip()]
-    other_menu = [e for e in elements
-                  if kind(e) in ("menu", "menubar", "splitbutton")
-                  and ((e.name or "").strip() or (e.automation_id or "").strip())]
-    fallback = [e for e in elements if e.interactive]
-    for elem in (named_menu_items or other_menu or fallback):
-        if (elem.automation_id or "").strip() or (elem.name or "").strip():
-            return elem
+    def named(elem) -> bool:
+        return bool((elem.name or "").strip())
+
+    # A bare ``MenuBar`` has no name, so clicking it means clicking whatever
+    # happens to sit at its center - not reproducible on replay. Named
+    # controls win; an unnamed one is only used when nothing else is left.
+    groups = (
+        [e for e in elements if kind(e) == "menuitem" and named(e)],
+        [e for e in elements
+         if kind(e) in ("menu", "menubar", "splitbutton") and named(e)],
+        [e for e in elements if e.interactive and named(e)],
+        [e for e in elements if e.interactive
+         and (e.automation_id or "").strip()],
+    )
+    for group in groups:
+        if group:
+            return group[0]
     return None
 
 
@@ -104,6 +118,10 @@ def learn_revealed_names(hwnd: int, anchor, attempts: int = 2) -> list[str]:
     for _ in range(max(1, attempts)):
         openeyes.send_hotkey("esc")
         time.sleep(0.3)
+        # The click below is a real mouse click: it only reaches this window
+        # when this window is in front.
+        _activate(hwnd)
+        time.sleep(0.2)
         before = _names(openeyes.detect_elements(hwnd, restore=True))
         openeyes.click_by_selector(
             hwnd=hwnd,
@@ -189,6 +207,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--window", default="", help="window title substring (default: Notepad)")
     parser.add_argument("--live", action="store_true", help="send real input and judge each step")
+    parser.add_argument("--activate", action="store_true",
+                        help="with --live: bring the window to the foreground first "
+                             "(real input lands on whatever is in front)")
     parser.add_argument("--with-failure", action="store_true",
                         help="append one unsatisfiable step (failed + exit 1)")
     parser.add_argument("--out", default=str(HERE / "record-out" / "trajectory_expect.jsonl"))
@@ -203,7 +224,7 @@ def main() -> int:
     # nothing, and the click lands on the window that happens to be in front.
     # Focus first so a `failed` verdict means the effect did not happen, not
     # that the input went somewhere else.
-    focus = openeyes.restore_window(window.hwnd)
+    focus = _activate(window.hwnd)
     _safe(f"focus  : {focus}")
     time.sleep(0.4)
 
@@ -229,7 +250,8 @@ def main() -> int:
     trajectory.save(str(out))
     _safe(f"\nwrote {out} ({len(trajectory.steps)} steps)")
 
-    report = Replayer(dry_run=not args.live).replay(trajectory)
+    report = Replayer(dry_run=not args.live,
+                      activate=args.activate and args.live).replay(trajectory)
     mode = "live" if args.live else "dry-run"
     _safe(f"[{mode}] replay of {trajectory.name}")
     for item in report.actions:

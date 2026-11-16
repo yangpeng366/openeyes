@@ -207,12 +207,31 @@ traj.save("trajectory.jsonl")
 - 窗口在前台 → `0: verified / 1: unverified / 2: failed(deliberate)`，退出码 1；
 - 窗口被抢到后台 → `0: failed / 1: unverified / 2: failed`，退出码 1。
 
-要稳定复现 `verified`，先激活目标窗口再回放：
+要稳定复现 `verified`，用 opt-in 的 `--activate`：回放会在向每一步投递前把该步
+的目标窗口激活到前台，**并且只在确认前台真的是它之后才发送输入**；激活失败
+（如 `FOCUS_OCCLUDED`：标题栏落点被另一个窗口盖住）就不投递，该步直接标
+`failed` 并写明原因，而不是把点击打给错误的窗口。
 
 ```powershell
-eyes focus --window <hwnd> --go
-eyes record replay trajectory.jsonl --live --json
+eyes record replay trajectory.jsonl --live --activate          # 文本输出
+eyes record replay trajectory.jsonl --live --activate --json   # 每步带 activation 回执
+eyes focus --window <hwnd> --go                                # 手工只激活、不回放时
 ```
+
+`activation` 回执（每步一个）包含 `ok` / `focused` / `foreground_before` /
+`foreground_after` / `reason` / `error_code`，`reason=already-foreground`
+表示目标已在前台、没有调用抢焦点原语（不扰动用户）。
+
+- 默认关闭：它会抢焦点、会取消最小化（可见副作用），不想被动桌面时不要开。
+- 每个 `hwnd` 每次回放只激活一次：逐步抢焦点会与用户的窗口操作打架。
+- MCP 侧同名参数：`record_replay(..., live=true, activate=true)`。
+
+实测（Notepad hwnd=23924796）：
+
+- `--live --activate` → `0: verified / 1: unverified`，退出码 0，
+  `activation.ok=true`（`reason=already-foreground`，未抢焦点）；
+- 不开 `--activate` 且目标在后台 → `0: failed / 1: unverified`，`sent=true`、
+  `last_observed` 为空——这就是「输入送到了别的窗口」的形态。
 
 
 ### CLI 退出码与输出
