@@ -54,15 +54,59 @@ class LightpandaError(RuntimeError):
     """Raised when Lightpanda cannot be started or reached."""
 
 
+def _decode_stream(raw: bytes | None) -> str:
+    """Decode what ``wsl.exe`` wrote, without trusting the ANSI code page.
+
+    ``wsl.exe`` writes **UTF-16LE** (usually with a ``FF FE`` BOM) into a
+    pipe, while the output of the command it runs is passed through as
+    UTF-8. ``text=True`` would decode both with the ANSI code page - cp936
+    on this host - and on a byte it cannot map the reader thread raises
+    :class:`UnicodeDecodeError`, so the very error line a failed ``docker
+    run`` needs disappears (the gate saw this as a dead reader thread). The
+    bytes are therefore decoded here, explicitly:
+
+    * ``FF FE`` / ``FE FF`` - UTF-16LE / UTF-16BE, BOM dropped;
+    * NUL-heavy payload - UTF-16LE without a BOM (the ``,\x00k\x00`` tell);
+    * anything else - UTF-8, which is what a child command emits.
+
+    ``errors="replace"`` keeps a garbled byte a visible ``\ufffd`` instead
+    of an exception, because a failure message that cannot be read is not a
+    failure message.
+    """
+    if not raw:
+        return ""
+    if raw.startswith(b"\xff\xfe"):
+        return raw[2:].decode("utf-16-le", errors="replace")
+    if raw.startswith(b"\xfe\xff"):
+        return raw[2:].decode("utf-16-be", errors="replace")
+    head = raw[:64]
+    if b"\x00" in head and head.count(b"\x00") * 4 >= len(head):
+        return raw.decode("utf-16-le", errors="replace")
+    return raw.decode("utf-8", errors="replace")
+
+
+def _run_wsl(args: list[str], *, timeout: float) -> subprocess.CompletedProcess:
+    """Run ``wsl.exe`` and hand back text the locale never touched.
+
+    Every call in this module goes through here: bytes out of the pipe, one
+    explicit decode, then ``stdout`` / ``stderr`` as ``str`` exactly like
+    ``text=True`` would have produced - minus the crash.
+    """
+    proc = subprocess.run(args, capture_output=True, timeout=timeout)
+    return subprocess.CompletedProcess(
+        args=proc.args,
+        returncode=proc.returncode,
+        stdout=_decode_stream(proc.stdout),
+        stderr=_decode_stream(proc.stderr),
+    )
+
+
 def _wsl_available() -> bool:
     """Return True if wsl.exe is on PATH and a default distro is registered."""
     if shutil.which("wsl") is None and shutil.which("wsl.exe") is None:
         return False
     try:
-        proc = subprocess.run(
-            ["wsl", "-e", "bash", "-lc", "true"],
-            capture_output=True, text=True, timeout=10,
-        )
+        proc = _run_wsl(["wsl", "-e", "bash", "-lc", "true"], timeout=10)
     except (OSError, subprocess.TimeoutExpired):
         return False
     return proc.returncode == 0
@@ -70,10 +114,8 @@ def _wsl_available() -> bool:
 
 def _wsl_docker_pull(image: str) -> None:
     """Pull the Lightpanda Docker image inside WSL (best-effort, quiet)."""
-    subprocess.run(
-        ["wsl", "-e", "bash", "-lc", f"docker pull {image}"],
-        capture_output=True, text=True, timeout=180,
-    )
+    _run_wsl(["wsl", "-e", "bash", "-lc", f"docker pull {image}"],
+             timeout=180)
 
 
 def _require_wsl_docker() -> None:
@@ -85,9 +127,9 @@ def _require_wsl_docker() -> None:
     opaque failure into one fast, named one.
     """
     try:
-        probe = subprocess.run(
+        probe = _run_wsl(
             ["wsl", "-e", "bash", "-lc", "docker version >/dev/null 2>&1"],
-            capture_output=True, text=True, timeout=30,
+            timeout=30,
         )
     except subprocess.TimeoutExpired as exc:
         raise LightpandaError(
@@ -113,19 +155,19 @@ def _wsl_docker_run(container: str, image: str, port: int) -> str:
     # timeout, and a stale container is caught by the `docker run` below,
     # which reports the real cause.
     with contextlib.suppress(OSError, subprocess.TimeoutExpired):
-        subprocess.run(
+        _run_wsl(
             ["wsl", "-e", "bash", "-lc",
              f"docker rm -f {container} 2>/dev/null; true"],
-            capture_output=True, text=True, timeout=20,
+            timeout=20,
         )
     try:
-        proc = subprocess.run(
+        proc = _run_wsl(
             [
                 "wsl", "-e", "bash", "-lc",
                 f"docker run -d --name {container} --rm "
                 f"-p 127.0.0.1:{port}:{port} {image}",
             ],
-            capture_output=True, text=True, timeout=60,
+            timeout=60,
         )
     except subprocess.TimeoutExpired as exc:
         raise LightpandaError(
@@ -217,8 +259,8 @@ def stop_lightpanda(container: str = LIGHTPANDA_CONTAINER) -> bool:
     """Stop the Lightpanda container. Returns True if docker rm reported success."""
     if not _wsl_available():
         return False
-    proc = subprocess.run(
+    proc = _run_wsl(
         ["wsl", "-e", "bash", "-lc", f"docker rm -f {container} 2>/dev/null"],
-        capture_output=True, text=True, timeout=20,
+        timeout=20,
     )
     return proc.returncode == 0

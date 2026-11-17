@@ -109,3 +109,72 @@ def test_a_wsl_timeout_is_reported_as_a_lightpanda_error(monkeypatch):
         lpmod.launch_lightpanda(port=_free_port(), wait_s=5.0)
     message = str(excinfo.value).lower()
     assert "wsl" in message or "docker" in message
+
+
+# ------------------------------------------- wsl.exe output vs the code page
+def test_wsl_output_is_utf16le_with_a_bom():
+    """The shape wsl.exe actually writes: FF FE, then UTF-16LE characters."""
+    raw = b"\xff\xfe" + "docker: not found\r\n".encode("utf-16-le")
+    assert lpmod._decode_stream(raw) == "docker: not found\r\n"
+
+
+def test_utf16le_without_a_bom_is_detected_by_its_nuls():
+    """No BOM still means UTF-16LE when every other byte is a NUL."""
+    raw = "cannot connect to the daemon".encode("utf-16-le")
+    assert lpmod._decode_stream(raw) == "cannot connect to the daemon"
+
+
+def test_a_childs_utf8_output_is_passed_through():
+    """The command's own output is UTF-8; it must not be forced to UTF-16."""
+    assert lpmod._decode_stream("docker 守护进程未启动\n".encode()) \
+        == "docker 守护进程未启动\n"
+
+
+def test_undecodable_bytes_become_replacements_not_an_exception():
+    """A garbled byte must stay visible; a dead reader loses the whole line."""
+    decoded = lpmod._decode_stream(b"\xff\xff\xff\xff")
+    assert isinstance(decoded, str)
+    assert decoded.count("\ufffd") == 4
+
+
+def test_empty_output_decodes_to_an_empty_string():
+    assert lpmod._decode_stream(None) == ""
+    assert lpmod._decode_stream(b"") == ""
+
+
+def test_live_wsl_output_survives_a_non_utf8_code_page():
+    """Live: the real wsl.exe pipe is decoded, not left to cp936."""
+    proc = lpmod._run_wsl(["wsl", "-e", "bash", "-lc", "echo openeyes"],
+                          timeout=60)
+    if proc.returncode != 0:
+        pytest.skip(f"wsl -e bash could not run here (rc={proc.returncode})")
+    assert "openeyes" in proc.stdout
+
+
+def test_the_module_never_lets_the_locale_decode_wsl_output():
+    """Enforcement: ``text=True`` here is the bug this round removed.
+
+    Parsed, not grepped: the docstring explains the bug by name, and a new
+    ``subprocess.run(..., text=True)`` call site must turn this red before a
+    dead reader thread can hide a docker error again.
+    """
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path(lpmod.__file__).read_text(encoding="utf-8"))
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(
+            func, "id", "")
+        if name not in ("run", "Popen", "check_output", "call", "check_call"):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg in ("text", "universal_newlines"):
+                offenders.append((node.lineno, keyword.arg))
+    assert offenders == [], (
+        "wsl output must be decoded by _decode_stream, not by the locale: "
+        f"{offenders}"
+    )

@@ -6,6 +6,16 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **`wsl.exe` output is decoded explicitly, not with the ANSI code page.** The Lightpanda
+  backend captured WSL output with `text=True`, so on a cp936 host the pipe reader thread
+  raised `UnicodeDecodeError` on `wsl.exe`'s UTF-16LE bytes and the failure line a failed
+  `docker run` needs disappeared (`pytest -W error::PytestUnhandledThreadExceptionWarning`
+  turned the suite red). Every `wsl` call now goes through `_run_wsl`, which captures bytes
+  and decodes them once (`_decode_stream`: BOM/`FF FE` → UTF-16LE, NUL-heavy → UTF-16LE,
+  otherwise UTF-8, `errors="replace"`); a test parses the module and fails if a call site
+  reintroduces `text=True` / `universal_newlines`.
+
 ### Changed
 - **`find_anchor` captures once per call.** All same-name candidate templates (scale-group
   peers, then the fallback phase) are scored on one frame, and the window rect used for
