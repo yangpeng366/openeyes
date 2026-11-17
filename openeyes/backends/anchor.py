@@ -1082,12 +1082,18 @@ def find_anchor_in_image(
     scale_product: float | None = None,
     color_theme: str | None = None,
     record_probe: bool = False,
+    product_explicit: bool = True,
 ) -> dict[str, Any]:
     """Match an anchor against a saved screenshot without touching a window.
 
     This is the offline twin of :func:`find_anchor`. It uses the same group
     fallback, scale prior, NMS and decision rules, but reports image-local
     coordinates and never performs a capture or an input action.
+
+    ``product_explicit`` says the caller supplied ``scale_product`` from the
+    same expression it renders with. A caller that merely *inferred* the
+    product (a window DPI hint) must pass ``False`` so the one-scale fast
+    path stays closed and the 11-scale band runs instead.
     """
     from openeyes.core.anchors import decide as choose
     from openeyes.core.anchors import scale_scan
@@ -1211,7 +1217,8 @@ def find_anchor_in_image(
                     hits, strategy = _two_stage_match(
                         source, template_path, search_floor, scale_product,
                         _entry_scale_product(entry),
-                        allow_fast_path=scale_product is not None)
+                        allow_fast_path=(scale_product is not None
+                                         and product_explicit))
                     report["scan_strategy"] = strategy
                 except Exception as exc:
                     failure = dict(report, error_code=ERROR_CAPTURE_FAILED,
@@ -1483,12 +1490,17 @@ def probe_anchors_in_image(
     scale_product: float | None = None,
     color_theme: str | None = None,
     roi_pad: int | None = None,
+    product_explicit: bool = True,
 ) -> dict[str, Any]:
     """Match many anchors against ONE frame and report the scene.
 
     ``roi_pad`` narrows each search to the stored rect plus that many
     pixels, which turns the sweep into a local one: much faster for polling
     loops, at the cost of seeing a control that moved far away as missing.
+
+    ``product_explicit`` is forwarded unchanged to
+    :func:`find_anchor_in_image`, so an inferred product keeps the wide
+    band even behind a padded ROI.
 
     ``find`` answers "is this control here". A probe answers "which of
     these state templates is on screen right now": every name is matched
@@ -1555,7 +1567,7 @@ def probe_anchors_in_image(
                 target, store, name, app=app_name, threshold=threshold,
                 min_score=min_score, weak_support=weak_support,
                 require_unique=require_unique, scale_product=scale_product,
-                color_theme=color_theme,
+                color_theme=color_theme, product_explicit=product_explicit,
             )
         except Exception as exc:
             report = {
@@ -1646,7 +1658,7 @@ def probe_anchors(
         image, store, names, app=app, threshold=threshold, min_score=min_score,
         weak_support=weak_support, require_unique=require_unique,
         scale_product=scale_product, color_theme=color_theme,
-        roi_pad=roi_pad,
+        roi_pad=roi_pad, product_explicit=scale_source == "explicit",
     )
     window_rect = None
     dpi_scale = None

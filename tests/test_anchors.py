@@ -143,6 +143,105 @@ def test_find_anchor_fast_path_escalates_below_strong_gate(monkeypatch, tmp_path
 
 
 @requires_cv2
+def test_find_anchor_auto_scale_product_scans_the_eleven_scale_band(monkeypatch, tmp_path):
+    """A DPI-inferred product must not buy the one-scale pass.
+
+    The inferred product equals the stored entry at 4 dp, so a gate that only
+    compared products would answer on ``[1.0]``. The contract reserves that
+    for a caller-supplied product, so the sweep stays the 11-scale band.
+    """
+    template = _texture(seed=63)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", auto_scale=True
+    )
+
+    assert report["ok"] is True, json.dumps(report, default=str)
+    assert report["scale_source"] == "window-dpi"
+    assert report["scale_product"] == 1.3021
+    assert report["used_group"] is True
+    strategy = report["scan_strategy"]
+    assert "fast_path" not in strategy
+    assert strategy["mode"] == "scale-prior"
+    assert strategy["expected_ratio"] == 1.0
+    assert strategy["range"] == [0.9, 1.1]
+    assert strategy["step"] == 0.02
+    assert strategy["scale_count"] == 11
+    assert strategy["scale_count"] == len(scale_scan(1.0)[0])
+    assert report["scale"] == pytest.approx(1.0, abs=0.001)
+
+
+@requires_cv2
+def test_probe_anchors_auto_scale_product_keeps_the_band(monkeypatch, tmp_path):
+    """The probe's own DPI inference goes down the same gated path.
+
+    ``probe_anchors(auto_scale=True)`` infers a product and hands it to the
+    offline matcher; that hand-off must not look like an explicit product, or
+    a probe would answer on one scale while ``find_anchor`` sweeps eleven.
+    """
+    template = _texture(seed=64)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    receipt = anchor_backend.probe_anchors(4242, tmp_path, ["solo_badge"], app="trae")
+
+    assert receipt["ok"] is True, json.dumps(receipt, default=str)
+    assert receipt["scale_source"] == "window-dpi"
+    assert receipt["matched"] == ["solo_badge"]
+    strategy = receipt["anchors"]["solo_badge"]["scan_strategy"]
+    assert "fast_path" not in strategy
+    assert strategy["expected_ratio"] == 1.0
+    assert strategy["range"] == [0.9, 1.1]
+    assert strategy["scale_count"] == 11
+
+
+@requires_cv2
+def test_probe_roi_pad_reuses_the_two_stage_scan(monkeypatch, tmp_path):
+    """A padded ROI is a crop, not a second matching implementation."""
+    template = _texture(seed=65)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    receipt = anchor_backend.probe_anchors(
+        4242, tmp_path, ["solo_badge"], app="trae", roi_pad=16
+    )
+
+    assert receipt["ok"] is True, json.dumps(receipt, default=str)
+    assert receipt["matched"] == ["solo_badge"]
+    anchor = receipt["anchors"]["solo_badge"]
+    region = anchor["search_region"]
+    assert region["pad"] == 16
+    assert region["origin"] == [54, 29]
+    strategy = anchor["scan_strategy"]
+    assert "fast_path" not in strategy
+    assert strategy["scale_count"] == 11
+    # The crop-local hit is reported in full-frame coordinates.
+    assert anchor["bbox"]["x"] == 70
+    assert anchor["bbox"]["y"] == 45
+    assert anchor["center"] == {"x": 70 + 21, "y": 45 + 17}
+
+
+@requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
     image = np.full((150, 240), 20, dtype=np.uint8)

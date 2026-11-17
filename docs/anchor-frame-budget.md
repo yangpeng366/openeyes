@@ -96,6 +96,15 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
 `openeyes/backends/anchor.py::_two_stage_match`（两段串联，`find_anchor` 与
 `find_anchor_in_image` 共用），`tests/test_anchors.py` 三例（门禁 / 单尺度命中 / 升级命中）。
 
+探针路径同口径（2026-11-18 复核 + 修复）：`probe_anchors` 自己推断 product 时走
+`product_explicit=False` → `probe_anchors_in_image` → `find_anchor_in_image`，门禁对推断值关闭，
+扫描仍是 11 尺度带（`expected_ratio=1.0`、`range=[0.9, 1.1]`、`step=0.02`、`scale_count=11`）；
+`probe_anchors_in_image` 收到显式 product（CLI `--scale-product` / MCP `anchor_probe`）时仍走单尺度
+首段。`roi_pad` 只是先把帧裁成「存档矩形 + pad」，命中结果按 `search_region.origin` 平移回全帧坐标，
+两段式没有被复写。集成用例：`test_find_anchor_auto_scale_product_scans_the_eleven_scale_band`、
+`test_probe_anchors_auto_scale_product_keeps_the_band`、
+`test_probe_roi_pad_reuses_the_two_stage_scan`。
+
 回执字段（`report["scan_strategy"]`）：
 
 | 字段 | 语义 |
@@ -124,4 +133,7 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
 
 - 真机复核：本次量化全在合成图上；`--roi-pad 48` + 文字模板的真机打分曲线待虚拟显示适配器可用后补。
 - 抓帧本身的开销（PrintWindow 1886x1183）未在本轮测量（无可用桌面），只用回执字段证明次数从 N 降到 1。
-- `probe_anchors` 早就是"一帧 N 判"，本轮让 `find_anchor` 与它对齐；两者口径现在一致。
+- `probe_anchors` 早就是「一帧 N 判」；本轮（2026-11-18）把快路径门禁也对齐了——推断的 DPI
+  product 不再冒充显式 product，探针与 `find_anchor` 同走 11 尺度带。
+- 仍未证实的一项：`roi_pad` 缩窗后若控件真的挪出 pad，只会在裁片内读成 `missing`（设计取舍，
+  不是 bug），真机量化仍需桌面。
