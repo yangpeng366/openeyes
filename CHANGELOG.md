@@ -6,6 +6,17 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **`find_anchor` captures once per call.** All same-name candidate templates (scale-group
+  peers, then the fallback phase) are scored on one frame, and the window rect used for
+  `screen_point` is read with that same frame. Receipts gain `frames_captured`, `frame_reused`
+  and `window_rect`; a capture failure is attempted once, not per candidate.
+- **Single-scale fast path measured, not shipped.** `benchmarks/bench_anchor_frame.py` quantifies
+  the 1.3021 case: one scale costs 186-191 ms against 1432-1663 ms for the 11-scale band on a
+  1886x1183 frame (7.7-8.7x), but a one-scale-only attempt fails text/icon templates after a 1%
+  scale drift. `docs/anchor-frame-budget.md` fixes the contract: gate on an exact 4-dp product
+  match, try `[1.0]`, and escalate to the band whenever the score is below 0.92.
+
 ### Added
 - **Anchor capture trims the detector's padding and proves it before clicking.**
   `eyes anchor capture --box-pad N` treats the outer `N` px of the supplied box as
