@@ -274,9 +274,22 @@ python C:\Users\47037\AppData\Local\Temp\oe-cdp-origin-probe8.py
 - CSS→设备像素的换算要求宿主进程是 per-monitor DPI aware：
   `openeyes.core.dpi.ensure_dpi_awareness()` 必须先跑，否则 130% 下的
   `SetCursorPos` 会落在虚拟化坐标里。
-- 多屏/负坐标副屏上的 `mozInnerScreenX/Y` 是否已经是虚拟桌面坐标，本机
-  （单屏 130%）**未实测**，已列为待测项（见 
-  `examples/multi-monitor-smoke.py`）。
+- 多屏/负坐标副屏上的 `mozInnerScreenX/Y` 是否已经是虚拟桌面坐标仍**未实测**：
+  本机只有一块屏（`\\.\DISPLAY1` 2240x1400 @130%），`examples/multi-monitor-smoke.py --go`
+  跑得动前两个场景，负坐标副屏固定 `SKIP`，不把「测不了」写成「通过」。
+- Win32 坐标链在 130% 单屏上已实测（2026-11-18，Windows 11，per-monitor-v2，
+  虚拟桌面 (0,0,2240,1400)，`python examples\multi-monitor-smoke.py --go` → exit 0）：
+
+  ```
+  PASS window_off_origin:        received (339,309) == sent (339,309), off 0 px
+  PASS scaled_click_125_130:     received (339,309) == sent (339,309), off 0 px
+  SKIP negative_secondary_click: no secondary monitor with a negative origin
+  overall: PASS
+  ```
+
+  即 `to_screen_xy(WINDOW, 客户区点)` + 窗口原点 → `SetCursorPos` → Tk 收到的
+  `event.x_root/y_root` 逐像素相同（容差 2 px），per-monitor-v2 下没有虚拟化偏移；
+  非 per-monitor-v2 的进程会被回答成虚拟化单位，`run(go=True)` 因此直接 `SKIP` 不下点。
 - 可选来源（尚未接入）：Chromium 系若将来在 BiDi 暴露 viewport 矩形，
   可由 `clientWindow` 矩形 + 该矩形换算；目前没有该字段，故不做估算。
 

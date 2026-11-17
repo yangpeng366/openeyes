@@ -32,7 +32,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
 
 - 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 23 工具、pytest 全套。
   CI 跑的是同一串步骤，别只跑局部。
-- 全量测试目前 1185 passed / 7 skipped；改到公共路径就把全量跑一遍。
+- 全量测试目前 1330 passed / 7 skipped（2026-11-18 实测）；改到公共路径就把全量跑一遍。
 - 真机验收用可见窗口（真实 Edge profile），不用无头。
 - 源文件 UTF-8 无 BOM（`examples/bom-sweep.py` 会扫）。
 - 提交直接推 `origin main`（单人维护，不走 PR、不 force push）。
@@ -110,7 +110,7 @@ Electron / Chromium 必须带 flag 2；实测 Trae CN 在后台也能读出真�
 **本地自测怎么跑**（在仓库根，pwsh 7）：
 
 ```powershell
-pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1185 passed / 7 skipped）
+pwsh -NoProfile -File examples\quality-gate.ps1            # 全量：ruff + bom-sweep + MCP 契约 + pytest（1330 passed / 7 skipped）
 pwsh -NoProfile -File examples\quality-gate.ps1 -SkipTests  # 只跑快的三项（不跑 pytest）
 python -m ruff check .
 python examples\bom-sweep.py
