@@ -11,13 +11,18 @@ versioning: [Semantic Versioning](https://semver.org/).
   peers, then the fallback phase) are scored on one frame, and the window rect used for
   `screen_point` is read with that same frame. Receipts gain `frames_captured`, `frame_reused`
   and `window_rect`; a capture failure is attempted once, not per candidate.
-- **Single-scale fast path measured, not shipped.** `benchmarks/bench_anchor_frame.py` quantifies
-  the 1.3021 case: one scale costs 186-191 ms against 1432-1663 ms for the 11-scale band on a
-  1886x1183 frame (7.7-8.7x), but a one-scale-only attempt fails text/icon templates after a 1%
-  scale drift. `docs/anchor-frame-budget.md` fixes the contract: gate on an exact 4-dp product
-  match, try `[1.0]`, and escalate to the band whenever the score is below 0.92.
+- **Two-stage scale fast path in `find_anchor` / `find_anchor_in_image`.** When the caller's
+  `scale_product` equals the candidate entry's product at 4 dp (and the product was passed
+  explicitly, never DPI-inferred), the first pass sweeps `[1.0]` alone; a peak below the strong
+  gate 0.92 escalates to the 11-scale band on the same frame instead of being reported as a
+  scale drift. Receipts record `scan_strategy.fast_path`, `fast_path_score`, `escalated` and the
+  `escalation` band; `benchmarks/bench_anchor_frame.py` measures the 1.3021 case at 186-191 ms for
+  the single pass against 1432-1663 ms for the band on a 1886x1183 frame (7.7-8.7x).
 
 ### Added
+- **Anchor scan contract helpers.** `core.anchors.scan_contract` / `same_scale_product` /
+  `scale_ratio` / `fast_path_strategy` / `escalate_scan` expose the two-stage rule as library
+  surface, so a caller can ask for the sweep of one candidate without duplicating the 4-dp gate.
 - **Anchor capture trims the detector's padding and proves it before clicking.**
   `eyes anchor capture --box-pad N` treats the outer `N` px of the supplied box as
   context, drops flat border lines back to the control's real boundary

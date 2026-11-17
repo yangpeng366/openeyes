@@ -3,12 +3,13 @@
 > 结论先行：**单次抓帧已落地**（一次 `find_anchor` 只抓一帧，N 个候选模板共用）；
 > **单尺度快路径"只跑 [1.0]"不可行**，只能做"先试 [1.0]、分数不足再退 11 尺度带"的两段式，
 > 且触发条件必须是当前 `scale_product` 与 entry 的 product 在 4 位小数上**完全相等**。
+> 该契约已实现（§3），回执可审计两次尝试。
 
 复现命令：
 
 ```powershell
 python benchmarks\bench_anchor_frame.py        # 单进程，约 40 s，stdout 为一份 JSON
-python -m pytest -q tests\test_anchors.py      # 76 passed（含本轮新增 3 例抓帧预算）
+python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 例 + 快路径 3 例）
 ```
 
 ## 1. 单次抓帧（已落地）
@@ -81,7 +82,33 @@ python -m pytest -q tests\test_anchors.py      # 76 passed（含本轮新增 3 �
 所以快路径的触发条件不能写成 `abs(ratio-1) < 0.01`，只能是 `current_product == entry_product`
 （同一表达式、同一四舍五入落库后比较），其余一律走 11 尺度带。
 
-## 3. 对 `scan_strategy` 契约的建议（下一轮实现）
+## 3. `scan_strategy` 两段式快路径契约（已落地）
+
+- 门禁：`scale_product is not None` 且与所选 entry 的 `scale_product` 在 4 位小数上相等，
+  且 product 由调用方显式传入（`auto_scale` 推断值不参与，见 §4）→ 第一发 `scales=[1.0]`。
+- 通过条件：`score >= 0.92`（strong）→ 直接用这一发判读。
+- 否则**无缝**升级到 11 尺度带（0.80–1.30 / step 0.05，同一帧），总成本 = 单尺度 186 ms
+  + 带 1432 ms，比原契约只多一次单尺度尝试；回执写清两次尝试。
+- 禁止：把低分单尺度命中直接当结果返回——那会把"可能只是尺度漂移"误报成
+  `weak`/`ambiguous`，正是"误报率=0"红线的反面。
+
+落地位置：`openeyes/core/anchors.py::scan_contract`（门禁 + 首段）、`escalate_scan`（band），
+`openeyes/backends/anchor.py::_two_stage_match`（两段串联，`find_anchor` 与
+`find_anchor_in_image` 共用），`tests/test_anchors.py` 三例（门禁 / 单尺度命中 / 升级命中）。
+
+回执字段（`report["scan_strategy"]`）：
+
+| 字段 | 语义 |
+|---|---|
+| `fast_path` | 本次候选是否走了单尺度首段（product 4 位相等且显式传入） |
+| `fast_path_scales` / `scale_count` | 首段尺度；未升级时为 1，升级后为该带长度 11 |
+| `fast_path_score` | 首段最佳分（无命中为 null），升级与否的判据 |
+| `escalate_below` | 升级门限 0.92 |
+| `escalated` | 是否真的升级到 11 尺度带 |
+| `escalation` | 升级带的 `range`/`step`/`scale_count`，便于事后审计 |
+| `mode` | 仍然只有 `scale-prior` / `fallback` 两值，快路径不新增 mode |
+
+## 4. 对 `scan_strategy` 契约的建议（历史，已按 §3 实现）
 
 - 门禁：`scale_product is not None` 且与所选 entry 的 `scale_product` 在 4 位小数上相等
   → 第一发 `scales=[1.0]`。
@@ -93,7 +120,7 @@ python -m pytest -q tests\test_anchors.py      # 76 passed（含本轮新增 3 �
   `weak`/`ambiguous`，正是"误报率=0"红线的反面。
 - `auto_scale` 推断出的 product 不参与快路径门禁（推断源与落库源不同，比的是不同表达式）。
 
-## 4. 遗留
+## 5. 遗留
 
 - 真机复核：本次量化全在合成图上；`--roi-pad 48` + 文字模板的真机打分曲线待虚拟显示适配器可用后补。
 - 抓帧本身的开销（PrintWindow 1886x1183）未在本轮测量（无可用桌面），只用回执字段证明次数从 N 降到 1。

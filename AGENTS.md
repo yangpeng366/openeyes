@@ -97,7 +97,9 @@ N 个模板、一份回执（`matched` / `ambiguous` / `missing` / `unreadable` 
 现由探针直接回 `WINDOW_MINIMIZED`；恢复用 `eyes focus --window H --restore --go`（ShowWindow
 (SW_RESTORE) 后重新读窗口身份再聚焦）。MCP 侧同名只读工具：`anchor_probe` / `anchor_wait`。
 `find_anchor` 单次调用也只抓一帧（多个同名候选模板共用同一帧，回执 `frames_captured` /
-`frame_reused` / `window_rect`），单尺度快路径的实测容差见 `docs/anchor-frame-budget.md`。
+`frame_reused` / `window_rect`），单尺度快路径的实测容差与两段式契约（product 4 位相等→先试
+`[1.0]`，`score < 0.92` 同帧升级 11 尺度带，回执 `scan_strategy.fast_path` / `fast_path_score` /
+`escalated`）见 `docs/anchor-frame-budget.md`。
 
 **10. 截图抓的是「屏幕上的那块」，不是「那个窗口」（2026-11-14 实测）**：`ImageGrab.grab(bbox=...)` 抓的是
 屏幕该矩形处的东西，被别的窗口盖住时，OCR 读回来的是**盖在上面的那个窗口**（实测在 Trae 窗口
