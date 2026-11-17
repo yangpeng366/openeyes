@@ -15,7 +15,15 @@ from PIL import Image
 
 from openeyes.backends import anchor as anchor_backend
 from openeyes.cli.main import cli
-from openeyes.core.anchors import assess_frames, classify, decide, match, nms, scale_scan
+from openeyes.core.anchors import (
+    assess_frames,
+    classify,
+    decide,
+    match,
+    nms,
+    scale_scan,
+    scan_contract,
+)
 
 CV2_AVAILABLE = importlib.util.find_spec("cv2") is not None
 requires_cv2 = pytest.mark.skipif(
@@ -56,6 +64,82 @@ def test_scale_scan_prior_and_fallback_paths():
     assert fallback_strategy["range"] == [0.8, 1.25]
     assert fallback_strategy["step"] == 0.05
     assert fallback == [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25]
+
+
+def test_scan_contract_gates_fast_path_on_exact_product():
+    fast, fast_strategy = scan_contract(1.3021, 1.3021)
+
+    assert fast == [1.0]
+    assert fast_strategy["mode"] == "scale-prior"
+    assert fast_strategy["fast_path"] is True
+    assert fast_strategy["escalate_below"] == 0.92
+    assert fast_strategy["escalation"]["range"] == [0.8, 1.3]
+    assert fast_strategy["escalation"]["scale_count"] == 11
+
+    # A 4-dp rounding difference is already a different product: no fast path.
+    prior, prior_strategy = scan_contract(1.3, 1.3021)
+
+    assert "fast_path" not in prior_strategy
+    assert prior_strategy["expected_ratio"] == pytest.approx(0.9984, abs=1e-3)
+    assert len(prior) > 1
+
+    # A DPI-inferred product may not stand in for the caller's expression.
+    band, band_strategy = scan_contract(1.3021, 1.3021, allow_fast_path=False)
+
+    assert band == scale_scan(1.0)[0]
+    assert "fast_path" not in band_strategy
+
+
+@requires_cv2
+def test_find_anchor_fast_path_answers_on_one_scale(monkeypatch, tmp_path):
+    template = _texture(seed=61)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", scale_product=1.3021
+    )
+
+    assert report["ok"] is True, json.dumps(report, default=str)
+    strategy = report["scan_strategy"]
+    assert strategy["fast_path"] is True
+    assert strategy["scale_count"] == 1
+    assert strategy["escalated"] is False
+    assert strategy["fast_path_score"] >= strategy["escalate_below"]
+    assert {hit["scale"] for hit in report["hits"]} == {1.0}
+
+
+@requires_cv2
+def test_find_anchor_fast_path_escalates_below_strong_gate(monkeypatch, tmp_path):
+    cv2 = _cv2()
+    template = _texture(seed=62)
+    drifted = cv2.resize(template, (36, 29), interpolation=cv2.INTER_AREA)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, drifted, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", scale_product=1.3021
+    )
+
+    assert report["ok"] is True, json.dumps(report, default=str)
+    strategy = report["scan_strategy"]
+    assert strategy["fast_path"] is True
+    assert strategy["escalated"] is True
+    assert strategy["scale_count"] == 11
+    # The 15% drift is below the strong gate, so stage 1 cannot answer.
+    assert (strategy["fast_path_score"] is None
+            or strategy["fast_path_score"] < strategy["escalate_below"])
+    assert report["scale"] == pytest.approx(0.85, abs=0.01)
 
 
 @requires_cv2

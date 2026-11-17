@@ -13,7 +13,7 @@ The design keeps three decisions separate:
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,14 @@ ANCHOR_EXTRA = 'pip install "openeyes[anchors]"'
 DEFAULT_SCALES = tuple(round(0.80 + index * 0.05, 2) for index in range(10))
 SCALE_PRIOR_TOLERANCE = 0.10
 SCALE_PRIOR_STEP = 0.02
+# Two-stage fast path. A caller product that equals the entry product after the
+# manifest's 4-dp rounding is the only case where one [1.0] pass may answer;
+# anything below the strong gate escalates to the 11-scale band instead of
+# reporting a scale drift as a real miss.
+PRODUCT_MATCH_DIGITS = 4
+FAST_PATH_SCALES = (1.0,)
+FAST_PATH_ESCALATE_BELOW = 0.92
+ESCALATION_SCALES = tuple(round(0.80 + index * 0.05, 2) for index in range(11))
 FRAME_STABLE_MAX_DIFF = 2.0
 FRAME_STABLE_MIN_SCORE = 0.92
 AMBIGUITY_MARGIN = 0.06
@@ -77,6 +85,91 @@ def scale_scan(expected_ratio: float | None = None) -> tuple[list[float], dict[s
         "step": 0.05,
         "scale_count": len(DEFAULT_SCALES),
     }
+
+
+def scale_ratio(current: Any, stored: Any) -> float | None:
+    """Current render metric divided by the manifest's capture metric."""
+    try:
+        current_value = float(current)
+        stored_value = float(stored)
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite(current_value) and np.isfinite(stored_value)):
+        return None
+    if current_value <= 0 or stored_value <= 0:
+        return None
+    return current_value / stored_value
+
+
+def same_scale_product(
+    current: Any,
+    stored: Any,
+    digits: int = PRODUCT_MATCH_DIGITS,
+) -> bool:
+    """True when both products agree after the manifest's ``digits`` rounding.
+
+    A missing product never matches: the fast path needs two numbers from the
+    same expression, not a default standing in for one of them.
+    """
+    if current is None or stored is None:
+        return False
+    try:
+        return round(float(current), digits) == round(float(stored), digits)
+    except (TypeError, ValueError):
+        return False
+
+
+def fast_path_strategy(expected_ratio: float = 1.0) -> dict[str, Any]:
+    """Audit record for the first stage: one [1.0] pass plus its escalation."""
+    expected = float(expected_ratio)
+    return {
+        "mode": "scale-prior",
+        "expected_ratio": round(expected, 4),
+        "range": [round(expected * (1.0 - SCALE_PRIOR_TOLERANCE), 4),
+                  round(expected * (1.0 + SCALE_PRIOR_TOLERANCE), 4)],
+        "step": SCALE_PRIOR_STEP,
+        "scale_count": len(FAST_PATH_SCALES),
+        "fast_path": True,
+        "fast_path_scales": list(FAST_PATH_SCALES),
+        "escalate_below": FAST_PATH_ESCALATE_BELOW,
+        "escalated": False,
+        "escalation": {
+            "range": [ESCALATION_SCALES[0], ESCALATION_SCALES[-1]],
+            "step": 0.05,
+            "scale_count": len(ESCALATION_SCALES),
+        },
+    }
+
+
+def scan_contract(
+    scale_product: Any,
+    entry_product: Any,
+    *,
+    allow_fast_path: bool = True,
+) -> tuple[list[float], dict[str, Any]]:
+    """Pick the scale sweep for one candidate under the fast-path contract.
+
+    Stage 1 applies only when both products are present and equal to 4 dp
+    (and the caller vouches the product came from the same expression, which
+    rules out a DPI-inferred stand-in): sweep ``[1.0]`` alone. Every other
+    case keeps the existing prior band or public fallback unchanged.
+    """
+    if allow_fast_path and same_scale_product(scale_product, entry_product):
+        return list(FAST_PATH_SCALES), fast_path_strategy(1.0)
+    return scale_scan(scale_ratio(scale_product, entry_product))
+
+
+def escalate_scan(
+    strategy: Mapping[str, Any],
+) -> tuple[list[float], dict[str, Any]]:
+    """Stage 2: the 11-scale band that replaces a below-gate fast-path pass."""
+    record = dict(strategy)
+    record["mode"] = "scale-prior"
+    record["scale_count"] = len(ESCALATION_SCALES)
+    record["range"] = [ESCALATION_SCALES[0], ESCALATION_SCALES[-1]]
+    record["step"] = 0.05
+    record["escalated"] = True
+    return list(ESCALATION_SCALES), record
 
 
 def _cv2():

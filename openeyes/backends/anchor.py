@@ -740,6 +740,38 @@ def _infer_scale_product(hwnd: int, entries: Sequence[Mapping[str, Any]]) -> flo
     return None
 
 
+def _two_stage_match(
+    frame: Any,
+    template_path: Path,
+    search_floor: float,
+    scale_product: Any,
+    entry_product: Any,
+    *,
+    allow_fast_path: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Score one template under the ``scan_strategy`` fast-path contract.
+
+    Stage 1 sweeps ``[1.0]`` alone only when both scale products agree at 4 dp.
+    A peak below ``FAST_PATH_ESCALATE_BELOW`` is not a miss: it escalates to
+    the 11-scale band on the same frame, so a 1% scale drift cannot be
+    reported as a real absence. The returned strategy records both attempts.
+    """
+    from openeyes.core.anchors import escalate_scan, match, scan_contract
+
+    scales, strategy = scan_contract(scale_product, entry_product,
+                                     allow_fast_path=allow_fast_path)
+    hits = match(frame, template_path, threshold=search_floor, scales=scales)
+    if not strategy.get("fast_path"):
+        return hits, strategy
+    best = max((float(hit["score"]) for hit in hits), default=None)
+    strategy["fast_path_score"] = None if best is None else round(best, 4)
+    if best is not None and best >= float(strategy["escalate_below"]):
+        return hits, strategy
+    band, strategy = escalate_scan(strategy)
+    hits = match(frame, template_path, threshold=search_floor, scales=band)
+    return hits, strategy
+
+
 def find_anchor(
     hwnd: int,
     store: str | os.PathLike[str],
@@ -766,7 +798,7 @@ def find_anchor(
     library sweep runs unchanged and ``scale_source`` says so.
     """
     from openeyes.core.anchors import decide as choose
-    from openeyes.core.anchors import match, scale_scan
+    from openeyes.core.anchors import scale_scan
 
     win32gui, _ = _require_windows()
     from openeyes.core.dpi import ensure_dpi_awareness
@@ -904,20 +936,21 @@ def find_anchor(
                                error=f"anchor image does not exist: {template_path}",
                                reason="template-missing", hits=[], decision=None)
             else:
-                expected = _scale_ratio(scale_product, _entry_scale_product(entry))
-                scales, strategy = scale_scan(expected)
-                report["scan_strategy"] = strategy
                 if frame is None and frame_error is None:
                     try:
                         frame = _capture_window(hwnd)
                         frame_rect = _window_rect(hwnd)
                     except Exception as exc:
                         frame_error = exc
+                strategy = report["scan_strategy"]
                 try:
                     if frame_error is not None:
                         raise frame_error
-                    hits = match(frame, template_path, threshold=search_floor,
-                                 scales=scales)
+                    hits, strategy = _two_stage_match(
+                        frame, template_path, search_floor, scale_product,
+                        _entry_scale_product(entry),
+                        allow_fast_path=scale_source == "explicit")
+                    report["scan_strategy"] = strategy
                 except Exception as exc:
                     failure = dict(report, error_code=ERROR_CAPTURE_FAILED,
                                    error=f"could not match anchor {name!r}: {exc}",
@@ -1057,7 +1090,7 @@ def find_anchor_in_image(
     coordinates and never performs a capture or an input action.
     """
     from openeyes.core.anchors import decide as choose
-    from openeyes.core.anchors import match, scale_scan
+    from openeyes.core.anchors import scale_scan
 
     lower_bound = float(threshold)
     if min_score is not None:
@@ -1173,12 +1206,13 @@ def find_anchor_in_image(
                                error=f"anchor image does not exist: {template_path}",
                                reason="template-missing", hits=[], decision=None)
             else:
-                expected = _scale_ratio(scale_product, _entry_scale_product(entry))
-                scales, strategy = scale_scan(expected)
-                report["scan_strategy"] = strategy
+                strategy = report["scan_strategy"]
                 try:
-                    hits = match(source, template_path, threshold=search_floor,
-                                 scales=scales)
+                    hits, strategy = _two_stage_match(
+                        source, template_path, search_floor, scale_product,
+                        _entry_scale_product(entry),
+                        allow_fast_path=scale_product is not None)
+                    report["scan_strategy"] = strategy
                 except Exception as exc:
                     failure = dict(report, error_code=ERROR_CAPTURE_FAILED,
                                    error=f"could not match anchor {name!r}: {exc}",
