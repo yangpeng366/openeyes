@@ -116,6 +116,119 @@ def test_find_anchor_falls_back_when_scale_group_misses(monkeypatch, tmp_path):
     assert report["scale"] == pytest.approx(0.83, abs=0.01)
 
 
+def _patch_live_window_once(monkeypatch, image, *, window_rect=(1000, 500, 1240, 650)):
+    """Patch the OS probes and return the list of capture calls."""
+    _install_fake_windows(monkeypatch)
+    captures: list[int] = []
+
+    def grab(hwnd: int):
+        captures.append(hwnd)
+        return Image.fromarray(image)
+
+    monkeypatch.setattr(anchor_backend, "_capture_window", grab)
+    monkeypatch.setattr(anchor_backend, "_window_rect", lambda hwnd: window_rect)
+    monkeypatch.setattr(anchor_backend, "_process_exe", lambda hwnd: "Trae CN.exe")
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.0)
+    return captures
+
+
+@requires_cv2
+def test_find_anchor_captures_one_frame_for_every_candidate(monkeypatch, tmp_path):
+    template = _texture(seed=71)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(_texture(seed=72)),
+        [70, 45, 42, 34], score=1.0, scale_product=1.5625,
+    )
+    captures = _patch_live_window_once(monkeypatch, image)
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", scale_product=1.5625
+    )
+
+    # Two templates were scored, but only one frame was grabbed.
+    assert report["ok"] is False
+    assert len(captures) == 1
+    assert report["frames_captured"] == 1
+    assert report["frame_reused"] is True
+    assert report["window_rect"] == [1000, 500, 1240, 650]
+
+
+@requires_cv2
+def test_find_anchor_fallback_scores_on_the_same_frame(monkeypatch, tmp_path):
+    cv2 = _cv2()
+    template = _texture(seed=73)
+    fallback_template = cv2.resize(template, (50, 41), interpolation=cv2.INTER_LINEAR)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(_texture(seed=74)),
+        [70, 45, 42, 34], score=1.0, scale_product=1.3021,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(fallback_template),
+        [70, 45, 50, 41], score=1.0, scale_product=1.5625,
+    )
+    _install_fake_windows(monkeypatch)
+    poison = np.zeros_like(image)  # a second frame that could never match
+    frames = iter([Image.fromarray(image), Image.fromarray(poison)])
+    monkeypatch.setattr(anchor_backend, "_capture_window", lambda hwnd: next(frames))
+    monkeypatch.setattr(anchor_backend, "_window_rect", lambda hwnd: (1000, 500, 1240, 650))
+    monkeypatch.setattr(anchor_backend, "_process_exe", lambda hwnd: "Trae CN.exe")
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.0)
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", scale_product=1.3021,
+        weak_support=True,
+    )
+
+    assert report["ok"] is True, json.dumps(report, default=str)
+    assert report["fell_back"] is True
+    assert report["frames_captured"] == 1
+    # The poisoned second frame was never consumed, so the fallback could not
+    # have been decided on a different frame than the group phase.
+    assert next(frames) is not None
+
+
+@requires_cv2
+def test_find_anchor_capture_failure_is_attempted_once(monkeypatch, tmp_path):
+    template = _texture(seed=75)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(_texture(seed=76)),
+        [70, 45, 42, 34], score=1.0, scale_product=1.5625,
+    )
+    _install_fake_windows(monkeypatch)
+    attempts: list[int] = []
+
+    def boom(hwnd: int):
+        attempts.append(hwnd)
+        raise OSError("PrintWindow failed")
+
+    monkeypatch.setattr(anchor_backend, "_capture_window", boom)
+    monkeypatch.setattr(anchor_backend, "_window_rect", lambda hwnd: (1000, 500, 1240, 650))
+    monkeypatch.setattr(anchor_backend, "_process_exe", lambda hwnd: "Trae CN.exe")
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.0)
+
+    report = anchor_backend.find_anchor(
+        4242, tmp_path, "solo_badge", app="trae", scale_product=1.3021
+    )
+
+    assert report["ok"] is False
+    assert report["error_code"] == anchor_backend.ERROR_CAPTURE_FAILED
+    assert attempts == [4242]
+    assert report["frames_captured"] == 0
+    assert report["frame_reused"] is False
+
+
 @requires_cv2
 def test_find_anchor_in_image_reports_group_and_scale_strategy(tmp_path):
     template = _texture(seed=64)

@@ -805,6 +805,11 @@ def find_anchor(
         "probe_count": 0,
         "scan_strategy": scale_scan(None)[1],
         "frame_stability": None,
+        # Every candidate template of this call is scored on one capture, so
+        # the receipt can prove the frame budget: 1 capture, N templates.
+        "frames_captured": 0,
+        "frame_reused": False,
+        "window_rect": None,
         "candidates": [],
     }
     if hwnd <= 0 or not win32gui.IsWindow(hwnd):
@@ -861,6 +866,14 @@ def find_anchor(
     group_had_hits = False
     last_failure: dict[str, Any] | None = None
     preferred_failure: dict[str, Any] | None = None
+    # One frame per call: the first candidate that needs pixels captures, and
+    # every later candidate (group peers, fallback phase) reuses that frame.
+    # Scoring N templates on one frame also removes the "two templates saw two
+    # different frames" class of disagreement from the decision.
+    frame: Any = None
+    frame_rect: tuple[int, int, int, int] | None = None
+    frame_error: Exception | None = None
+    scored = 0
 
     def finish_probe(receipt: dict[str, Any], peaks: int) -> dict[str, Any]:
         stats = ({"peaks": int(peaks),
@@ -869,6 +882,10 @@ def find_anchor(
                  if not record_probe else
                  _record_probe(store, app_name, name, scale_product, peaks))
         receipt.update(stats)
+        receipt["frames_captured"] = 1 if frame is not None else 0
+        receipt["frame_reused"] = scored > 1 and frame is not None
+        if frame is not None and frame_rect is not None:
+            receipt["window_rect"] = list(frame_rect)
         return receipt
 
     for phase, phase_entries in phases:
@@ -890,15 +907,24 @@ def find_anchor(
                 expected = _scale_ratio(scale_product, _entry_scale_product(entry))
                 scales, strategy = scale_scan(expected)
                 report["scan_strategy"] = strategy
+                if frame is None and frame_error is None:
+                    try:
+                        frame = _capture_window(hwnd)
+                        frame_rect = _window_rect(hwnd)
+                    except Exception as exc:
+                        frame_error = exc
                 try:
-                    image = _capture_window(hwnd)
-                    hits = match(image, template_path, threshold=search_floor,
+                    if frame_error is not None:
+                        raise frame_error
+                    hits = match(frame, template_path, threshold=search_floor,
                                  scales=scales)
                 except Exception as exc:
                     failure = dict(report, error_code=ERROR_CAPTURE_FAILED,
                                    error=f"could not match anchor {name!r}: {exc}",
                                    reason="capture-failed", hits=[], decision=None)
                 else:
+                    scored += 1
+                    image = frame
                     decision = choose(hits, require_unique=require_unique,
                                       weak_support=weak_support)
                     peaks = _competition_peaks(hits)
@@ -950,7 +976,10 @@ def find_anchor(
                             last_failure = failure
                         continue
 
-                    left, top, right, bottom = _window_rect(hwnd)
+                    # Map from the geometry captured with this same frame: a
+                    # window that moved after the grab would otherwise shift
+                    # the click point away from the pixels we matched.
+                    left, top, right, bottom = frame_rect or _window_rect(hwnd)
                     scale_x = (right - left) / image.width if image.width else 1.0
                     scale_y = (bottom - top) / image.height if image.height else 1.0
                     bbox = {
