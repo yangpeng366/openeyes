@@ -26,6 +26,22 @@ versioning: [Semantic Versioning](https://semver.org/).
   reintroduces `text=True` / `universal_newlines`.
 
 ### Changed
+- **A dropped `roi_pad` is now auditable instead of silent.** `probe_anchors_in_image` narrows each
+  search to the stored rect plus `roi_pad`, but a name stored only at another scale product had no
+  rect to crop to, so the search widened back to the whole frame with no trace in the receipt. The
+  helper is now `_roi_window` and returns `(box, reason)`, and the probe adds `receipt["roi"]`
+  (`{pad, applied, reason, region}` per name) whenever `roi_pad` is set. Reasons: `no-app`,
+  `store-unreadable`, `no-stored-rect`, `no-stored-rect-at-this-scale`, `outside-frame`. Widening
+  stays the behaviour - an empty crop would report a control that is on screen as missing - but a
+  full-frame answer can no longer be read as a narrowed one. Tests:
+  `test_probe_roi_pad_widens_instead_of_missing_a_name_at_another_scale`,
+  `test_roi_window_names_why_the_pad_was_dropped`.
+- **`wait_anchors` polls under the same fast-path contract.** The polling loop forwards the product
+  to `probe_anchors` on every frame, so an explicit product keeps the single-scale first stage per
+  poll (verified carrier: `last["anchors"][name]["scan_strategy"]`), while a window-DPI stand-in
+  keeps the 11-scale band. Two contract tests pin both halves:
+  `test_wait_anchors_explicit_product_polls_on_one_scale`,
+  `test_wait_anchors_inferred_product_keeps_the_band`.
 - **`find_anchor` captures once per call.** All same-name candidate templates (scale-group
   peers, then the fallback phase) are scored on one frame, and the window rect used for
   `screen_point` is read with that same frame. Receipts gain `frames_captured`, `frame_reused`

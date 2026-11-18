@@ -109,6 +109,22 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
 `test_probe_roi_pad_explicit_product_keeps_the_fast_path`、
 `test_probe_roi_pad_fast_path_still_escalates_inside_the_crop`。
 
+轮询与缩窗审计（2026-11-18 复核）：
+
+- `wait_anchors` 每次 poll 都只把 `scale_product` 透传给 `probe_anchors`，所以门禁语义与单次探针完全一致：
+  显式 product 时**每一帧**都走单尺度首段（证据在 `receipt["last"]["anchors"][name]["scan_strategy"]`，
+  `fast_path=true`、`scale_count=1`），只给窗口 DPI 时每一帧仍是 11 尺度带。用例：
+  `test_wait_anchors_explicit_product_polls_on_one_scale`、
+  `test_wait_anchors_inferred_product_keeps_the_band`。
+- `_roi_box` 更名 `_roi_window`，返回 `(box, reason)`；`roi_pad` 存在时回执新增 `receipt["roi"]`
+  （每个 name 一项 `pad` / `applied` / `reason` / `region`）。
+- 关键取舍：推断 product 下，某个 name 若只在**别的** product 有存档，裁窗会没有矩形可用。
+  此时不是裁成空图（那会把屏幕上的控件读成 `missing`），而是退回全帧搜索，并在 `roi.reason` 写明
+  `no-stored-rect-at-this-scale`——全帧答案不再能被误读成缩窗答案。其余 reason：`no-app`、
+  `store-unreadable`、`no-stored-rect`、`outside-frame`。用例：
+  `test_probe_roi_pad_widens_instead_of_missing_a_name_at_another_scale`、
+  `test_roi_window_names_why_the_pad_was_dropped`。
+
 回执字段（`report["scan_strategy"]`）：
 
 | 字段 | 语义 |
@@ -138,6 +154,8 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
 - 真机复核：本次量化全在合成图上；`--roi-pad 48` + 文字模板的真机打分曲线待虚拟显示适配器可用后补。
 - 抓帧本身的开销（PrintWindow 1886x1183）未在本轮测量（无可用桌面），只用回执字段证明次数从 N 降到 1。
 - `probe_anchors` 早就是「一帧 N 判」；本轮（2026-11-18）把快路径门禁也对齐了——推断的 DPI
-  product 不再冒充显式 product，探针与 `find_anchor` 同走 11 尺度带。
+  product 不再冒充显式 product，探针与 `find_anchor` 同走 11 尺度带；轮询路径同口径已有用例钉住。
+- 缩窗回退已可审计，但**未量化**：`roi.reason=no-stored-rect-at-this-scale` 时退回全帧的那一帧，
+  多花的毫秒数仍未测（需真机桌面）；当前只有「不会误报 missing」的用例证据。
 - 仍未证实的一项：`roi_pad` 缩窗后若控件真的挪出 pad，只会在裁片内读成 `missing`（设计取舍，
   不是 bug），真机量化仍需桌面。

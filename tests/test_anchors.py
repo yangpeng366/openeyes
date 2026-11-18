@@ -314,6 +314,156 @@ def test_probe_roi_pad_fast_path_still_escalates_inside_the_crop(monkeypatch, tm
 
 
 @requires_cv2
+def test_probe_roi_pad_widens_instead_of_missing_a_name_at_another_scale(monkeypatch, tmp_path):
+    """One inferred product must not delete another name's search area.
+
+    The DPI hint is taken because ``solo_badge`` is stored at that product;
+    ``chat_badge`` only exists at 1.0, so a pad filtered by the same product
+    has no rect to crop to. Cropping to nothing would report a control that
+    is plainly on screen as missing, so the probe widens that name back to
+    the whole frame - and records the widening in ``roi`` so the answer is
+    not mistaken for a narrowed one.
+    """
+    cv2 = _cv2()
+    solo = _texture(seed=73)
+    chat = _texture(seed=74, height=30, width=40)
+    regrown = cv2.resize(chat, (52, 39), interpolation=cv2.INTER_LINEAR)
+    image = np.full((300, 400), 20, dtype=np.uint8)
+    _paste(image, solo, 70, 45)
+    _paste(image, regrown, 250, 120)      # rendered at 1.3x, far from its stored rect
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(solo), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "chat_badge", Image.fromarray(chat), [150, 20, 40, 30],
+        score=1.0, scale_product=1.0,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    receipt = anchor_backend.probe_anchors(
+        4242, tmp_path, ["solo_badge", "chat_badge"], app="trae", roi_pad=16
+    )
+
+    assert receipt["scale_source"] == "window-dpi"
+    assert receipt["matched"] == ["solo_badge", "chat_badge"], json.dumps(
+        receipt, default=str)
+    assert receipt["roi"]["solo_badge"] == {
+        "pad": 16, "applied": True, "reason": None, "region": [54, 29, 74, 66],
+    }
+    assert receipt["roi"]["chat_badge"] == {
+        "pad": 16, "applied": False,
+        "reason": "no-stored-rect-at-this-scale", "region": None,
+    }
+    chat_report = receipt["anchors"]["chat_badge"]
+    assert "search_region" not in chat_report
+    # Full-frame coordinates, found at the 1.3x render the band allows.
+    assert chat_report["bbox"]["x"] == 250
+    assert chat_report["bbox"]["y"] == 120
+    assert chat_report["scale"] == pytest.approx(1.3, abs=0.03)
+
+
+def test_roi_window_names_why_the_pad_was_dropped(tmp_path):
+    """A widened search always carries its reason.
+
+    These codes are what a polling loop reads to tell "the pad narrowed the
+    frame" from "the pad was dropped"; an invented empty crop would turn the
+    second case into a silent miss instead of a slower but correct answer.
+    """
+    template = Image.fromarray(_texture(seed=75))
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", template, [70, 45, 42, 34],
+        score=1.0, scale_product=1.0,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "edge_badge", template, [396, 296, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+
+    assert anchor_backend._roi_window(
+        tmp_path, "trae", "solo_badge", None, 16, (400, 300)
+    ) == ((54, 29, 74, 66), None)
+    assert anchor_backend._roi_window(
+        tmp_path, "trae", "solo_badge", 1.3021, 16, (400, 300)
+    ) == (None, "no-stored-rect-at-this-scale")
+    assert anchor_backend._roi_window(
+        tmp_path, "trae", "absent_badge", None, 16, (400, 300)
+    ) == (None, "no-stored-rect")
+    assert anchor_backend._roi_window(
+        tmp_path, "trae", "edge_badge", 1.3021, 16, (100, 100)
+    ) == (None, "outside-frame")
+    assert anchor_backend._roi_window(
+        tmp_path, "", "solo_badge", None, 16, (400, 300)
+    ) == (None, "no-app")
+
+
+@requires_cv2
+def test_wait_anchors_explicit_product_polls_on_one_scale(monkeypatch, tmp_path):
+    """The polling path inherits the fast path instead of re-deriving it.
+
+    ``wait_anchors`` forwards the product to ``probe_anchors`` on every poll,
+    so an explicit product must keep the single-scale first stage on each
+    frame - and the strategy that decided the verdict must survive into the
+    returned ``last`` receipt, not stay buried inside the poll.
+    """
+    template = _texture(seed=76)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+
+    receipt = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5,
+        app="trae", scale_product=1.3021,
+    )
+
+    assert receipt["satisfied"] is True, json.dumps(receipt, default=str)
+    assert receipt["polls"] == 1
+    last = receipt["last"]
+    assert last["scale_source"] == "explicit"
+    assert last["scale_product"] == 1.3021
+    strategy = last["anchors"]["solo_badge"]["scan_strategy"]
+    assert strategy["fast_path"] is True
+    assert strategy["escalated"] is False
+    assert strategy["scale_count"] == 1
+    assert {hit["scale"] for hit in last["anchors"]["solo_badge"]["hits"]} == {1.0}
+
+
+@requires_cv2
+def test_wait_anchors_inferred_product_keeps_the_band(monkeypatch, tmp_path):
+    """Polling must not buy the fast path from a DPI stand-in.
+
+    ``wait_anchors`` passes no product here, so ``probe_anchors`` infers the
+    window DPI. That inference may group candidates, it may not claim the
+    caller's expression - the 11-scale band has to run on every poll.
+    """
+    template = _texture(seed=77)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    receipt = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5, app="trae",
+    )
+
+    assert receipt["satisfied"] is True, json.dumps(receipt, default=str)
+    last = receipt["last"]
+    assert last["scale_source"] == "window-dpi"
+    strategy = last["anchors"]["solo_badge"]["scan_strategy"]
+    assert "fast_path" not in strategy
+    assert strategy["scale_count"] == 11
+
+
+@requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
     image = np.full((150, 240), 20, dtype=np.uint8)

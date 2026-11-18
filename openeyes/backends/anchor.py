@@ -1394,36 +1394,47 @@ def _probe_failure(
     }
 
 
-def _roi_box(
+def _roi_window(
     store: str | os.PathLike[str],
     app_name: str,
     name: str,
     scale_product: float | None,
     pad: int,
     frame_size: tuple[int, int],
-) -> tuple[int, int, int, int] | None:
+) -> tuple[tuple[int, int, int, int] | None, str | None]:
     """Stored rect (plus pad) as a search window, clamped to the frame.
 
     An anchor records where it was captured. Searching only around that
     place turns a full-frame sweep into a small one; it also means a
     control that moved out of the box reads as missing, which is the
     trade the caller opts into with ``roi_pad``.
+
+    ``None`` means "search the whole frame" and always comes with a reason,
+    because the two cases are not equivalent: a probe holds several names,
+    and one of them may be stored only at another scale product. Dropping
+    the pad there is a silent *widening* - safe, but it must be visible in
+    the receipt so nobody reads a full-frame answer as a narrowed one.
     """
+    if not app_name:
+        return None, "no-app"
     try:
         manifest = load_store(store, app_name)
     except Exception:
-        return None
+        return None, "store-unreadable"
     rects = []
+    other_scales = 0
     for entry in _find_entries(manifest, name):
         if (scale_product is not None
                 and not _same_scale_product(_entry_scale_product(entry), scale_product)):
+            other_scales += 1
             continue
         try:
             rects.append(_normalize_rect(entry.get("rect_window")))
         except Exception:
             continue
     if not rects:
-        return None
+        return None, ("no-stored-rect-at-this-scale" if other_scales
+                      else "no-stored-rect")
     left = min(rect[0] for rect in rects) - pad
     top = min(rect[1] for rect in rects) - pad
     right = max(rect[0] + rect[2] for rect in rects) + pad
@@ -1434,8 +1445,8 @@ def _roi_box(
     right = min(int(width), int(right))
     bottom = min(int(height), int(bottom))
     if right - left <= 0 or bottom - top <= 0:
-        return None
-    return left, top, right - left, bottom - top
+        return None, "outside-frame"
+    return (left, top, right - left, bottom - top), None
 
 
 def _shift_report(
@@ -1497,6 +1508,10 @@ def probe_anchors_in_image(
     ``roi_pad`` narrows each search to the stored rect plus that many
     pixels, which turns the sweep into a local one: much faster for polling
     loops, at the cost of seeing a control that moved far away as missing.
+    The receipt's ``roi`` map says per name whether that happened: ``applied``
+    plus the clamped ``region``, or ``applied: False`` with the ``reason``
+    the pad was dropped (a name stored only at another scale product widens
+    back to the whole frame instead of being reported missing).
 
     ``product_explicit`` is forwarded unchanged to
     :func:`find_anchor_in_image`, so an inferred product keeps the wide
@@ -1514,6 +1529,7 @@ def probe_anchors_in_image(
     if roi_pad is not None and int(roi_pad) < 0:
         raise ValueError("roi_pad must be non-negative")
     unique = list(dict.fromkeys(wanted))
+    roi_windows: dict[str, dict[str, Any]] = {}
     receipt: dict[str, Any] = {
         "ok": True,
         "source": "image",
@@ -1553,15 +1569,22 @@ def probe_anchors_in_image(
         region = None
         origin = (0, 0)
         target = source
-        if roi_pad is not None and app_name:
-            box = _roi_box(store, str(app_name), name, scale_product,
-                           int(roi_pad), source.size)
+        if roi_pad is not None:
+            box, reason = _roi_window(store, str(app_name or ""), name,
+                                      scale_product, int(roi_pad), source.size)
+            roi_windows[name] = {
+                "pad": int(roi_pad),
+                "applied": box is not None,
+                "reason": reason,
+                "region": None,
+            }
             if box:
                 origin = (box[0], box[1])
                 target = source.crop((box[0], box[1],
                                        box[0] + box[2], box[1] + box[3]))
                 region = {"origin": [box[0], box[1]],
                           "size": [box[2], box[3]], "pad": int(roi_pad)}
+                roi_windows[name]["region"] = [box[0], box[1], box[2], box[3]]
         try:
             report = find_anchor_in_image(
                 target, store, name, app=app_name, threshold=threshold,
@@ -1585,6 +1608,8 @@ def probe_anchors_in_image(
         if report.get("app") and receipt["app"] is None:
             receipt["app"] = report["app"]
 
+    if roi_pad is not None:
+        receipt["roi"] = roi_windows
     receipt["satisfied"] = not (receipt["missing"] or receipt["ambiguous"]
                               or receipt["unreadable"])
     receipt["ok"] = not receipt["unreadable"]
