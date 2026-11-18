@@ -5,11 +5,13 @@
 same two independent surfaces and must not disagree about what PASS, FAIL or
 SKIP mean. The rules therefore live here once:
 
-* :func:`_combine_verdicts` - **FAIL > SKIP > PASS**; a skipped leg is never a
-  pass because "there was nothing to judge" and "it ran and was right" are two
-  different facts;
+* :func:`_combine_verdicts` - **FAIL > SKIP > PASS**, the same rule as
+  :func:`openeyes.core.verdict.combine`, which is where it is defined; a
+  skipped leg is never a pass because "there was nothing to judge" and "it ran
+  and was right" are two different facts;
 * :func:`_verdict_exit_code` - the process exit code that goes with a verdict
-  (PASS ``0``, FAIL ``2``, SKIP ``3``; an interruption exits ``130``);
+  (PASS ``0``, FAIL ``2``, SKIP ``3``; an interruption exits ``130``), read
+  from the package's single ``EXIT_CODES`` table;
 * :func:`_classify_powershell` - a real ``pwsh`` command that exits non-zero,
   times out or prints no ``200`` is FAIL; only a missing interpreter is SKIP;
 * :func:`_injected_ps_command` - ``--inject-failure powershell|both`` supplies
@@ -43,15 +45,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    # ``python examples\browser-scan-acceptance.py`` only puts ``examples`` on
+    # ``sys.path``; the verdict vocabulary now lives in the installed package.
+    sys.path.insert(0, str(REPO_ROOT))
 
-PASS = "PASS"
-FAIL = "FAIL"
-SKIP = "SKIP"
-INTERRUPTED = "INTERRUPTED"
-#: Exit code table for the three verdicts. Nothing else may define it.
-EXIT_CODES = {PASS: 0, FAIL: 2, SKIP: 3}
-#: A run that was stopped before it could conclude does not get a verdict code.
-EXIT_INTERRUPTED = 130
+#: The verdict vocabulary, the exit-code table and the combination rule are
+#: owned by :mod:`openeyes.core.verdict` - one definition for the whole tree,
+#: shipped code included. Re-exported under the names the probes import so the
+#: four probes and the two package reports compare the same objects.
+from openeyes.core.verdict import (  # noqa: E402, F401, I001 - re-exported
+    EXIT_CODES,
+    EXIT_INTERRUPTED,
+    FAIL,
+    INTERRUPTED,
+    PASS,
+    SKIP,
+    combine as _combine_verdicts,
+    exit_code as _verdict_exit_code,
+)
+
 #: Windows STATUS_CONTROL_C_EXIT, signed and unsigned: the console event that
 #: a Ctrl+C / graceful ``taskkill`` sends to every process on the console.
 CONSOLE_INTERRUPT_CODES = (3221225786, -1073741510)
@@ -116,25 +129,6 @@ def _leg(verdict: str, reason: str | None = None, **detail) -> dict:
         leg["reason"] = reason
     leg.update(detail)
     return leg
-
-
-def _combine_verdicts(*verdicts: str) -> str:
-    """FAIL beats SKIP and SKIP beats PASS: a skipped leg is never a pass."""
-    unknown = [verdict for verdict in verdicts if verdict not in (PASS, FAIL, SKIP)]
-    if unknown:
-        raise ValueError(f"unknown verdict(s): {unknown!r}")
-    if FAIL in verdicts:
-        return FAIL
-    if SKIP in verdicts:
-        return SKIP
-    return PASS
-
-
-def _verdict_exit_code(verdict: str) -> int:
-    try:
-        return EXIT_CODES[verdict]
-    except KeyError:
-        raise ValueError(f"unknown verdict: {verdict!r}") from None
 
 
 def _canonical_sha256(payload: dict) -> str:

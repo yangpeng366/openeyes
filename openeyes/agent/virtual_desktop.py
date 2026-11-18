@@ -43,9 +43,15 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-PASS = "PASS"
-FAIL = "FAIL"
-SKIP = "SKIP"
+#: The verdict vocabulary and rule come from :mod:`openeyes.core.verdict`, the
+#: single definition; these names are re-exported so existing importers keep
+#: working and keep comparing the same objects.
+from openeyes.core.verdict import (  # noqa: F401 - re-exported
+    FAIL,
+    PASS,
+    SKIP,
+    combine_statuses,
+)
 
 PHYSICAL = "physical"
 VIRTUAL = "virtual"
@@ -620,12 +626,14 @@ class SecondDesktopReport:
 
     @property
     def overall(self) -> str:
-        """PASS only when nothing failed and something was actually measured."""
-        if self.failed:
-            return FAIL
-        if any(check.status == PASS for check in self.checks):
-            return PASS
-        return SKIP
+        """One rule, the shared one: **FAIL > SKIP > PASS**.
+
+        It used to be ``FAIL > PASS > SKIP``, which answered ``PASS`` for a
+        probe whose ``create`` check was skipped and whose ``cursor`` check
+        passed - the report claiming a second desktop it never made. A check
+        that could not be judged now holds the total down to ``SKIP``.
+        """
+        return combine_statuses(check.status for check in self.checks)
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -316,9 +316,16 @@ eyes resolve --window 1234 --pretty                 # 谁答上来了 + 降级�
 | page | MCP `browser_tabs` / `browser_type` / `browser_shot` 的 payload | 全部检查通过 | 页面或元素不存在、CDP 报错、payload 违约 | CDP 端口无人监听 |
 | PowerShell | 真 `pwsh -NoProfile -Command` 问 `/json/version` | 退出 0 且 stdout 含 `200` | 非零退出、超时、退出 0 但没有 `200` | 找不到 `pwsh` |
 
-总判定由 `_combine_verdicts` 合并：**FAIL > SKIP > PASS**。SKIP 永远不等于
-PASS——「没有可判对象」和「跑过且对」是两件事。退出码：PASS `0`、FAIL `2`、
-SKIP `3`、收到中断 `130`。
+总判定由 `_combine_verdicts`（即 `openeyes.core.verdict.combine`）合并：
+**FAIL > SKIP > PASS**。SKIP 永远不等于 PASS——「没有可判对象」和「跑过且对」
+是两件事。退出码：PASS `0`、FAIL `2`、SKIP `3`、收到中断 `130`。
+
+这套词表和合成规则全树只有一份：`openeyes/core/verdict.py`。四个浏览器探针通过
+`examples/_acceptance_verdict.py` 重导出同一批对象，`SmokeReport`
+（`multi-monitor-smoke.py`）与 `SecondDesktopReport`（`second-desktop-probe.py`）
+也走同一个 `combine`。此前两个报告用的是相反的 `FAIL > PASS > SKIP`，结果单屏机器上
+「离原点场景 PASS + 缩放/副屏场景 SKIP」被合成为 PASS——即用一条实测掩盖两条未测。
+现在报告会给出 `overall: SKIP` 和 `unexercised: [<场景名>]`，说清哪条根本没跑。
 
 「正在监听但不是 CDP」与「没人监听」也分开：把 page 面指向 fixture HTTP
 端口时 `browser_tabs` 真报 `HTTP Error 404: File not found`，判 FAIL；端口根本

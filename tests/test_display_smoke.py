@@ -175,11 +175,20 @@ def test_a_failure_dominates_a_pass():
     assert report.overall == FAIL
 
 
-def test_one_pass_after_go_is_a_pass():
+def test_one_pass_after_go_is_not_a_pass_when_a_scenario_skipped():
+    """The shared rule: a measured pass does not hide an unmeasured scenario.
+
+    This assertion used to read ``== PASS``. That was the second, opposite
+    rule in the tree (``FAIL > PASS > SKIP``) and it reported a multi-monitor
+    coordinate path as passing on a machine with one monitor.
+    """
     report = _report(Step(OFF_ORIGIN, PASS, "landed"), Step(SCALED, SKIP, "100%"),
                      go=True)
 
-    assert report.overall == PASS
+    assert report.overall == SKIP
+    assert report.unexercised == [SCALED]
+    assert "not exercised here: " + SCALED in "\n".join(report.lines())
+    assert report.to_dict()["unexercised"] == [SCALED]
 
 
 def test_the_json_report_keeps_the_numbers():

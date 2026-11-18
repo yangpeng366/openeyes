@@ -128,8 +128,10 @@ python examples\browser-scan-acceptance.py --cdp-port 9222
 python examples\browser-click-acceptance.py --cdp-port 9222
 ```
 
-All four probes judge through `examples/_acceptance_verdict.py`: FAIL beats
-SKIP beats PASS, PASS/FAIL/SKIP exit `0`/`2`/`3`, and the receipt's
+All four probes judge through `examples/_acceptance_verdict.py`, which now
+re-exports the single model from `openeyes/core/verdict.py` (shared with
+`SmokeReport` and `SecondDesktopReport`): FAIL beats SKIP beats PASS,
+PASS/FAIL/SKIP exit `0`/`2`/`3`, and the receipt's
 `judgement_sha256` covers the decision only, so two live runs must print the
 same digest. `--inject-failure page|powershell|both` must turn the run red; run
 it after any probe change, because a check that cannot fail proves nothing.
@@ -6610,9 +6612,11 @@ Stay on the 7-day cadence. The FIXED recheck target of 2026-09-30T12:00:00+08:00
 ## Round 483 evidence — 2026-09-20 (dsh gate-readiness not ready)
 
 - 时间窗 2026-09-11T10:00:00+08:00 已过 (now=2026-09-20T13:00:27+08:00)。
-- 执行 python examples/dsh-gate-readiness.py -> exit 2, eady=false（<urlopen error timed out>，:3080 无响应）。
+- 执行 python examples/dsh-gate-readiness.py -> exit 2, 
+eady=false（<urlopen error timed out>，:3080 无响应）。
 - 旁证：Get-NetTCPConnection -LocalPort 3080 -State Listen -> 0；Get-NetTCPConnection -LocalPort 3080 -> 0；Get-Process -Name dsh -> 0；dsh 已装(E:\npm-global\dsh.ps1)未启。
-- 处置：按方向表 otherwise 分支——追加本条 evidence note + 刷新 .codex/last-message.md；未启 dsh、未跑 section 4、未碰 ecord/。
+- 处置：按方向表 otherwise 分支——追加本条 evidence note + 刷新 .codex/last-message.md；未启 dsh、未跑 section 4、未碰 
+ecord/。
 - 命令复盘（实测）：python examples/dsh-gate-readiness.py -> {"ready":false,"status_code":null,"error":"<urlopen error timed out>","next_recheck":"2026-09-10T16:30:00+08:00","next_action":"Wait for the dsh web host to return HTTP 200, then rerun this probe."}；exit 2。
 
 ## Round 484 evidence — 2026-09-20 (dsh gate-readiness not ready)

@@ -230,9 +230,28 @@ def test_a_failing_leg_makes_the_receipt_fail_in_every_probe():
 
 
 def test_the_shared_module_is_the_only_definition_of_the_table():
-    """The shared module itself must still hold exactly one table."""
-    tree = ast.parse(SHARED_SOURCE.read_text(encoding="utf-8"))
-    tables = [
+    """Exactly one ``EXIT_CODES`` table in the tree: the package's.
+
+    The table moved to :mod:`openeyes.core.verdict` so the two package reports
+    and the four probes can read the same object; this file keeps the guard,
+    now pointed at the new single source, and adds the other half: the examples
+    module must *not* still hold a copy of its own.
+    """
+    source = ROOT / "openeyes" / "core" / "verdict.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    tables = _exit_code_assignments(tree)
+
+    assert len(tables) == 1, f"{source} must define EXIT_CODES exactly once"
+    assert _table_values(tables[0]) == (["PASS", "FAIL", "SKIP"], [0, 2, 3])
+
+    examples_tree = ast.parse(SHARED_SOURCE.read_text(encoding="utf-8"))
+    assert _exit_code_assignments(examples_tree) == [], (
+        "_acceptance_verdict.py carries its own EXIT_CODES again"
+    )
+
+
+def _exit_code_assignments(tree: ast.Module) -> list[ast.Assign]:
+    return [
         node
         for node in tree.body
         if isinstance(node, ast.Assign)
@@ -242,12 +261,29 @@ def test_the_shared_module_is_the_only_definition_of_the_table():
         )
     ]
 
-    assert len(tables) == 1
-    value = tables[0].value
+
+def _table_values(node: ast.Assign) -> tuple[list[str], list[int]]:
+    value = node.value
     assert isinstance(value, ast.Dict)
     keys = [key.id for key in value.keys if isinstance(key, ast.Name)]
-    assert keys == ["PASS", "FAIL", "SKIP"]
-    assert [ast.literal_eval(item) for item in value.values] == [0, 2, 3]
+    numbers = [ast.literal_eval(item) for item in value.values]
+    return keys, numbers
+
+
+def test_the_verdict_vocabulary_is_also_owned_by_the_package():
+    """``PASS``/``FAIL``/``SKIP`` must be one set of strings everywhere."""
+    shared = _shared()
+    from openeyes.agent import (
+        display_smoke,  # noqa: PLC0415
+        virtual_desktop,  # noqa: PLC0415
+    )
+    from openeyes.core import verdict  # noqa: PLC0415
+
+    for module in (shared, display_smoke, virtual_desktop):
+        assert module.PASS is verdict.PASS
+        assert module.FAIL is verdict.FAIL
+        assert module.SKIP is verdict.SKIP
+    assert shared.EXIT_CODES is verdict.EXIT_CODES
 
 
 def test_injection_naming_the_powershell_leg_supplies_a_failing_command():

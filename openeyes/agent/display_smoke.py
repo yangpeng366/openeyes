@@ -36,9 +36,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openeyes.agent.virtual_desktop import (
-    FAIL,
-    PASS,
-    SKIP,
     Display,
     enumerate_displays,
 )
@@ -47,6 +44,12 @@ from openeyes.core.dpi import (
     PER_MONITOR_AWARE,
     PER_MONITOR_AWARE_V2,
     ensure_dpi_awareness,
+)
+from openeyes.core.verdict import (
+    FAIL,
+    PASS,
+    SKIP,
+    combine_statuses,
 )
 
 #: A step that has not run: dry-run, or waiting for ``--go``.
@@ -123,19 +126,28 @@ class SmokeReport:
 
     @property
     def overall(self) -> str:
-        """DRY-RUN without ``--go``; otherwise FAIL > PASS > SKIP."""
+        """DRY-RUN without ``--go``; otherwise the shared **FAIL > SKIP > PASS**.
+
+        The previous rule was ``FAIL > PASS > SKIP``, so a machine with one
+        monitor reported ``PASS`` whenever the off-origin scenario landed and
+        the scaled/negative ones skipped: the run claimed a multi-monitor
+        coordinate path it had never exercised. One skipped scenario now holds
+        the total at ``SKIP`` and :attr:`unexercised` names it.
+        """
         if not self.go:
             return DRY_RUN
-        if any(step.status == FAIL for step in self.steps):
-            return FAIL
-        if any(step.status == PASS for step in self.steps):
-            return PASS
-        return SKIP
+        return combine_statuses(step.status for step in self.steps)
+
+    @property
+    def unexercised(self) -> list[str]:
+        """The scenarios this machine could not exercise, by name."""
+        return [step.name for step in self.steps if step.status == SKIP]
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "go": self.go,
             "overall": self.overall,
+            "unexercised": self.unexercised,
             "dpi_awareness": self.dpi_awareness,
             "virtual_screen": list(self.virtual_screen),
             "displays": [display.to_dict() for display in self.displays],
@@ -151,6 +163,11 @@ class SmokeReport:
         out += [f"  {display.describe()}" for display in self.displays]
         out += [f"  {step.line()}" for step in self.steps]
         out.append(f"overall: {self.overall}")
+        if self.unexercised:
+            out.append(
+                "not exercised here: " + ", ".join(self.unexercised)
+                + " (a pass needs every scenario measured)"
+            )
         if not self.go:
             out.append("dry-run: nothing was clicked; pass --go to measure")
         return out
