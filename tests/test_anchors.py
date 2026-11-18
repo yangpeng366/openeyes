@@ -242,6 +242,78 @@ def test_probe_roi_pad_reuses_the_two_stage_scan(monkeypatch, tmp_path):
 
 
 @requires_cv2
+def test_probe_roi_pad_explicit_product_keeps_the_fast_path(monkeypatch, tmp_path):
+    """An explicit product buys one scale even behind a padded ROI.
+
+    The crop is the only thing ``roi_pad`` changes: the gate still sees a
+    caller-supplied product, so the receipt must show the single-scale pass
+    and the hit must come back in full-frame coordinates.
+    """
+    template = _texture(seed=66)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, template, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+
+    receipt = anchor_backend.probe_anchors(
+        4242, tmp_path, ["solo_badge"], app="trae",
+        scale_product=1.3021, roi_pad=16,
+    )
+
+    assert receipt["ok"] is True, json.dumps(receipt, default=str)
+    assert receipt["scale_source"] == "explicit"
+    assert receipt["matched"] == ["solo_badge"]
+    anchor = receipt["anchors"]["solo_badge"]
+    assert anchor["search_region"]["pad"] == 16
+    strategy = anchor["scan_strategy"]
+    assert strategy["fast_path"] is True
+    assert strategy["escalated"] is False
+    assert strategy["scale_count"] == 1
+    assert {hit["scale"] for hit in anchor["hits"]} == {1.0}
+    assert anchor["bbox"]["x"] == 70
+    assert anchor["bbox"]["y"] == 45
+
+
+@requires_cv2
+def test_probe_roi_pad_fast_path_still_escalates_inside_the_crop(monkeypatch, tmp_path):
+    """A crop must not turn a drifted render into a silent miss.
+
+    The single-scale pass runs on the padded ROI, scores below the strong
+    gate, and escalates to the 11-scale band on that same crop; the winning
+    hit is reported back in full-frame coordinates.
+    """
+    cv2 = _cv2()
+    template = _texture(seed=67)
+    drifted = cv2.resize(template, (36, 29), interpolation=cv2.INTER_AREA)
+    image = np.full((150, 240), 20, dtype=np.uint8)
+    _paste(image, drifted, 70, 45)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(template), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+
+    receipt = anchor_backend.probe_anchors(
+        4242, tmp_path, ["solo_badge"], app="trae",
+        scale_product=1.3021, roi_pad=16,
+    )
+
+    assert receipt["ok"] is True, json.dumps(receipt, default=str)
+    assert receipt["matched"] == ["solo_badge"]
+    anchor = receipt["anchors"]["solo_badge"]
+    strategy = anchor["scan_strategy"]
+    assert strategy["fast_path"] is True
+    assert strategy["escalated"] is True
+    assert strategy["scale_count"] == 11
+    assert anchor["scale"] == pytest.approx(0.85, abs=0.02)
+    assert anchor["bbox"]["x"] == 70
+    assert anchor["bbox"]["y"] == 45
+
+
+@requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
     image = np.full((150, 240), 20, dtype=np.uint8)

@@ -101,9 +101,13 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
 扫描仍是 11 尺度带（`expected_ratio=1.0`、`range=[0.9, 1.1]`、`step=0.02`、`scale_count=11`）；
 `probe_anchors_in_image` 收到显式 product（CLI `--scale-product` / MCP `anchor_probe`）时仍走单尺度
 首段。`roi_pad` 只是先把帧裁成「存档矩形 + pad」，命中结果按 `search_region.origin` 平移回全帧坐标，
-两段式没有被复写。集成用例：`test_find_anchor_auto_scale_product_scans_the_eleven_scale_band`、
+两段式没有被复写。`roi_pad` + 显式 product 时单尺度首段照旧生效，首段弱于 0.92 时升级也在裁出的
+小图上完成（坐标按 `search_region.origin` 平移回全帧）。集成用例：
+`test_find_anchor_auto_scale_product_scans_the_eleven_scale_band`、
 `test_probe_anchors_auto_scale_product_keeps_the_band`、
-`test_probe_roi_pad_reuses_the_two_stage_scan`。
+`test_probe_roi_pad_reuses_the_two_stage_scan`、
+`test_probe_roi_pad_explicit_product_keeps_the_fast_path`、
+`test_probe_roi_pad_fast_path_still_escalates_inside_the_crop`。
 
 回执字段（`report["scan_strategy"]`）：
 

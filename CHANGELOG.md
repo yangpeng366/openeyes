@@ -13,7 +13,9 @@ versioning: [Semantic Versioning](https://semver.org/).
   `find_anchor` swept the 11-scale band. `find_anchor_in_image` / `probe_anchors_in_image` gain
   `product_explicit` (default `True`, so CLI/MCP callers keep the fast path), and `probe_anchors`
   passes `scale_source == "explicit"`: an inferred product keeps the band, with or without
-  `roi_pad`. Three integration tests cover the auto_scale band, the probe band and the padded ROI.
+  `roi_pad`. Five integration tests cover the auto_scale band, the probe band, the padded ROI with an
+  inferred product, and the padded ROI with an explicit product (single-scale pass preserved, and a
+  sub-gate score still escalating to the band inside the crop).
 - **`wsl.exe` output is decoded explicitly, not with the ANSI code page.** The Lightpanda
   backend captured WSL output with `text=True`, so on a cp936 host the pipe reader thread
   raised `UnicodeDecodeError` on `wsl.exe`'s UTF-16LE bytes and the failure line a failed
