@@ -464,6 +464,65 @@ def test_wait_anchors_inferred_product_keeps_the_band(monkeypatch, tmp_path):
 
 
 @requires_cv2
+def test_wait_anchors_multi_group_roi_narrows_or_widens_never_crops_empty(
+        monkeypatch, tmp_path):
+    """A same-name entry set across two products must not crop to nothing.
+
+    ``solo_badge`` was captured at 1.0 and again at 1.5625, so one name owns
+    two rects in two scale groups while the poll runs on an inferred
+    product. Both endings are checked: a window DPI that lands on a stored
+    group narrows the pad to that group alone, and a DPI between groups
+    leaves no single group to trust, so the pad takes the union of both
+    rects. Neither ending may produce a zero-size crop - that would report
+    a control that is plainly on screen as missing, and ``wait_anchors``
+    would then spin until the timeout instead of answering present.
+    """
+    live = _texture(seed=80)
+    stale = _texture(seed=81)
+    image = np.full((300, 400), 20, dtype=np.uint8)
+    _paste(image, live, 250, 120)          # only the 1.5625 capture is on screen
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(stale), [70, 45, 42, 34],
+        score=1.0, scale_product=1.0,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(live), [250, 120, 42, 34],
+        score=1.0, scale_product=1.5625,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)] * 2)
+
+    # A DPI that matches a stored group: the pad keeps only that group's rect.
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.5625)
+    matching = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5,
+        app="trae", roi_pad=16,
+    )
+
+    assert matching["satisfied"] is True, json.dumps(matching, default=str)
+    matching_last = matching["last"]
+    assert matching_last["scale_source"] == "window-dpi"
+    assert matching_last["roi"]["solo_badge"] == {
+        "pad": 16, "applied": True, "reason": None, "region": [234, 104, 74, 66],
+    }
+    assert matching_last["anchors"]["solo_badge"]["search_region"]["size"] == [74, 66]
+
+    # A DPI between groups: no group can be trusted, so both rects are kept.
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.25)
+    widened = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5,
+        app="trae", roi_pad=16,
+    )
+
+    assert widened["satisfied"] is True, json.dumps(widened, default=str)
+    widened_last = widened["last"]
+    assert widened_last["scale_source"] == "none"
+    region = widened_last["roi"]["solo_badge"]
+    assert region["applied"] is True and region["reason"] is None
+    assert region["region"] == [54, 29, 254, 141]
+    assert widened_last["anchors"]["solo_badge"]["bbox"]["x"] == 250
+
+
+@requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
     image = np.full((150, 240), 20, dtype=np.uint8)
