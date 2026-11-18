@@ -26,6 +26,17 @@ versioning: [Semantic Versioning](https://semver.org/).
   reintroduces `text=True` / `universal_newlines`.
 
 ### Changed
+- **A failed `record_replay` step now carries its `activation` receipt.** `failed_steps[]` reported
+  `index` / `action` / `reason` / `error`, so a step refused because its window could not be brought
+  to the front read as a bare "not activated" with no hwnd and no ok flag. Each entry now includes
+  `activation` (the replayer's receipt, `None` when no activation was attempted), and a dry-run
+  action entry carries `activation: None` too, so the planned and live shapes match. The `activate`
+  contract is pinned at the MCP layer: `activate=true` with `live=false` is forced off (a dry run
+  moves no window), `live=true` keeps it opt-in, activation runs once per hwnd before the first
+  delivery, and a refused activation fails both steps on that hwnd with `sent=false`. Tests:
+  `test_a_dry_run_never_activates_even_when_asked`, `test_live_activation_is_opt_in`,
+  `test_live_activate_activates_once_per_hwnd`,
+  `test_a_refused_activation_reaches_failed_steps_with_its_receipt`.
 - **A dropped `roi_pad` is now auditable instead of silent.** `probe_anchors_in_image` narrows each
   search to the stored rect plus `roi_pad`, but a name stored only at another scale product had no
   rect to crop to, so the search widened back to the whole frame with no trace in the receipt. The

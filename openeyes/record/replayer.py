@@ -490,7 +490,10 @@ class Replayer:
 
         if self.dry_run:
             # Planning needs no desktop access at all: nothing is sent and
-            # nothing is observed, so nothing is claimed.
+            # nothing is observed, so nothing is claimed. ``activation`` stays
+            # present and ``None`` so the planned shape matches a live entry:
+            # a dry run cannot activate, and its absence must not read as
+            # "activation was attempted and failed".
             for index, step, plan, spec, source in planned:
                 report.actions.append({
                     "index": index,
@@ -499,6 +502,7 @@ class Replayer:
                     "status": STATUS_PLANNED,
                     "expectation": spec,
                     "expectation_source": source,
+                    "activation": None,
                     "sent": False,
                 })
             return report

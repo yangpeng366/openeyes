@@ -92,9 +92,107 @@ def test_live_replay_keeps_the_failed_steps_in_the_payload(tmp_path, monkeypatch
     assert payload["summary"]["failed"] == 2
     assert [step["index"] for step in payload["failed_steps"]] == [0, 1]
     assert all(step["reason"] for step in payload["failed_steps"])
+    # no activation was requested, so the receipt is present but empty
+    assert all(step["activation"] is None for step in payload["failed_steps"])
     # the full action list survives; the summary does not replace it
     assert [action["status"] for action in payload["actions"]] == ["failed", "failed"]
     assert json.loads(json.dumps(payload))["summary"]["failed"] == 2
+
+
+# ---------------------------------------------------------------------------
+# The ``activate`` contract
+# ---------------------------------------------------------------------------
+
+def _capture_replayer(monkeypatch, backend) -> dict:
+    """Patch the payload builder's Replayer, keeping every kwarg it passes.
+
+    The factory builds a real :class:`Replayer` around ``backend`` and records
+    the arguments, so a test can assert what the tool asked for *and* what the
+    replayer then did.
+    """
+    seen: dict = {}
+
+    def _factory(**kwargs):
+        seen.update(kwargs)
+        return Replayer(
+            dry_run=kwargs["dry_run"], backend=backend,
+            retries=kwargs.get("retries", 2), timeout=kwargs.get("timeout", 2.0),
+            interval=kwargs.get("interval", 0.0),
+            activate=kwargs.get("activate", False),
+        )
+
+    monkeypatch.setattr("openeyes.mcp.replay_tool.Replayer", _factory)
+    return seen
+
+
+def _live_args(path: str, **extra) -> dict:
+    args = {"trajectory_path": path, "live": True,
+            "retries": 1, "timeout": 0.01, "interval": 0.0}
+    args.update(extra)
+    return args
+
+
+def test_a_dry_run_never_activates_even_when_asked(tmp_path, monkeypatch):
+    """``activate=true`` without ``live`` must not move a window."""
+    path, _ = _write_click_trajectory(tmp_path)
+    backend = _ActivatingBackend()
+    seen = _capture_replayer(monkeypatch, backend)
+
+    payload = record_replay_payload({"trajectory_path": path, "activate": True})
+
+    assert seen["dry_run"] is True
+    assert seen["activate"] is False
+    assert backend.calls == []
+    assert [a["status"] for a in payload["actions"]] == ["planned", "planned"]
+    assert all(a["activation"] is None for a in payload["actions"])
+    assert payload["failed_steps"] == []
+    assert payload["ok"] is True
+
+
+def test_live_activation_is_opt_in(tmp_path, monkeypatch):
+    path, _ = _write_click_trajectory(tmp_path)
+    backend = _ActivatingBackend(present=True)
+    seen = _capture_replayer(monkeypatch, backend)
+
+    record_replay_payload(_live_args(path))
+
+    assert seen["activate"] is False
+    assert [c[0] for c in backend.calls] == ["click_selector", "click_selector"]
+
+
+def test_live_activate_activates_once_per_hwnd(tmp_path, monkeypatch):
+    path, _ = _write_click_trajectory(tmp_path)
+    backend = _ActivatingBackend(present=True)
+    seen = _capture_replayer(monkeypatch, backend)
+
+    payload = record_replay_payload(_live_args(path, activate=True))
+
+    assert seen["activate"] is True
+    assert [c[0] for c in backend.calls].count("activate") == 1
+    assert backend.calls[0] == ("activate", 4242)
+    assert all(a["activation"] == {"ok": True, "hwnd": 4242}
+               for a in payload["actions"])
+    assert payload["ok"] is True
+
+
+def test_a_refused_activation_reaches_failed_steps_with_its_receipt(
+        tmp_path, monkeypatch):
+    """Activation failure is the reason nothing was sent - keep the receipt."""
+    path, _ = _write_click_trajectory(tmp_path)
+    backend = _ActivatingBackend(activate_ok=False)
+    _capture_replayer(monkeypatch, backend)
+
+    payload = record_replay_payload(_live_args(path, activate=True))
+
+    assert payload["ok"] is False
+    # the refusal is cached per hwnd, so both steps fail without delivery
+    assert [s["index"] for s in payload["failed_steps"]] == [0, 1]
+    for failed in payload["failed_steps"]:
+        assert failed["activation"]["ok"] is False
+        assert failed["activation"]["hwnd"] == 4242
+        assert "not activated" in failed["reason"]
+    assert [a["sent"] for a in payload["actions"]] == [False, False]
+    assert [c[0] for c in backend.calls] == ["activate"]
 
 
 def test_call_tool_exposes_record_replay(tmp_path):
@@ -141,3 +239,37 @@ class _NoEffectBackend:
 
     def probe(self, spec, *, hwnd=0):
         return {"found": False, "observed": "probe present=False"}
+
+
+class _ActivatingBackend:
+    """Acts and activates; records the call order, never touches the desktop.
+
+    The activation is cached per hwnd by the replayer, so a second step on the
+    same window must not produce a second ``activate`` call.
+    """
+
+    def __init__(self, *, activate_ok: bool = True, present: bool = False):
+        self.activate_ok = activate_ok
+        self.present = present
+        self.calls: list[tuple] = []
+
+    def activate(self, hwnd):
+        self.calls.append(("activate", hwnd))
+        return {"ok": self.activate_ok, "hwnd": hwnd}
+
+    def click_selector(self, hwnd, selector, *, button="left", double=False):
+        self.calls.append(("click_selector", hwnd, selector))
+        self.present = True
+
+    def click_xy(self, x, y, *, button="left", double=False):
+        self.calls.append(("click_xy", x, y))
+        self.present = True
+
+    def send_hotkey(self, combo):
+        self.calls.append(("send_hotkey", combo))
+
+    def type_text(self, text):
+        self.calls.append(("type_text", text))
+
+    def probe(self, spec, *, hwnd=0):
+        return {"found": self.present, "observed": f"present={self.present}"}

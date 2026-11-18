@@ -12,7 +12,11 @@ outcome readable without walking the action list:
                   whether an action took effect - a step with no recorded
                   expectation is ``unverified``, and ``ok`` stays True for it.
 ``failed_steps``  index / action / reason / error of every failed step,
-                  copied from ``actions`` rather than replacing it.
+                  plus its ``activation`` receipt (``None`` when the step
+                  never tried to activate), copied from ``actions`` rather
+                  than replacing it. A step refused because its window could
+                  not be brought to the front is only diagnosable through
+                  that receipt, so it must travel with the failure.
 
 ``live`` is opt-in and defaults to False. A dry run sends no input and claims
 nothing; only ``live=true`` actuates the desktop. Per step,
@@ -20,7 +24,9 @@ nothing; only ``live=true`` actuates the desktop. Per step,
 
 ``activate`` (only meaningful with ``live``) brings each step's window to the
 foreground before delivering, because real input lands on whatever is in
-front. It is opt-in: it steals focus and un-minimises the target.
+front. It is opt-in: it steals focus and un-minimises the target. A dry run
+never activates - it is forced off when ``live`` is false, so asking for
+``activate`` while merely planning cannot move a window on the user's desktop.
 """
 from __future__ import annotations
 
@@ -75,6 +81,7 @@ def record_replay_payload(arguments: dict[str, Any]) -> dict[str, Any]:
             "action": action.get("action"),
             "reason": action.get("reason"),
             "error": action.get("error"),
+            "activation": action.get("activation"),
         }
         for action in payload["actions"]
         if action.get("status") == "failed"

@@ -781,7 +781,9 @@ async def list_tools() -> list[Tool]:
                         "only means delivered - it is not proof of effect, and "
                         "a step with no recorded expectation stays "
                         "'unverified'. Failed steps keep their reason and "
-                        "error in actions[] and in failed_steps[].",
+                        "error in actions[] and in failed_steps[], together "
+                        "with the step's 'activation' receipt (null when no "
+                        "activation was attempted).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -803,7 +805,9 @@ async def list_tools() -> list[Tool]:
                                        "to the foreground before delivering. "
                                        "Real input lands on whatever is in "
                                        "front, so without it a background "
-                                       "target fails. Steals focus.",
+                                       "target fails. Steals focus. Ignored "
+                                       "when live=false: a dry run never "
+                                       "moves a window.",
                     },
                     "retries": {"type": "integer", "default": 2,
                                 "description": "attempts per step when the "

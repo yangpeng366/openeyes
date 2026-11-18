@@ -244,10 +244,14 @@ eyes focus --window <hwnd> --go                                # 手工只激活
 
 ### MCP
 
-`record_replay(trajectory_path, live=false, retries=2, timeout=2.0, interval=0.1)`
+`record_replay(trajectory_path, live=false, activate=false, retries=2, timeout=2.0, interval=0.1)`
 返回 `report.to_dict()` 外加 `ok`（无 failed 即为 `true`）与 `failed_steps`
-（每个失败步骤的 `index` / `action` / `reason` / `error`）。`actions[]` 原样保留，
+（每个失败步骤的 `index` / `action` / `reason` / `error` / `activation`）。`actions[]` 原样保留，
 失败明细不会被摘要覆盖。参数错误与读不到文件时返回 `{"error": ..., "tool": "record_replay"}`。
+
+`activate` 契约：`live=false` 时强制不激活（dry-run 不会把任何窗口提到前台，`activation` 恒为 `null`）；
+`live=true, activate=true` 时每个 `hwnd` 每次回放只激活一次，激活失败则该步 `sent=false` 并直接判 failed，
+失败的 `activation` 回执（`{"ok": false, "hwnd": ...}`）随 `failed_steps[]` 返回，便于定位「没送到」的原因。
 
 ## 降低门槛的设计要点（适用于所有路径）
 
