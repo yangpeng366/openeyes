@@ -1112,6 +1112,23 @@ def record() -> None:
     """Inspect, replay and export recorded trajectories."""
 
 
+def _activation_note(entry: dict) -> str | None:
+    """One line naming a window that refused focus, or ``None``.
+
+    A failed activation is the whole reason a step was not delivered, so the
+    terminal has to name the window: the status line only says "not activated"
+    and the operator cannot tell which hwnd to un-minimise. A successful
+    activation needs no line - the step's own status already carries it.
+    """
+    activation = entry.get("activation")
+    if not isinstance(activation, dict) or activation.get("ok"):
+        return None
+    hwnd = activation.get("hwnd")
+    error = activation.get("error") or activation.get("error_code") or ""
+    note = f"  activate hwnd={hwnd if hwnd is not None else '?'} ok=False"
+    return f"{note} {error}".rstrip()
+
+
 @record.command("replay")
 @click.argument("trajectory_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("--live", is_flag=True,
@@ -1133,7 +1150,9 @@ def record_replay(trajectory_path: str, live: bool, activate: bool,
     background target delivers the click to the wrong place and honestly
     reports 'failed'. ``--activate`` focuses each step's window first (opt-in:
     it steals focus and un-minimises); when focus cannot be taken the step is
-    not delivered at all and says so.
+    not delivered at all and says so, with an ``activate hwnd=... ok=False``
+    line naming the window that refused. ``--activate`` without ``--live`` is
+    ignored: a dry run sends nothing, so there is nothing to focus.
 
     The exit code is 0 when no step failed, 1 when any step failed. A bad
     invocation (missing file, unknown option) still exits 2 through click.
@@ -1164,6 +1183,9 @@ def record_replay(trajectory_path: str, live: bool, activate: bool,
             _safe_echo(
                 f"{item['index']}: {item['status']} {item.get('reason') or ''}".rstrip()
             )
+            note = _activation_note(item)
+            if note:
+                _safe_echo(note)
         for item in report.skipped:
             _safe_echo(f"{item['index']}: skipped {item.get('reason') or ''}".rstrip())
         _safe_echo(

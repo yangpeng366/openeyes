@@ -37,6 +37,14 @@ versioning: [Semantic Versioning](https://semver.org/).
   `test_a_dry_run_never_activates_even_when_asked`, `test_live_activation_is_opt_in`,
   `test_live_activate_activates_once_per_hwnd`,
   `test_a_refused_activation_reaches_failed_steps_with_its_receipt`.
+- **`eyes record replay --live` now names the window that refused focus.** The text output printed
+  `index: status reason`, and a refused step's reason was only "target window not activated", with
+  no hwnd; the operator could not tell which window to restore. A failed activation now adds one
+  `activate hwnd=<hwnd> ok=False <error>` line under that step (successful activations print
+  nothing - the step's own status already covers them). `--activate` without `--live` is pinned as
+  ignored: two CLI tests assert the flag never reaches `Replayer(activate=True)` in a dry run, and a
+  third drives the real `Replayer` with a backend that raises on any attribute access, so a plan
+  that touched the desktop would fail the suite.
 - **A dropped `roi_pad` is now auditable instead of silent.** `probe_anchors_in_image` narrows each
   search to the stored rect plus `roi_pad`, but a name stored only at another scale product had no
   rect to crop to, so the search widened back to the whole frame with no trace in the receipt. The

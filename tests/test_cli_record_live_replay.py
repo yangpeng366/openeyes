@@ -1,7 +1,8 @@
 """`eyes record replay --live` is opt-in, and its exit code follows failures.
 
-Every test here replaces ``openeyes.record.replayer.Replayer`` with a fake
-that never touches the desktop, so no mouse or keyboard input is ever sent.
+Every test here either replaces ``openeyes.record.replayer.Replayer`` with a
+fake, or drives the real one with a backend that refuses to be touched, so no
+mouse or keyboard input is ever sent.
 """
 from __future__ import annotations
 
@@ -23,7 +24,8 @@ def _write_trajectory(tmp_path) -> tuple[str, Trajectory]:
     return str(path), trajectory
 
 
-def _report(trajectory: Trajectory, dry_run: bool, statuses: list[str]) -> ReplayReport:
+def _report(trajectory: Trajectory, dry_run: bool, statuses: list[str],
+            activation: dict | None = None) -> ReplayReport:
     """A ReplayReport with one action per status, shaped like the real one."""
     report = ReplayReport(
         trajectory_id=trajectory.id,
@@ -44,9 +46,10 @@ def _report(trajectory: Trajectory, dry_run: bool, statuses: list[str]) -> Repla
             "elapsed": 0.01,
             "last_observed": "probe present=False",
             "preexisting": False,
+            "activation": activation if status == "failed" else None,
             "sent": not dry_run,
             "text_typed": False,
-            "reason": "expected state not observed within timeout"
+            "reason": "target window not activated: foreground refused"
             if status == "failed" else "no expectation recorded",
             "error": "expected state not observed within timeout"
             if status == "failed" else None,
@@ -68,7 +71,8 @@ def _patch_replayer(monkeypatch, dialog):
             if statuses is None:
                 statuses = ["planned"] * len(trajectory.steps) if seen["dry_run"] \
                     else ["verified"] * len(trajectory.steps)
-            return _report(trajectory, bool(seen["dry_run"]), statuses)
+            return _report(trajectory, bool(seen["dry_run"]), statuses,
+                           activation=dialog.get("activation"))
 
     monkeypatch.setattr("openeyes.record.replayer.Replayer", _FakeReplayer)
     return seen
@@ -110,6 +114,73 @@ def test_live_prints_one_line_per_step_with_the_status(tmp_path, monkeypatch):
     assert "1: unverified" in result.output
 
 
+# ------------------------------------------------------------ activate flag
+def test_activate_without_live_is_not_forwarded(tmp_path, monkeypatch):
+    """``--activate`` is a delivery aid: a plan sends nothing to focus."""
+    path, _ = _write_trajectory(tmp_path)
+    seen = _patch_replayer(monkeypatch, {"statuses": None})
+
+    result = CliRunner().invoke(cli, ["record", "replay", path, "--activate"])
+
+    assert result.exit_code == 0, result.output
+    assert seen["dry_run"] is True
+    assert seen["kwargs"]["activate"] is False
+    assert "activate" not in result.output.lower()
+
+
+def test_live_activate_reaches_the_replayer(tmp_path, monkeypatch):
+    path, _ = _write_trajectory(tmp_path)
+    seen = _patch_replayer(monkeypatch, {"statuses": None})
+
+    result = CliRunner().invoke(
+        cli, ["record", "replay", path, "--live", "--activate"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen["dry_run"] is False
+    assert seen["kwargs"]["activate"] is True
+
+
+def test_activate_without_live_never_touches_a_backend(tmp_path):
+    """The real Replayer, not a fake: a dry run builds no desktop backend."""
+    from openeyes.record.replayer import Replayer
+
+    path, trajectory = _write_trajectory(tmp_path)
+
+    class _Untouchable:
+        def __getattr__(self, name):
+            raise AssertionError(f"dry run touched backend.{name}")
+
+    report = Replayer(
+        dry_run=True, activate=True, backend=_Untouchable(),
+    ).replay(trajectory)
+
+    assert [item["status"] for item in report.actions] == ["planned"] * len(
+        trajectory.steps
+    )
+    assert all(item["activation"] is None for item in report.actions)
+
+
+def test_a_refused_activation_names_the_window(tmp_path, monkeypatch):
+    """A step that never got focus must say which hwnd refused it."""
+    path, _ = _write_trajectory(tmp_path)
+    _patch_replayer(monkeypatch, {
+        "statuses": ["verified", "failed"],
+        "activation": {"ok": False, "hwnd": 4242,
+                       "error": "foreground is not the target window"},
+    })
+
+    result = CliRunner().invoke(
+        cli, ["record", "replay", path, "--live", "--activate"],
+    )
+
+    assert result.exit_code != 0
+    assert "activate hwnd=4242 ok=False foreground is not the target window" \
+        in result.output
+    # The note belongs to the refused step only, not to the one that verified.
+    assert result.output.count("activate hwnd=") == 1
+
+
 # ------------------------------------------------------------ failing steps
 def test_a_failed_step_exits_non_zero_and_is_summarised(tmp_path, monkeypatch):
     path, _ = _write_trajectory(tmp_path)
@@ -147,7 +218,6 @@ def test_missing_trajectory_is_still_a_usage_error(tmp_path):
 def test_json_output_is_parseable_in_both_modes(tmp_path, monkeypatch):
     path, trajectory = _write_trajectory(tmp_path)
     seen = _patch_replayer(monkeypatch, {"statuses": None})
-
     dry = CliRunner().invoke(cli, ["record", "replay", path, "--json"])
     assert dry.exit_code == 0, dry.output
     assert seen["dry_run"] is True

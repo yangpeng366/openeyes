@@ -222,8 +222,14 @@ eyes focus --window <hwnd> --go                                # 手工只激活
 `foreground_after` / `reason` / `error_code`，`reason=already-foreground`
 表示目标已在前台、没有调用抢焦点原语（不扰动用户）。
 
+文本输出（不加 `--json`）在每一步的 `index: status reason` 行下，**仅对激活
+失败的步骤**再补一行 `activate hwnd=<hwnd> ok=False <error>`：状态行只有
+「not activated」，看不出是哪个窗口拒绝，补这一行才能直接定位要恢复的窗口。
+激活成功的步骤不补行——它的 `verified` / `unverified` 已经说明了结果。
+
 - 默认关闭：它会抢焦点、会取消最小化（可见副作用），不想被动桌面时不要开。
 - 每个 `hwnd` 每次回放只激活一次：逐步抢焦点会与用户的窗口操作打架。
+- 不带 `--live` 的 `--activate` 被忽略（计划不发送任何输入，没有可激活的对象）。
 - MCP 侧同名参数：`record_replay(..., live=true, activate=true)`。
 
 实测（Notepad hwnd=23924796）：
