@@ -523,6 +523,135 @@ def test_wait_anchors_multi_group_roi_narrows_or_widens_never_crops_empty(
 
 
 @requires_cv2
+def test_wait_anchors_rolls_the_roi_map_into_one_line(monkeypatch, tmp_path):
+    """The wait receipt answers "was this frame narrowed, and why not".
+
+    ``last.roi`` holds one entry per name, so a polling loop checking the
+    pad had to walk that map and read booleans. The receipt now carries the
+    roll-up beside ``last``: ``applied`` names in requested order, and
+    ``reasons`` counting the drop codes of the rest. Two widened names
+    prove the count is a count rather than a flag, and a poll that asked
+    for no pad reports ``None`` instead of an empty box.
+    """
+    cv2 = _cv2()
+    solo = _texture(seed=82)
+    chat = _texture(seed=83, height=30, width=40)
+    alert = _texture(seed=84, height=30, width=40)
+    regrown_chat = cv2.resize(chat, (52, 39), interpolation=cv2.INTER_LINEAR)
+    regrown_alert = cv2.resize(alert, (52, 39), interpolation=cv2.INTER_LINEAR)
+    image = np.full((300, 400), 20, dtype=np.uint8)
+    _paste(image, solo, 70, 45)
+    _paste(image, regrown_chat, 150, 20)    # 1.3x render, far from the 1.0 rect
+    _paste(image, regrown_alert, 300, 60)
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(solo), [70, 45, 42, 34],
+        score=1.0, scale_product=1.3021,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "chat_badge", Image.fromarray(chat), [150, 20, 40, 30],
+        score=1.0, scale_product=1.0,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "alert_badge", Image.fromarray(alert), [300, 60, 40, 30],
+        score=1.0, scale_product=1.0,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.3021)
+
+    receipt = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge", "chat_badge", "alert_badge"],
+        until="present", timeout=5, app="trae", roi_pad=16,
+    )
+
+    assert receipt["satisfied"] is True, json.dumps(receipt, default=str)
+    last = receipt["last"]
+    assert last["scale_source"] == "window-dpi"
+    assert receipt["roi"] == {
+        "pad": 16,
+        "applied": ["solo_badge"],
+        "widened": 2,
+        "reasons": {"no-stored-rect-at-this-scale": 2},
+    }
+    # Same order as the per-name map, so the two views cannot disagree.
+    assert list(last["roi"]) == ["solo_badge", "chat_badge", "alert_badge"]
+    assert receipt["roi"]["applied"] == [
+        name for name, entry in last["roi"].items() if entry["applied"]
+    ]
+    # The widened names are only found because their search went full-frame.
+    assert last["roi"]["chat_badge"]["reason"] == "no-stored-rect-at-this-scale"
+    assert last["anchors"]["chat_badge"]["bbox"]["x"] == 150
+    assert last["anchors"]["alert_badge"]["bbox"]["x"] == 300
+
+    # A poll that did not ask for a pad says so instead of reporting an empty one.
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    plain = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5, app="trae",
+    )
+
+    assert plain["satisfied"] is True, json.dumps(plain, default=str)
+    assert plain["roi"] is None
+    assert "roi" not in plain["last"]
+
+
+@requires_cv2
+def test_roi_union_of_two_distant_groups_covers_the_whole_frame(monkeypatch, tmp_path):
+    """Quantify what the union buys when the two stored groups are far apart.
+
+    A name captured at two scale products keeps two rects, and when neither
+    group matches the window DPI ``_roi_window`` takes the union, so the
+    crop is only as tight as the distance between the captures. On a
+    400x300 frame with a 16 px pad: one group alone would search
+    74x66 = 4,884 px (4.07% of the frame, a 24.57x saving), while these two
+    distant groups union to [0, 0, 400, 300] - all 120,000 px, a 1.00x
+    saving. The pad still answers correctly (the far group is found and the
+    poll is satisfied); it just stops narrowing, which is why ``applied``
+    alone is not a claim about the saving.
+    """
+    near = _texture(seed=85)
+    far = _texture(seed=86)
+    image = np.full((300, 400), 20, dtype=np.uint8)
+    _paste(image, far, 348, 258)           # only the 1.5625 capture is on screen
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(near), [10, 8, 42, 34],
+        score=1.0, scale_product=1.0,
+    )
+    anchor_backend.save_anchor(
+        tmp_path, "trae", "solo_badge", Image.fromarray(far), [348, 258, 42, 34],
+        score=1.0, scale_product=1.5625,
+    )
+    _patch_live_window(monkeypatch, [Image.fromarray(image)])
+    monkeypatch.setattr(anchor_backend, "_dpi_scale", lambda hwnd: 1.25)
+
+    receipt = anchor_backend.wait_anchors(
+        4242, tmp_path, ["solo_badge"], until="present", timeout=5,
+        app="trae", roi_pad=16,
+    )
+
+    assert receipt["satisfied"] is True, json.dumps(receipt, default=str)
+    last = receipt["last"]
+    assert last["scale_source"] == "none"
+    entry = last["roi"]["solo_badge"]
+    assert entry["applied"] is True and entry["reason"] is None
+    assert entry["region"] == [0, 0, 400, 300]
+
+    frame_px = 400 * 300
+    one_group_px = (42 + 32) * (34 + 32)
+    searched = last["anchors"]["solo_badge"]["search_region"]
+    assert searched["origin"] == [0, 0]
+    assert searched["size"] == [400, 300]
+    assert searched["size"][0] * searched["size"][1] == frame_px
+    assert one_group_px == 4884
+    assert round(one_group_px / frame_px, 4) == 0.0407
+    assert round(frame_px / one_group_px, 2) == 24.57
+    # Found in full-frame coordinates, so the degraded union is slow, not wrong.
+    assert last["anchors"]["solo_badge"]["bbox"]["x"] == 348
+    assert last["anchors"]["solo_badge"]["bbox"]["y"] == 258
+    assert receipt["roi"] == {
+        "pad": 16, "applied": ["solo_badge"], "widened": 0, "reasons": {},
+    }
+
+
+@requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
     image = np.full((150, 240), 20, dtype=np.uint8)

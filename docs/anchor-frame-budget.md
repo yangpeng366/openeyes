@@ -124,6 +124,15 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
   `store-unreadable`、`no-stored-rect`、`outside-frame`。用例：
   `test_probe_roi_pad_widens_instead_of_missing_a_name_at_another_scale`、
   `test_roi_window_names_why_the_pad_was_dropped`。
+- 轮询回执另带顶层汇总 `receipt["roi"]`（`roi_pad` 未传时为 `None`）：`pad`、`applied`（真正被
+  缩窗的 name，顺序同 `last["roi"]`）、`widened`（退回全帧的个数）、`reasons`（丢弃理由码计数）。
+  判 poll 是否缩窗、为什么没缩，不必再逐 name 读 `last["roi"]`。用例：
+  `test_wait_anchors_rolls_the_roi_map_into_one_line`。
+- 并集退化的量化边界：同名两组 rect 相距很远时，`applied: true` 只说明矩形存在，不说明省了多少。
+  400x300 帧、pad=16、两组 rect 分处左上/右下时，并集被夹成 `[0, 0, 400, 300]`（全帧 120,000 px）；
+  单组本应是 74x66 = 4,884 px（帧的 4.07%，省 24.57 倍），并集把收益降到 1.00 倍。答案仍然正确
+  （远处那组照样命中、轮询 satisfied），只是不再省时。用例：
+  `test_roi_union_of_two_distant_groups_covers_the_whole_frame`。
 
 回执字段（`report["scan_strategy"]`）：
 

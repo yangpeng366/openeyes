@@ -1449,6 +1449,44 @@ def _roi_window(
     return (left, top, right - left, bottom - top), None
 
 
+def _roi_summary(
+    roi: Mapping[str, Any] | None,
+    pad: int | None,
+) -> dict[str, Any] | None:
+    """Roll a probe's per-name ``roi`` map up into one receipt-level line.
+
+    The per-name map answers "what did *this* name's search become"; a
+    polling loop usually asks the cheaper question "was this frame
+    narrowed at all, and if not, why". Reading that out of ``last.roi``
+    means walking every name and comparing booleans, so the wait receipt
+    carries the roll-up once: ``applied`` keeps the names that were
+    narrowed (in requested order, so it lines up with ``last.roi``), and
+    ``reasons`` counts the drop codes of the rest.
+
+    ``applied`` says the pad bound a rect; it does not say how much of the
+    frame that rect covers. Two same-name groups stored far apart make the
+    union box the whole frame, so a caller that needs the saving should
+    compare ``region`` against the frame size itself.
+    """
+    if roi is None:
+        return None
+    applied: list[str] = []
+    reasons: dict[str, int] = {}
+    for name, entry in roi.items():
+        entry = entry if isinstance(entry, Mapping) else {}
+        if entry.get("applied"):
+            applied.append(str(name))
+            continue
+        code = str(entry.get("reason") or "unspecified")
+        reasons[code] = reasons.get(code, 0) + 1
+    return {
+        "pad": pad,
+        "applied": applied,
+        "widened": sum(reasons.values()),
+        "reasons": reasons,
+    }
+
+
 def _shift_report(
     report: dict[str, Any],
     origin: tuple[int, int],
@@ -1777,6 +1815,12 @@ def wait_anchors(
     none of them visible. Ambiguous counts as visible, so a shaky template
     never reads as "gone". Timeout is a verdict (``ANCHOR_TIMEOUT``), not
     an exception: the last frame stays in the receipt as evidence.
+
+    With ``roi_pad`` the receipt also carries ``roi`` beside ``last``: the
+    deciding frame's per-name roi map rolled up into ``pad``, ``applied``
+    (names whose search was narrowed) and ``reasons`` (drop-code counts),
+    so a poll's search area is legible without opening ``last``. ``roi`` is
+    ``None`` when no pad was requested.
     """
     target = str(until).strip().lower()
     if target not in {"present", "absent"}:
@@ -1805,6 +1849,10 @@ def wait_anchors(
         done = (wanted <= visible if target == "present"
                 else not (wanted & visible))
         elapsed = max(0.0, float(now()) - started)
+        summary = _roi_summary(
+            last.get("roi") if isinstance(last, dict) else None,
+            int(roi_pad) if roi_pad is not None else None,
+        )
         if done:
             return {
                 "ok": True,
@@ -1816,6 +1864,7 @@ def wait_anchors(
                 "polls": polls,
                 "elapsed_s": round(elapsed, 3),
                 "frame_changes": max(0, len(frames) - 1),
+                "roi": summary,
                 "error_code": None,
                 "error": None,
                 "last": last,
@@ -1831,6 +1880,7 @@ def wait_anchors(
                 "polls": polls,
                 "elapsed_s": round(elapsed, 3),
                 "frame_changes": max(0, len(frames) - 1),
+                "roi": summary,
                 "error_code": ERROR_ANCHOR_TIMEOUT,
                 "error": (f"{'/'.join(names)} did not become {target} "
                           f"within {float(timeout):g}s ({polls} polls)"),

@@ -47,6 +47,16 @@ versioning: [Semantic Versioning](https://semver.org/).
   full-frame answer can no longer be read as a narrowed one. Tests:
   `test_probe_roi_pad_widens_instead_of_missing_a_name_at_another_scale`,
   `test_roi_window_names_why_the_pad_was_dropped`.
+- **A `roi_pad` poll now states its narrowing in one line.** `wait_anchors` receipts carry
+  `roi` beside `last`: the deciding frame's per-name map rolled up into `pad`, `applied` (names
+  actually narrowed, in requested order) and `reasons` (drop-code counts, plus a `widened` total),
+  so a polling loop can answer "was this frame narrowed at all, and if not why" without walking
+  `last.roi`. `roi` is `None` when no pad was requested. A second test quantifies the case the
+  roll-up cannot see: two same-name groups stored far apart union to the whole frame (400x300
+  frame, 16 px pad: `[0, 0, 400, 300]`, 120,000 px searched; one group alone would be 4,884 px,
+  a 24.57x saving cut to 1.00x), and the answer stays correct because the far group is still
+  found. Tests: `test_wait_anchors_rolls_the_roi_map_into_one_line`,
+  `test_roi_union_of_two_distant_groups_covers_the_whole_frame`.
 - **`wait_anchors` polls under the same fast-path contract.** The polling loop forwards the product
   to `probe_anchors` on every frame, so an explicit product keeps the single-scale first stage per
   poll (verified carrier: `last["anchors"][name]["scan_strategy"]`), while a window-DPI stand-in
