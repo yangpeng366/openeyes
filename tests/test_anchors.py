@@ -651,6 +651,99 @@ def test_roi_union_of_two_distant_groups_covers_the_whole_frame(monkeypatch, tmp
     }
 
 
+def test_cli_anchor_wait_text_reports_the_pad_and_its_frame_share(monkeypatch):
+    """A padded poll's text line says what the pad bought, not just that it ran.
+
+    ``roi.applied`` is a boolean, so a union box that covers the whole frame
+    still reads as a saving in the receipt. The line prints the covered
+    fraction computed from the deciding frame instead: 74x66 px of 400x300.
+    """
+    receipt = {
+        "ok": True, "satisfied": True, "until": "present",
+        "names": ["solo_badge", "chat_badge"], "polls": 3, "elapsed_s": 1.204,
+        "roi": {"pad": 16, "applied": ["solo_badge"], "widened": 1,
+                "reasons": {"no-stored-rect-at-this-scale": 1}},
+        "last": {
+            "frame": {"size": [400, 300]},
+            "roi": {
+                "solo_badge": {"applied": True, "reason": None,
+                               "region": [54, 29, 74, 66]},
+                "chat_badge": {"applied": False,
+                               "reason": "no-stored-rect-at-this-scale",
+                               "region": None},
+            },
+        },
+    }
+    monkeypatch.setattr(anchor_backend, "wait_anchors",
+                        lambda *args, **kwargs: receipt)
+
+    result = CliRunner().invoke(
+        cli, ["anchor", "wait", "--window", "4242",
+              "--names", "solo_badge,chat_badge", "--app", "trae",
+              "--roi-pad", "16"])
+
+    assert result.exit_code == 0, result.output
+    assert ("solo_badge,chat_badge became present after 1.204s (3 polls); "
+            "roi pad=16 applied=1/2 frame=4.1% widened=1 "
+            "reasons=no-stored-rect-at-this-scale:1") in result.output
+
+
+def test_cli_roi_text_counts_overlapping_rects_once():
+    """Two applied rects overlapping by a quarter are not summed."""
+    from openeyes.cli.main import _anchor_roi_text
+
+    receipt = {
+        "names": ["a", "b"],
+        "roi": {"pad": 8, "applied": ["a", "b"], "widened": 0, "reasons": {}},
+        "last": {
+            "frame": {"size": [400, 300]},
+            "roi": {
+                "a": {"applied": True, "region": [0, 0, 200, 100]},
+                "b": {"applied": True, "region": [100, 50, 200, 100]},
+            },
+        },
+    }
+
+    # 20,000 + 20,000 - 5,000 overlap = 35,000 of 120,000 px; a sum would say 33.3%.
+    assert _anchor_roi_text(receipt) == "roi pad=8 applied=2/2 frame=29.2%"
+
+
+def test_cli_roi_text_omits_a_share_when_no_rect_was_applied():
+    """A wholly widened poll names the drop codes instead of a fake 100%."""
+    from openeyes.cli.main import _anchor_roi_text
+
+    receipt = {
+        "names": ["a", "b"],
+        "roi": {"pad": 8, "applied": [], "widened": 2,
+                "reasons": {"no-stored-rect": 1, "outside-frame": 1}},
+        "last": {
+            "frame": {"size": [400, 300]},
+            "roi": {"a": {"applied": False, "reason": "no-stored-rect"},
+                    "b": {"applied": False, "reason": "outside-frame"}},
+        },
+    }
+
+    assert _anchor_roi_text(receipt) == (
+        "roi pad=8 applied=0/2 widened=2 "
+        "reasons=no-stored-rect:1,outside-frame:1")
+
+
+def test_cli_anchor_wait_text_stays_quiet_without_a_pad(monkeypatch):
+    """No ``roi_pad`` means no clause: the receipt's ``roi`` is ``None``."""
+    receipt = {"ok": True, "satisfied": True, "until": "present",
+               "names": ["solo_badge"], "polls": 1, "elapsed_s": 0.2,
+               "roi": None, "last": {"frame": {"size": [400, 300]}}}
+    monkeypatch.setattr(anchor_backend, "wait_anchors",
+                        lambda *args, **kwargs: receipt)
+
+    result = CliRunner().invoke(
+        cli, ["anchor", "wait", "--window", "4242",
+              "--names", "solo_badge"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "solo_badge became present after 0.2s (1 polls)"
+
+
 @requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)

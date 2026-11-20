@@ -133,6 +133,17 @@ python -m pytest -q tests\test_anchors.py      # 79 passed（含抓帧预算 3 �
   单组本应是 74x66 = 4,884 px（帧的 4.07%，省 24.57 倍），并集把收益降到 1.00 倍。答案仍然正确
   （远处那组照样命中、轮询 satisfied），只是不再省时。用例：
   `test_roi_union_of_two_distant_groups_covers_the_whole_frame`。
+- `eyes anchor wait` 的文本行补上这一段（JSON 不变，回执 schema 不加字段）：带 `--roi-pad` 时在
+  `became ... (N polls)` 之后追加 `; roi pad=16 applied=1/2 frame=4.1% widened=1 reasons=<code>:N`。
+  `frame=` 是决定帧里所有 `applied` 矩形**并集**的面积占帧比（重叠不重复计），由 `last["roi"]` 的
+  `region` 与 `last["frame"]["size"]` 现算；没有矩形被应用时不打印该项，避免把全帧退化成“100%”。
+  未传 `--roi-pad` 时不追加任何内容。用例：
+  `test_cli_anchor_wait_text_reports_the_pad_and_its_frame_share`、
+  `test_cli_roi_text_counts_overlapping_rects_once`、
+  `test_cli_roi_text_omits_a_share_when_no_rect_was_applied`、
+  `test_cli_anchor_wait_text_stays_quiet_without_a_pad`。
+- 关于 `roi.frame_fraction`：全仓无消费方需要回执里带该字段（MCP 只透传 JSON，脚本自行比较
+  `last["roi"][name]["region"]` 与帧尺寸），故不下沉进回执，只在 CLI 文本层计算。
 
 回执字段（`report["scan_strategy"]`）：
 

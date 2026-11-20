@@ -162,6 +162,11 @@ eyes focus --window <hwnd> --restore --go --json   # un-minimize first, then ver
   `--roi-pad 48` ~0.12 s. The trade is positional: a control that moved farther
   than the pad reads as `missing`, and a byte-identical look-alike outside the ROI
   no longer causes a false `ambiguous`.
+- Text mode of `wait` adds one `roi` clause when `--roi-pad` was given:
+  `; roi pad=16 applied=1/2 frame=4.1% widened=1 reasons=<code>:N`. `frame=` is
+  the covered share of the deciding frame (union of the applied rects), so a pad
+  that no longer narrows anything reads as `frame=100.0%` instead of looking
+  like a saving. No `--roi-pad`, no clause, and the `--json` receipt is unchanged.
 - `wait` polls `probe` until all names are present (`--until present`, default)
   or none are (`--until absent`). Timeout is a verdict (`ANCHOR_TIMEOUT`, with
   `last` holding the final frame), not an exception. Waiting never sends input,

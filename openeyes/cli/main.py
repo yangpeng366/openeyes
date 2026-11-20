@@ -482,6 +482,91 @@ def anchor_probe(hwnd: int, image: str | None, names: str, store: str | None,
         )
 
 
+def _roi_frame_fraction(receipt: dict) -> float | None:
+    """Share of the deciding frame the applied search rects cover.
+
+    ``roi.applied`` only says a rect bound the search. Two captures of the
+    same name stored far apart union to the whole frame, so the boolean can
+    read as a saving that never happened. The union is taken here instead of
+    in the receipt because no caller reads it: the CLI is the one place that
+    prints a human summary of a poll.
+    """
+    last = receipt.get("last")
+    last = last if isinstance(last, dict) else {}
+    frame = last.get("frame")
+    size = frame.get("size") if isinstance(frame, dict) else None
+    if not isinstance(size, (list, tuple)) or len(size) != 2:
+        return None
+    try:
+        width, height = int(size[0]), int(size[1])
+    except (TypeError, ValueError):
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    roi = last.get("roi")
+    roi = roi if isinstance(roi, dict) else {}
+    summary = receipt.get("roi")
+    applied = summary.get("applied") if isinstance(summary, dict) else None
+    boxes: list[tuple[int, int, int, int]] = []
+    for name in applied or []:
+        entry = roi.get(str(name))
+        region = entry.get("region") if isinstance(entry, dict) else None
+        if not isinstance(region, (list, tuple)) or len(region) != 4:
+            continue
+        try:
+            x, y, box_w, box_h = (int(value) for value in region)
+        except (TypeError, ValueError):
+            continue
+        if box_w > 0 and box_h > 0:
+            boxes.append((x, y, x + box_w, y + box_h))
+    if not boxes:
+        return None
+    edges = sorted({edge for box in boxes for edge in (box[0], box[2])})
+    covered_px = 0
+    for left, right in zip(edges, edges[1:], strict=False):
+        if right <= left:
+            continue
+        spans = sorted((box[1], box[3]) for box in boxes
+                       if box[0] <= left and box[2] >= right)
+        top: int | None = None
+        bottom = 0
+        covered = 0
+        for span_top, span_bottom in spans:
+            if top is None or span_top > bottom:
+                if top is not None:
+                    covered += bottom - top
+                top, bottom = span_top, span_bottom
+            else:
+                bottom = max(bottom, span_bottom)
+        if top is not None:
+            covered += bottom - top
+        covered_px += covered * (right - left)
+    return min(1.0, covered_px / float(width * height))
+
+
+def _anchor_roi_text(receipt: dict) -> str | None:
+    """One clause for a padded poll: what the pad narrowed, and to how much."""
+    roi = receipt.get("roi")
+    if not isinstance(roi, dict):
+        return None
+    applied = [str(name) for name in roi.get("applied") or []]
+    widened = roi.get("widened")
+    widened = int(widened) if isinstance(widened, (int, float)) else 0
+    total = len(receipt.get("names") or []) or len(applied) + widened
+    parts = [f"pad={roi.get('pad')}", f"applied={len(applied)}/{total}"]
+    fraction = _roi_frame_fraction(receipt)
+    if fraction is not None:
+        parts.append(f"frame={fraction * 100:.1f}%")
+    if widened:
+        parts.append(f"widened={widened}")
+        reasons = roi.get("reasons")
+        detail = ",".join(f"{code}:{count}"
+                          for code, count in sorted((reasons or {}).items()))
+        if detail:
+            parts.append(f"reasons={detail}")
+    return "roi " + " ".join(parts)
+
+
 @anchor.command("wait")
 @click.option("--window", "hwnd", type=int, required=True)
 @click.option("--names", "names", required=True,
@@ -532,10 +617,10 @@ def anchor_wait(hwnd: int, names: str, until: str, timeout: float,
     if as_json or wants_json():
         emit_json(receipt)
         return
-    click.echo(
-        f"{','.join(wanted)} became {until} after "
-        f"{receipt['elapsed_s']:g}s ({receipt['polls']} polls)"
-    )
+    line = (f"{','.join(wanted)} became {until} after "
+            f"{receipt['elapsed_s']:g}s ({receipt['polls']} polls)")
+    roi_text = _anchor_roi_text(receipt)
+    click.echo(f"{line}; {roi_text}" if roi_text else line)
 
 
 @anchor.command("capture")

@@ -65,6 +65,18 @@ versioning: [Semantic Versioning](https://semver.org/).
   a 24.57x saving cut to 1.00x), and the answer stays correct because the far group is still
   found. Tests: `test_wait_anchors_rolls_the_roi_map_into_one_line`,
   `test_roi_union_of_two_distant_groups_covers_the_whole_frame`.
+- **`eyes anchor wait` text output now shows what the pad bought.** The receipt's `roi` roll-up
+  answered *whether* a name's search was narrowed, but the text line printed only
+  `became present after ...s (N polls)`, so a poll whose union box still covered the whole frame
+  read like a saving. With `--roi-pad` the line now appends
+  `; roi pad=16 applied=1/2 frame=4.1% widened=1 reasons=<code>:N`; `frame=` is the covered
+  share of the deciding frame, computed as the union of the applied rects (overlap counted once)
+  from `last.roi[*].region` and `last.frame.size`, and it is omitted when no rect was applied. No
+  field is added to the receipt: no MCP caller or script reads a `roi.frame_fraction`, and the
+  `--json` shape is unchanged. Tests: `test_cli_anchor_wait_text_reports_the_pad_and_its_frame_share`,
+  `test_cli_roi_text_counts_overlapping_rects_once`,
+  `test_cli_roi_text_omits_a_share_when_no_rect_was_applied`,
+  `test_cli_anchor_wait_text_stays_quiet_without_a_pad`.
 - **`wait_anchors` polls under the same fast-path contract.** The polling loop forwards the product
   to `probe_anchors` on every frame, so an explicit product keeps the single-scale first stage per
   poll (verified carrier: `last["anchors"][name]["scan_strategy"]`), while a window-DPI stand-in
