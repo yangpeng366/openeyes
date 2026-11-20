@@ -1239,6 +1239,12 @@ def record_replay(trajectory_path: str, live: bool, activate: bool,
     line naming the window that refused. ``--activate`` without ``--live`` is
     ignored: a dry run sends nothing, so there is nothing to focus.
 
+    The text tail separates delivery from effect: the status line labels
+    ``unverified`` as delivered-but-unproven, and a ``delivery:`` line gives
+    delivered / not delivered (plus how many activations were refused), so a
+    step that never reached the desktop is not read as one that ran and did
+    nothing.
+
     The exit code is 0 when no step failed, 1 when any step failed. A bad
     invocation (missing file, unknown option) still exits 2 through click.
     """
@@ -1274,8 +1280,19 @@ def record_replay(trajectory_path: str, live: bool, activate: bool,
         for item in report.skipped:
             _safe_echo(f"{item['index']}: skipped {item.get('reason') or ''}".rstrip())
         _safe_echo(
-            f"{counts['verified']} verified / {counts['unverified']} unverified / "
+            f"{counts['verified']} verified / "
+            f"{counts['unverified']} delivered, effect unverified / "
             f"{counts[STATUS_FAILED]} failed"
+        )
+        # `failed` mixes "sent but the effect did not show" with "never sent",
+        # so the tail states the delivery side on its own line rather than
+        # leaving a refused window to look like a step that ran and did nothing.
+        delivery = report.delivery()
+        refused = delivery["refused_activation"] or 0
+        _safe_echo(
+            f"delivery: {delivery['delivered']} delivered / "
+            f"{delivery['not_delivered']} not delivered"
+            + (f" ({refused} activation refused)" if refused else "")
         )
 
     if counts[STATUS_FAILED]:

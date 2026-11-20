@@ -126,3 +126,49 @@ def test_backend_without_activate_refuses_instead_of_clicking_blindly():
     assert report.actions[0]["status"] == "failed"
     assert "activate()" in report.actions[0]["reason"]
     assert backend.calls == []
+
+
+def test_refused_activation_is_counted_as_not_delivered():
+    """A refused window is an undelivered step, not a delivered failure.
+
+    Both steps share the hwnd, so both are refused by the cached activation:
+    nothing was sent, and the summary must say so instead of leaving the two
+    steps indistinguishable from ones that ran and missed their expectation.
+    """
+    backend = _Backend(activate_ok=False)
+    report = _replay(
+        backend,
+        _click_traj(steps=2, meta={"expect": {"automation_id": "ok_button"}}),
+        activate=True,
+    )
+
+    summary = report.to_dict()["summary"]
+    assert summary["failed"] == 2
+    assert summary["refused_activation"] == 2
+    assert summary["delivered"] == 0
+    assert summary["not_delivered"] == 2
+    assert all(action["sent"] is False for action in report.actions)
+
+
+def test_delivered_step_whose_effect_is_unproven_is_not_counted_as_undelivered():
+    """The other side of the split: delivered, unverified, still delivered."""
+    backend = _Backend()
+    report = _replay(backend, _click_traj(), activate=True)
+
+    summary = report.to_dict()["summary"]
+    assert summary["verified"] == 0
+    assert summary["unverified"] == 1
+    assert summary["delivered"] == 1
+    assert summary["not_delivered"] == 0
+    assert summary["refused_activation"] == 0
+
+
+def test_a_dry_run_does_not_claim_any_delivery():
+    """Planned steps are neither delivered nor refused - both stay unclaimed."""
+    report = Replayer(dry_run=True).replay(_click_traj())
+    summary = report.to_dict()["summary"]
+
+    assert summary["planned"] == 1
+    assert summary["delivered"] is None
+    assert summary["not_delivered"] is None
+    assert summary["refused_activation"] == 0

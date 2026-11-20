@@ -316,8 +316,38 @@ class ReplayReport:
         counts[STATUS_SKIPPED] = len(self.skipped)
         return counts
 
+    def delivery(self) -> dict[str, int | None]:
+        """Split the executed steps by what happened to the input itself.
+
+        Statuses answer "did the effect get proven", not "did the input ever
+        arrive". Both kinds of shortfall used to hide inside ``failed``: a
+        step whose window refused focus was never delivered at all, while a
+        step that was delivered and could not be observed is a different
+        fact. ``refused_activation`` counts the first kind (activation was
+        attempted and refused, so nothing was sent), ``delivered`` /
+        ``not_delivered`` count actions by their ``sent`` flag.
+
+        A dry run attempts nothing, so ``delivered`` and ``not_delivered``
+        stay ``None``: "nothing was attempted" is not "nothing arrived".
+        """
+        refused = 0
+        for action in self.actions:
+            activation = action.get("activation")
+            if isinstance(activation, dict) and activation.get("ok") is False:
+                refused += 1
+        if self.dry_run:
+            return {"delivered": None, "not_delivered": None,
+                    "refused_activation": refused}
+        delivered = sum(1 for action in self.actions if action.get("sent"))
+        return {
+            "delivered": delivered,
+            "not_delivered": len(self.actions) - delivered,
+            "refused_activation": refused,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         counts = self.counts()
+        delivery = self.delivery()
         return {
             "trajectory_id": self.trajectory_id,
             "trajectory_name": self.trajectory_name,
@@ -331,6 +361,12 @@ class ReplayReport:
                 "failed": counts[STATUS_FAILED],
                 "skipped": counts[STATUS_SKIPPED],
                 "planned": counts[STATUS_PLANNED],
+                # Delivery, not effect: keeps "never arrived" out of the
+                # failed count above, where it could not be told apart from
+                # "arrived but the effect was not observed".
+                "delivered": delivery["delivered"],
+                "not_delivered": delivery["not_delivered"],
+                "refused_activation": delivery["refused_activation"],
                 # True only when every executed step was proven effective.
                 "all_effect_verified": None if self.dry_run else (
                     counts[STATUS_VERIFIED] > 0
