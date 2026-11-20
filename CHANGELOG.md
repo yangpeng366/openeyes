@@ -26,6 +26,19 @@ versioning: [Semantic Versioning](https://semver.org/).
   reintroduces `text=True` / `universal_newlines`.
 
 ### Changed
+- **A replay now separates "never delivered" from "delivered, effect unproven".** `ReplayReport.summary`
+  gains `delivered` / `not_delivered` / `refused_activation`, and `eyes record replay --live` prints them.
+  The status line used to end `N verified / N unverified / N failed`, where `failed` held both a step whose
+  window refused focus (nothing was ever sent) and a step that was sent but never showed the expected state -
+  the same number for two different facts. `ReplayReport.delivery()` counts actions by `sent` and counts a
+  refused activation receipt (`activation.ok is False`) separately; a dry run reports `null` for
+  `delivered` / `not_delivered` because a plan delivers nothing, and 0 refusals because none was attempted.
+  The live tail is now `N verified / N delivered, effect unverified / N failed` plus
+  `delivery: N delivered / N not delivered (N activation refused)`; the count is printed only when non-zero.
+  Tests: `test_refused_activation_is_counted_as_not_delivered`,
+  `test_delivered_step_whose_effect_is_unproven_is_not_counted_as_undelivered`,
+  `test_a_dry_run_does_not_claim_any_delivery`,
+  `test_a_refused_activation_is_counted_in_the_json_summary`.
 - **A failed `record_replay` step now carries its `activation` receipt.** `failed_steps[]` reported
   `index` / `action` / `reason` / `error`, so a step refused because its window could not be brought
   to the front read as a bare "not activated" with no hwnd and no ok flag. Each entry now includes

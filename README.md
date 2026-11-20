@@ -244,7 +244,10 @@ eyes record replay trajectory.jsonl --live --json   # same, report.to_dict() on 
 
 Without `--live` nothing is sent and every step is `planned`. With `--live` the
 steps are delivered and each one is `verified` / `unverified` / `failed`; the exit
-code is 1 when any step failed. `sent: true` means *delivered*, not *effective*.
+code is 1 when any step failed. `sent: true` means *delivered*, not *effective*:
+the text tail prints `delivery: N delivered / N not delivered` (plus
+`refused_activation` when a window refused focus) so a step that never reached
+the desktop is not read as one that ran and did nothing.
 See `docs/RECORD_DESIGN.md` for the three-state semantics.
 
 ### Export a loadable skill

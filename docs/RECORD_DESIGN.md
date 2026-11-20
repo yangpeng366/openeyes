@@ -136,6 +136,21 @@ graph.to_dot()                                      # DAG DOT
 
 `skipped` 是计划阶段就识别出的未知动作，单独计数，不进入上面三态。
 
+### 「未投递」与「投递了但效果未验证」是两件事
+
+三态里的 `failed` 混着两种事实：一是**根本没送到**（目标窗口拒绝激活、没有可投递
+路径、投递抛错，`sent=false`），二是**送到了但期望没成立**。为了不让窗口拒绝变成
+「跑了但没效果」，`summary` 另带三个投递口径的计数：
+
+| 字段 | 含义 |
+|---|---|
+| `delivered` | `sent=true` 的步数：输入确实投递出去 |
+| `not_delivered` | 已执行但 `sent=false` 的步数（含激活被拒） |
+| `refused_activation` | 激活尝试过且被拒的步数（`activation.ok is false`），这些步一律未投递 |
+
+dry-run 下 `delivered` / `not_delivered` 为 `null`（什么都没尝试，不等于什么都没送到），
+`refused_activation` 为 0。`refused_activation` 是 `not_delivered` 的子集，不是并列计数。
+
 ### 「已发送」不等于「已生效」
 
 报告里每步有 `sent` 字段，它只表示**输入已投递**，不表示界面状态发生了改变：
@@ -246,7 +261,11 @@ eyes focus --window <hwnd> --go                                # 手工只激活
   参数/文件错误仍由 click 返回 `2`。
 - `--json` 在两种模式下都只把 `report.to_dict()` 打到 stdout，便于管道解析。
 - 不带 `--json`：dry-run 保持原有计划输出；`--live` 逐步打印
-  `index: status reason`，末行 `N verified / N unverified / N failed`。
+  `index: status reason`，末两行分别为
+  `N verified / N delivered, effect unverified / N failed` 与
+  `delivery: N delivered / N not delivered (N activation refused)`（没有拒绝时不带括号）。
+  第一行标出 `unverified` 是**已投递**、只是效果没被证明；第二行单独给出投递口径，
+  这样「没送到」不会被读成「送到了没生效」。
 
 ### MCP
 
