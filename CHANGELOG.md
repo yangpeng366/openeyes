@@ -26,6 +26,16 @@ versioning: [Semantic Versioning](https://semver.org/).
   reintroduces `text=True` / `universal_newlines`.
 
 ### Changed
+- **A padded `anchor wait` that times out now says what the pad narrowed.** The success line grew a
+  `roi pad=... applied=n/m frame=x% ...` clause earlier, but the timeout line still read only
+  `X did not become present within Ns (M polls)`, so a pad's saving disappeared exactly in the case a
+  caller most needs it - a wait that ran out. `_anchor_payload_error` gains an optional `suffix`
+  (appended with `; `) and `anchor wait` passes the same `_anchor_roi_text` the success path uses, so
+  both lines answer "how much of the frame did this poll actually search". No pad, no clause: the
+  line stays byte-identical to the receipt's own `error`, and `--json` keeps the `roi` map beside it.
+  Tests: `test_cli_anchor_wait_timeout_text_carries_the_roi_clause`,
+  `test_cli_anchor_wait_timeout_text_stays_quiet_without_a_pad`,
+  `test_cli_anchor_wait_timeout_json_keeps_the_roi_map`.
 - **A replay now separates "never delivered" from "delivered, effect unproven".** `ReplayReport.summary`
   gains `delivered` / `not_delivered` / `refused_activation`, and `eyes record replay --live` prints them.
   The status line used to end `N verified / N unverified / N failed`, where `failed` held both a step whose

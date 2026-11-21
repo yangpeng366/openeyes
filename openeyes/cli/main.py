@@ -279,9 +279,17 @@ def _anchor_exit_code(error_code: str | None, operation: str = "find") -> int:
     return 5 if operation == "click" else 4
 
 
-def _anchor_payload_error(payload: dict, *, operation: str) -> None:
-    """Emit a structured anchor failure, preserving checks and hits."""
+def _anchor_payload_error(payload: dict, *, operation: str,
+                          suffix: str | None = None) -> None:
+    """Emit a structured anchor failure, preserving checks and hits.
+
+    ``suffix`` carries a text-tier clause the receipt's own ``error`` string
+    does not hold (today only the wait's roi roll-up), appended with ``"; "``
+    so the failure line answers the same question the success line does.
+    """
     message = payload.get("error") or payload.get("reason") or "anchor operation failed"
+    if suffix:
+        message = f"{message}; {suffix}"
     extra = {key: value for key, value in payload.items()
              if key not in {"ok", "error"}}
     emit_error(str(message), code=_anchor_exit_code(payload.get("error_code"), operation),
@@ -612,7 +620,8 @@ def anchor_wait(hwnd: int, names: str, until: str, timeout: float,
                    hwnd=hwnd, anchors=wanted)
         return
     if not receipt.get("ok"):
-        _anchor_payload_error(receipt, operation="wait")
+        _anchor_payload_error(receipt, operation="wait",
+                              suffix=_anchor_roi_text(receipt))
         return
     if as_json or wants_json():
         emit_json(receipt)

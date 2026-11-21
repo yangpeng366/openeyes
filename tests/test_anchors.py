@@ -744,6 +744,89 @@ def test_cli_anchor_wait_text_stays_quiet_without_a_pad(monkeypatch):
     assert result.output.strip() == "solo_badge became present after 0.2s (1 polls)"
 
 
+def _timed_out_padded_receipt() -> dict:
+    return {
+        "ok": False, "satisfied": False, "until": "present",
+        "names": ["solo_badge", "chat_badge"], "polls": 3, "elapsed_s": 2.0,
+        "error_code": anchor_backend.ERROR_ANCHOR_TIMEOUT,
+        "error": "solo_badge/chat_badge did not become present within 2s (3 polls)",
+        "roi": {"pad": 16, "applied": ["solo_badge"], "widened": 1,
+                "reasons": {"no-stored-rect-at-this-scale": 1}},
+        "last": {
+            "frame": {"size": [400, 300]},
+            "roi": {
+                "solo_badge": {"applied": True, "reason": None,
+                               "region": [54, 29, 74, 66]},
+                "chat_badge": {"applied": False,
+                               "reason": "no-stored-rect-at-this-scale",
+                               "region": None},
+            },
+        },
+    }
+
+
+def test_cli_anchor_wait_timeout_text_carries_the_roi_clause(monkeypatch):
+    """A padded poll that times out says what the pad narrowed, as success does.
+
+    The failure line used to name only the names and the budget, so a pad's
+    saving was legible when a wait happened to succeed and invisible when it
+    ran out - the case where a caller most needs to know the search was
+    narrow. The clause is computed from the deciding frame, same as the
+    success path: 74x66 px of 400x300.
+    """
+    monkeypatch.setattr(anchor_backend, "wait_anchors",
+                        lambda *args, **kwargs: _timed_out_padded_receipt())
+
+    result = CliRunner().invoke(
+        cli, ["anchor", "wait", "--window", "4242",
+              "--names", "solo_badge,chat_badge", "--app", "trae",
+              "--roi-pad", "16"])
+
+    assert result.exit_code == 3, result.output
+    assert result.stdout == ""
+    assert result.stderr.strip() == (
+        "error: solo_badge/chat_badge did not become present within 2s "
+        "(3 polls); roi pad=16 applied=1/2 frame=4.1% widened=1 "
+        "reasons=no-stored-rect-at-this-scale:1")
+
+
+def test_cli_anchor_wait_timeout_text_stays_quiet_without_a_pad(monkeypatch):
+    """No ``--roi-pad`` means no clause, and no stray separator either."""
+    receipt = {
+        "ok": False, "satisfied": False, "until": "present",
+        "names": ["solo_badge"], "polls": 3, "elapsed_s": 2.0,
+        "error_code": anchor_backend.ERROR_ANCHOR_TIMEOUT,
+        "error": "solo_badge did not become present within 2s (3 polls)",
+        "roi": None, "last": {"frame": {"size": [400, 300]}},
+    }
+    monkeypatch.setattr(anchor_backend, "wait_anchors",
+                        lambda *args, **kwargs: receipt)
+
+    result = CliRunner().invoke(
+        cli, ["anchor", "wait", "--window", "4242", "--names", "solo_badge"])
+
+    assert result.exit_code == 3, result.output
+    assert result.stderr.strip() == (
+        "error: solo_badge did not become present within 2s (3 polls)")
+
+
+def test_cli_anchor_wait_timeout_json_keeps_the_roi_map(monkeypatch):
+    """``--json`` keeps the receipt's own ``roi`` field beside the message."""
+    monkeypatch.setattr(anchor_backend, "wait_anchors",
+                        lambda *args, **kwargs: _timed_out_padded_receipt())
+
+    result = CliRunner().invoke(
+        cli, ["anchor", "wait", "--window", "4242",
+              "--names", "solo_badge,chat_badge", "--roi-pad", "16", "--json"])
+
+    assert result.exit_code == 3, result.output
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["roi"]["applied"] == ["solo_badge"]
+    assert payload["error"].endswith("roi pad=16 applied=1/2 frame=4.1% widened=1 "
+                                     "reasons=no-stored-rect-at-this-scale:1")
+
+
 @requires_cv2
 def test_find_anchor_prefers_matching_scale_product_group(monkeypatch, tmp_path):
     template = _texture(seed=51)
