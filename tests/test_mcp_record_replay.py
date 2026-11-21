@@ -65,6 +65,23 @@ def test_the_tool_is_a_dry_run_unless_live_is_true(tmp_path):
     assert all(action["sent"] is False for action in payload["actions"])
 
 
+def test_every_report_names_delivery_separately_from_effect(tmp_path):
+    """``delivered``/``refused_activation`` are contract, not decoration.
+
+    A dry run attempts nothing: ``delivered`` stays ``None`` so a reader can
+    tell "never arrived" from "never tried".
+    """
+    path, _ = _write_trajectory(tmp_path)
+
+    payload = record_replay_payload({"trajectory_path": path})
+
+    assert {"delivered", "not_delivered", "refused_activation"} <= set(
+        payload["summary"])
+    assert payload["summary"]["delivered"] is None
+    assert payload["summary"]["not_delivered"] is None
+    assert payload["summary"]["refused_activation"] == 0
+
+
 def test_a_missing_path_is_an_error_not_an_empty_report(tmp_path):
     with pytest.raises(ValueError):
         record_replay_payload({})
@@ -173,6 +190,10 @@ def test_live_activate_activates_once_per_hwnd(tmp_path, monkeypatch):
     assert all(a["activation"] == {"ok": True, "hwnd": 4242}
                for a in payload["actions"])
     assert payload["ok"] is True
+    # both clicks were actually delivered, and neither was refused
+    assert payload["summary"]["delivered"] == 2
+    assert payload["summary"]["not_delivered"] == 0
+    assert payload["summary"]["refused_activation"] == 0
 
 
 def test_a_refused_activation_reaches_failed_steps_with_its_receipt(
@@ -193,6 +214,11 @@ def test_a_refused_activation_reaches_failed_steps_with_its_receipt(
         assert "not activated" in failed["reason"]
     assert [a["sent"] for a in payload["actions"]] == [False, False]
     assert [c[0] for c in backend.calls] == ["activate"]
+    # the split must say "nothing arrived", not merely "the effect is unproven"
+    summary = payload["summary"]
+    assert summary["delivered"] == 0
+    assert summary["not_delivered"] == 2
+    assert summary["refused_activation"] == 2
 
 
 def test_call_tool_exposes_record_replay(tmp_path):
@@ -210,6 +236,40 @@ def test_call_tool_exposes_record_replay(tmp_path):
     assert payload["ok"] is True
     assert len(payload["actions"]) == 2
     assert "failed_steps" in payload
+    # the delivery split survives the MCP envelope, and a dry run claims none
+    assert payload["summary"]["delivered"] is None
+    assert payload["summary"]["not_delivered"] is None
+    assert payload["summary"]["refused_activation"] == 0
+
+
+def test_call_tool_reports_the_delivery_split_for_a_refused_activation(
+        tmp_path, monkeypatch):
+    """Over the real MCP envelope, a refusal reads as "not delivered".
+
+    ``delivered + not_delivered`` must cover every action, and
+    ``refused_activation`` must name the subset that never left the process -
+    a caller who only looks at ``failed`` cannot tell those apart otherwise.
+    """
+    pytest.importorskip("mcp")
+    import openeyes.mcp.server as mcp_server
+
+    path, _ = _write_click_trajectory(tmp_path)
+    _capture_replayer(monkeypatch, _ActivatingBackend(activate_ok=False))
+
+    result = asyncio.run(mcp_server.call_tool(
+        "record_replay", _live_args(path, activate=True),
+    ))
+    payload = json.loads(result[0].text)
+
+    assert payload["ok"] is False
+    summary = payload["summary"]
+    assert summary["delivered"] == 0
+    assert summary["not_delivered"] == 2
+    assert summary["refused_activation"] == 2
+    assert summary["delivered"] + summary["not_delivered"] == summary["total"]
+    assert summary["refused_activation"] <= summary["not_delivered"]
+    assert [s["activation"]["ok"] for s in payload["failed_steps"]] == [
+        False, False]
 
 
 def test_call_tool_reports_a_bad_path_in_the_error_envelope(tmp_path):

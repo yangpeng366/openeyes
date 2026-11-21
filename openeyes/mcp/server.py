@@ -783,7 +783,13 @@ async def list_tools() -> list[Tool]:
                         "'unverified'. Failed steps keep their reason and "
                         "error in actions[] and in failed_steps[], together "
                         "with the step's 'activation' receipt (null when no "
-                        "activation was attempted).",
+                        "activation was attempted). summary.delivered / "
+                        "not_delivered count actions by that same 'sent' "
+                        "flag, and summary.refused_activation counts steps "
+                        "whose window refused focus - those were never sent "
+                        "at all, which 'failed' alone cannot distinguish. A "
+                        "dry run reports delivered/not_delivered as null, "
+                        "not 0: nothing was attempted.",
             inputSchema={
                 "type": "object",
                 "properties": {
