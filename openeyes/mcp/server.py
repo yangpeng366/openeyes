@@ -708,7 +708,11 @@ async def list_tools() -> list[Tool]:
                         "present (until=present, the default) or all are "
                         "gone (until=absent). Read-only; it never resends a "
                         "task. Timeout is a verdict (ANCHOR_TIMEOUT), not "
-                        "an exception. Ambiguous counts as visible.",
+                        "an exception. Ambiguous counts as visible. With "
+                        "roi_pad the receipt carries a rolled-up roi line "
+                        "(pad / applied / widened / reasons) beside last, on "
+                        "a timeout too, so a failed poll says whether its "
+                        "search area was narrowed.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -723,7 +727,12 @@ async def list_tools() -> list[Tool]:
                     "threshold": {"type": "number", "default": 0.8},
                     "scale_product": {"type": "number"},
                     "color_theme": {"type": "string", "enum": ["light", "dark"]},
-                    "roi_pad": {"type": "integer"}
+                    "roi_pad": {"type": "integer",
+                                "description": "narrow each poll to the stored rect "
+                                               "plus this pad; the receipt then "
+                                               "carries roi, and names that could "
+                                               "not be narrowed are counted in "
+                                               "roi.reasons"}
                 },
                 "required": ["hwnd", "names"]
             },

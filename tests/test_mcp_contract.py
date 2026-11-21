@@ -659,6 +659,51 @@ def test_anchor_wait_defaults_to_present_and_forwards_timeout(monkeypatch):
     assert seen["timeout"] == 900.0
 
 
+def test_anchor_wait_timeout_keeps_the_roi_roll_up(monkeypatch, tmp_path):
+    """A timeout is the case a caller most needs the roi line for.
+
+    ``anchor_wait`` hands the backend receipt back untouched, so the roll-up
+    ``wait_anchors`` computes has to survive the tool boundary: an agent that
+    sees only ``roi`` can tell whether the polled search area was narrowed
+    without walking ``last.roi`` name by name.
+    """
+    from openeyes.backends import anchor as anchor_api
+
+    def fake_probe(hwnd, store, names, **kwargs):
+        return {
+            "ok": False,
+            "requested": ["solo_badge", "chat_badge"],
+            "matched": [],
+            "ambiguous": [],
+            "frame": {"size": [800, 600], "sha256": "deadbeef"},
+            "roi": {
+                "solo_badge": {"applied": True, "region": [10, 10, 100, 60]},
+                "chat_badge": {"applied": False,
+                               "reason": "no-stored-rect-at-this-scale"},
+            },
+        }
+
+    monkeypatch.setattr(anchor_api, "probe_anchors", fake_probe)
+    result = _call("anchor_wait", {
+        "hwnd": 4242,
+        "names": ["solo_badge", "chat_badge"],
+        "store": str(tmp_path),
+        "timeout": 0,
+        "roi_pad": 16,
+    })
+
+    assert result["error_code"] == "ANCHOR_TIMEOUT"
+    assert result["ok"] is False
+    assert result["roi"] == {
+        "pad": 16,
+        "applied": ["solo_badge"],
+        "widened": 1,
+        "reasons": {"no-stored-rect-at-this-scale": 1},
+    }
+    assert result["last"]["roi"]["chat_badge"]["reason"] == (
+        "no-stored-rect-at-this-scale")
+
+
 def test_scene_describe_returns_the_scene_with_a_text_digest(monkeypatch):
     """A scene is evidence about a window; it must never actuate."""
     from openeyes.core import scene as scene_api
