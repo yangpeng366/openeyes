@@ -49,6 +49,19 @@ def _write_click_trajectory(tmp_path) -> tuple[str, Trajectory]:
     return str(path), trajectory
 
 
+def _write_blind_click_trajectory(tmp_path, *, steps: int = 2) -> tuple[str, Trajectory]:
+    """Clicks that recorded no expectation: deliverable, never provable."""
+    trajectory = Trajectory.new("mcp-live-replay-blind")
+    for index in range(steps):
+        trajectory.add(UIAEvent(
+            ts=float(index + 1), action="click", element=dict(_ELEMENT),
+            selector="automation_id=btn_submit", hwnd=4242,
+        ))
+    path = tmp_path / "blind.jsonl"
+    trajectory.save(str(path))
+    return str(path), trajectory
+
+
 def test_the_tool_is_a_dry_run_unless_live_is_true(tmp_path):
     path, trajectory = _write_trajectory(tmp_path)
 
@@ -219,6 +232,52 @@ def test_a_refused_activation_reaches_failed_steps_with_its_receipt(
     assert summary["delivered"] == 0
     assert summary["not_delivered"] == 2
     assert summary["refused_activation"] == 2
+
+
+# ---------------------------------------------------------------------------
+# ``ok=True`` is not "the effect was proven"
+# ---------------------------------------------------------------------------
+
+def test_a_delivered_but_unprovable_step_is_ok_and_unverified(
+        tmp_path, monkeypatch):
+    """No recorded expectation: delivered, unjudged, still ``ok``.
+
+    ``send`` sets ``sent``/``delivered``; nothing sets ``verified``. A reader
+    who equates ``ok`` with "it worked" is wrong here, so the payload has to
+    carry the counter-fact: ``all_effect_verified`` is ``False`` (a real live
+    run, effect unproven) and never ``None`` (which means dry run). Pinning
+    both halves stops a later "tidy-up" from making ``ok`` mean effect - and
+    stops the delivered count from silently dropping to 0 for an unjudged
+    step.
+    """
+    path, _ = _write_blind_click_trajectory(tmp_path)
+    backend = _ActivatingBackend(present=True)
+    _capture_replayer(monkeypatch, backend)
+
+    payload = record_replay_payload(_live_args(path, activate=True))
+    summary = payload["summary"]
+
+    assert payload["dry_run"] is False
+    assert (summary["verified"], summary["unverified"], summary["failed"]) == (
+        0, 2, 0)
+    assert summary["all_effect_verified"] is False
+    assert payload["ok"] is True
+    assert payload["failed_steps"] == []
+    assert [a["status"] for a in payload["actions"]] == [
+        "unverified", "unverified"]
+    assert all(a["sent"] is True for a in payload["actions"])
+    # delivered, and nothing was refused activation
+    assert summary["delivered"] == 2
+    assert summary["not_delivered"] == 0
+    assert summary["refused_activation"] == 0
+    # both actions left the process, so the split covers the total
+    assert summary["delivered"] + summary["not_delivered"] == summary["total"]
+    # and each step says why it could not be judged
+    assert all(a["expectation"] is None for a in payload["actions"])
+    assert all(a["expectation_source"] == "no expectation recorded"
+               for a in payload["actions"])
+    assert all("no expectation recorded" in a["reason"]
+               for a in payload["actions"])
 
 
 def test_call_tool_exposes_record_replay(tmp_path):
