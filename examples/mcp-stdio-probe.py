@@ -136,7 +136,16 @@ def main() -> int:
         messages = []
         deadline = 15
         while len(messages) < 4:
-            line = lines.get(timeout=deadline)
+            try:
+                line = lines.get(timeout=deadline)
+            except queue.Empty:
+                # An empty ``str(exc)`` used to make a starved read look like a
+                # silent failure. Name what never arrived instead.
+                missing = sorted({1, 2, 3, 4} - {m.get("id") for m in messages})
+                raise RuntimeError(
+                    f"no reply to request id(s) {missing} within {deadline}s "
+                    f"({len(messages)}/4 replies received)"
+                ) from None
             message = json.loads(line)
             if message.get("id") in (1, 2, 3, 4):
                 messages.append(message)
@@ -174,7 +183,15 @@ def main() -> int:
             raise RuntimeError(f"browser_shot path mismatch: {shot_result}")
     except (AssertionError, OSError, queue.Empty, TypeError, ValueError, KeyError, RuntimeError) as exc:
         stderr = _stop_process(process)
-        print(json.dumps({"ready": False, "error": str(exc), "stderr": stderr[-2000:]}))
+        # Some of these carry an empty ``str()`` (bare ``OSError``), and an empty
+        # error string is indistinguishable from no diagnostic at all, so the
+        # class name travels with it.
+        print(json.dumps({
+            "ready": False,
+            "error": str(exc) or type(exc).__name__,
+            "error_type": type(exc).__name__,
+            "stderr": stderr[-2000:],
+        }))
         return 2
 
     _stop_process(process)
