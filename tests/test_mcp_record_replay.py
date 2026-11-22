@@ -280,6 +280,37 @@ def test_a_delivered_but_unprovable_step_is_ok_and_unverified(
                for a in payload["actions"])
 
 
+def test_a_single_unjudged_click_still_reports_delivered(tmp_path, monkeypatch):
+    """The smallest live run: one click, no expectation, delivered anyway.
+
+    The two-step case above can pass while a one-step run quietly loses its
+    delivery count (or starts rounding ``delivered`` against ``total`` minus
+    skips), so pin the single-action cell too: nothing was verified, nothing
+    was refused, one input left the process, and ``ok`` is still True - that
+    is the honest report for a step that can only ever be unverifiable.
+    """
+    path, _ = _write_blind_click_trajectory(tmp_path, steps=1)
+    backend = _ActivatingBackend(present=True)
+    _capture_replayer(monkeypatch, backend)
+
+    payload = record_replay_payload(_live_args(path))
+    summary = payload["summary"]
+    action = payload["actions"][0]
+
+    assert summary["total"] == 1
+    assert (summary["verified"], summary["unverified"], summary["failed"]) == (
+        0, 1, 0)
+    assert action["status"] == "unverified"
+    assert action["sent"] is True
+    assert action["activation"] is None
+    assert payload["ok"] is True
+    assert payload["failed_steps"] == []
+    assert summary["delivered"] == 1
+    assert summary["not_delivered"] == 0
+    assert summary["refused_activation"] == 0
+    assert summary["all_effect_verified"] is False
+
+
 def test_call_tool_exposes_record_replay(tmp_path):
     pytest.importorskip("mcp")
     import openeyes.mcp.server as mcp_server
@@ -329,6 +360,40 @@ def test_call_tool_reports_the_delivery_split_for_a_refused_activation(
     assert summary["refused_activation"] <= summary["not_delivered"]
     assert [s["activation"]["ok"] for s in payload["failed_steps"]] == [
         False, False]
+
+
+def test_call_tool_keeps_an_unverified_click_delivered(tmp_path, monkeypatch):
+    """Over the real MCP envelope, an unjudged click reads as delivered.
+
+    A caller that only sees ``ok``/``failed`` would read this run as clean and
+    proven. The envelope must carry the counter-facts unchanged: ``unverified``
+    one, ``sent`` True, ``delivered`` one, ``all_effect_verified`` False, and
+    the reason the step could not be judged.
+    """
+    pytest.importorskip("mcp")
+    import openeyes.mcp.server as mcp_server
+
+    path, _ = _write_blind_click_trajectory(tmp_path, steps=1)
+    _capture_replayer(monkeypatch, _ActivatingBackend(present=True))
+
+    result = asyncio.run(mcp_server.call_tool(
+        "record_replay", _live_args(path),
+    ))
+    payload = json.loads(result[0].text)
+    summary = payload["summary"]
+
+    assert payload["dry_run"] is False
+    assert payload["ok"] is True
+    assert summary["total"] == 1
+    assert summary["unverified"] == 1
+    assert summary["failed"] == 0
+    assert summary["delivered"] == 1
+    assert summary["not_delivered"] == 0
+    assert summary["refused_activation"] == 0
+    assert summary["all_effect_verified"] is False
+    assert payload["actions"][0]["sent"] is True
+    assert payload["actions"][0]["expectation_source"] == "no expectation recorded"
+    assert payload["failed_steps"] == []
 
 
 def test_call_tool_reports_a_bad_path_in_the_error_envelope(tmp_path):
