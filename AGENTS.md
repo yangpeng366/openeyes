@@ -17,7 +17,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
    任何一步都要有可解释的降级原因。
 3. **默认 dry-run**：所有改变状态的操作先 dry-run，显式 `--go` 才真执行。
    验收门禁据此判定「真跑了」还是「只是演练」。
-4. **MCP 优先**：23 个工具的契约是一份稳定接口，改内部不许改契约；
+4. **MCP 优先**：24 个工具的契约是一份稳定接口，改内部不许改契约；
    `examples/mcp-stdio-probe.py` 就是为了守住它。
 5. **Record & Replay 无需 vision**：录的是逻辑步骤（UIAEvent）而非原始事件流，
    回放翻译成 `openeyes.actuate()` 调用；backend 可注入（`auto` / `jev` 真模型 / `mock`），
@@ -30,7 +30,7 @@ AI 友好的 Windows 桌面操作原语：`see → resolve → act`。
 
 ## 改动规矩
 
-- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 23 工具、pytest 全套。
+- 跑 `pwsh -NoProfile -File examples\quality-gate.ps1`：ruff、UTF-8 无 BOM、MCP 契约 24 工具、pytest 全套。
   CI 跑的是同一串步骤，别只跑局部。
 - 全量测试目前 1336 passed / 8 skipped（2026-11-18 实测）；改到公共路径就把全量跑一遍。
 - 真机验收用可见窗口（真实 Edge profile），不用无头。
@@ -107,6 +107,14 @@ N 个模板、一份回执（`matched` / `ambiguous` / `missing` / `unreadable` 
 矩形上读到的是 Codex 自己的对话）。治法：`PrintWindow` + `PW_RENDERFULLCONTENT`（2）请窗口自画，
 Electron / Chromium 必须带 flag 2；实测 Trae CN 在后台也能读出真正的 SOLO 页面。失败时退回屏幕抓取，
 并用 `capture.method` 注明走的哪条路。
+
+**11. 固定动词表有天花板，逃生阀是「让调用方写代码」（2026-11-24 实测）**：症状——一个
+「把每段文字都取出来」的任务，用 `scan`/`click`/`type` 固定动词要 N 轮往返，页面里没被
+建模的控件更是根本点不到。治法：`eyes browser exec --code|--file` 把页面自己的 JS 交给调用方，
+一个 `for` 循环就是一次调用（实测一条脚本取回 example.com 的 7 段文字）。规矩：默认 dry-run
+（回执给 `code_chars` + `code_sha1`，**不碰浏览器**），只有 `--go` 才真跑；`--url-contains`
+失配 fail-closed（exit 4）；页面报错要带原因不许吞。详见 `docs/browser-exec.md`。
+MCP 侧同名工具 `browser_exec`，`dry_run=true` 优先于 `go`。
 
 **本地自测怎么跑**（在仓库根，pwsh 7）：
 

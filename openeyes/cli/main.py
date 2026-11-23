@@ -25,9 +25,11 @@ paid for from --budget (0 = never, the default).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
@@ -1363,6 +1365,7 @@ def browser() -> None:
         eyes browser scan    [--pretty]
         eyes browser click   --hint <a|aa> ...
         eyes browser type    --text <str>
+        eyes browser exec    --code <js> | --file <path>
         eyes browser shot    --out <png>
 
     Defaults are dry-run unless ``--go`` is passed.
@@ -1634,6 +1637,109 @@ def browser_type(port: int, protocol: str, host_header: str | None,
             + (f" into {chosen.name!r}" if chosen else " (focused field)")
             + (" + Enter" if enter else ""))
     click.echo(desc)
+
+
+def _read_page_code(code: str | None, code_file: str | None) -> str:
+    """Return the page JavaScript to run, from --code or --file."""
+    if bool(code) == bool(code_file):
+        raise ValueError("give exactly one of --code or --file")
+    if code_file:
+        path = Path(code_file)
+        if not path.is_file():
+            raise ValueError(f"no such file: {code_file}")
+        source = path.read_text(encoding="utf-8-sig")
+    else:
+        source = code or ""
+    if not source.strip():
+        raise ValueError("the page JavaScript is empty")
+    return source
+
+
+@browser.command("exec")
+@click.option("--port", type=int, default=9222, show_default=True)
+@_protocol_option
+@_host_header_option
+@click.option("--code", default=None,
+              help="JavaScript to run inside the page")
+@click.option("--file", "code_file", default=None,
+              type=click.Path(exists=True, dir_okay=False),
+              help="read the JavaScript from a file")
+@click.option("--url-contains", default=None,
+              help="only run on a page whose URL contains this")
+@click.option("--await-promise/--no-await-promise", default=False,
+              help="await a promise the code returns")
+@click.option("--timeout", type=float, default=20.0, show_default=True,
+              help="seconds to wait for the page to answer")
+@click.option("--go", "go", is_flag=True, help="actually run the code")
+@json_option
+def browser_exec(port: int, protocol: str, host_header: str | None,
+                 code: str | None, code_file: str | None,
+                 url_contains: str | None, await_promise: bool,
+                 timeout: float, go: bool, as_json: bool) -> None:
+    """Run page JavaScript and return its value.
+
+    The code-first escape hatch: the caller writes the code, so a loop,
+    a condition or an unmodelled widget is still expressible.  A dry-run
+    reports the payload without touching the browser - it connects only
+    when --url-contains has to be resolved, and fails closed then.
+    --go runs the code and returns the value.
+    """
+    try:
+        source = _read_page_code(code, code_file)
+    except ValueError as exc:
+        emit_error(str(exc), code=2)
+        return
+    digest = hashlib.sha1(source.encode("utf-8")).hexdigest()
+    preview = " ".join(source.split())[:200]
+    browser_backend = _backend(protocol)
+    conn = None
+    target_url = ""
+    if go or url_contains:
+        try:
+            conn = browser_backend.connect(
+                port=port, url_contains=url_contains,
+                **_browser_connection_options(protocol, host_header),
+            )
+        except Exception as exc:
+            emit_error(f"could not reach a browser page on port {port}: {exc}",
+                       code=4, port=port)
+            return
+        try:
+            target_url = conn.current_url()
+        except Exception:
+            target_url = ""
+    receipt = {"ok": True, "protocol": protocol,
+               "target_url": target_url,
+               "code_chars": len(source), "code_sha1": digest,
+               "preview": preview}
+    try:
+        if not go:
+            receipt.update({"executed": False, "dry_run": True,
+                            "would_execute": True})
+            if as_json or wants_json():
+                emit_json(receipt)
+                return
+            click.echo(f"[dry-run] would run {len(source)} chars of page "
+                       f"JavaScript (sha1 {digest[:12]})")
+            return
+        try:
+            value = browser_backend.exec_js(
+                conn, source, await_promise=await_promise,
+                timeout=timeout)
+        except Exception as exc:
+            emit_error(f"page JavaScript failed: {exc}", code=1,
+                       code_sha1=digest, target_url=target_url)
+            return
+        receipt.update({"executed": True, "dry_run": False,
+                        "result": value})
+        if as_json or wants_json():
+            emit_json(receipt)
+            return
+        click.echo(f"ran {len(source)} chars -> {preview}")
+    finally:
+        close = getattr(conn, "close", None)
+        if close:
+            close()
 
 
 @browser.command("shot")

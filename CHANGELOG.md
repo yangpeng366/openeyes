@@ -6,6 +6,18 @@ versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`eyes browser exec` — the code-first escape hatch.** The fixed verbs (`scan` /
+  `click` / `type` / `shot`) can only express what somebody modelled; a loop over 200
+  rows was 200 round trips and a widget nobody modelled was unreachable. `browser exec`
+  hands the page its own JavaScript instead: `--code "..."` or `--file script.js`,
+  returning the value by value (CDP `Runtime.evaluate`, Firefox BiDi `script.evaluate`).
+  Dry-run by default - the receipt carries `code_chars`, `code_sha1` and `preview` and
+  does not touch the browser at all (it connects only when `--url-contains` has to be
+  resolved, and fails closed there); `--go` runs it. The same verb ships as the MCP tool
+  `browser_exec` (24 tools now), where `dry_run=true` beats `go`. A page error is
+  reported with its cause. Rationale and measurements: `docs/browser-exec.md`.
+
 ### Fixed
 - **`probe_anchors` no longer buys the one-scale pass with an inferred product.** The probe inferred a
   scale product from the window DPI and handed it to `find_anchor_in_image`, which treated any

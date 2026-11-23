@@ -532,3 +532,19 @@ def screenshot(conn, out_path: str) -> str:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_bytes(png)
     return str(p)
+
+
+def exec_js(conn, expression: str, await_promise: bool = False,
+            timeout: float = 20.0) -> Any:
+    """Run *expression* inside the page and return its value.
+
+    The code-first escape hatch.  A fixed verb set can only express what
+    somebody modelled; a loop, a conditional, or a widget the harness
+    never saw cannot be expressed at all.  Handing the caller the page's
+    own JavaScript keeps that decision with the caller.
+
+    The value comes back by value (no remote object handle), so a caller
+    can keep the result as plain JSON.
+    """
+    return conn.evaluate(expression, await_promise=await_promise,
+                         timeout=timeout)

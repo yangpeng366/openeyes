@@ -546,3 +546,14 @@ def type_text(conn: BidiConnection, text: str, element=None,
 
 def screenshot(conn: BidiConnection, out_path: str) -> str:
     return conn.screenshot(out_path)
+
+
+def exec_js(conn: BidiConnection, expression: str,
+            await_promise: bool = False, timeout: float = 20.0) -> Any:
+    """Run *expression* inside the page and return its value.
+
+    The code-first escape hatch; see ``openeyes.backends.cdp.exec_js``
+    for the contract.  BiDi already returns the value JSON-shaped.
+    """
+    return conn.evaluate(expression, await_promise=await_promise,
+                         timeout=timeout)

@@ -64,6 +64,18 @@ def screenshot(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
     return backend_for(protocol).screenshot(conn, out_path)
 
 
+def exec_js(protocol: str = DEFAULT_PROTOCOL, conn: Any = None,
+            expression: str = "", await_promise: bool = False,
+            timeout: float = 20.0) -> Any:
+    """Run page JavaScript over *protocol* and return the value.
+
+    The caller writes the code; the harness only carries it to the page.
+    """
+    return backend_for(protocol).exec_js(conn, expression,
+                                         await_promise=await_promise,
+                                         timeout=timeout)
+
+
 #: Backends that can measure where the page viewport sits on screen. A
 #: backend that cannot is not guessed at: its click path stays in-page
 #: (CDP ``Input.dispatchMouseEvent``, BiDi ``origin: "viewport"``), and a

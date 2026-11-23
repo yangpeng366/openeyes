@@ -30,6 +30,7 @@ def test_mcp_exposes_stable_tool_set():
         "browser_scan",
         "browser_click",
         "browser_type",
+        "browser_exec",
         "browser_shot",
         "resolve_elements",
         "vision_detect",
@@ -53,6 +54,7 @@ def test_side_effecting_tools_declare_dry_run_default():
         "type_text",
         "browser_launch",
         "browser_type",
+        "browser_exec",
         "browser_shot",
         "app_ensure",
     ):

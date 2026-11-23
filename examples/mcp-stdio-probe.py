@@ -31,6 +31,7 @@ EXPECTED_TOOLS = [
     "browser_scan",
     "browser_click",
     "browser_type",
+    "browser_exec",
     "browser_shot",
     "resolve_elements",
     "vision_detect",
@@ -45,6 +46,7 @@ EXPECTED_TOOLS = [
 ]
 
 PROBE_TEXT = "acceptance"
+PROBE_CODE = "document.title"
 PROBE_SHOT_PATH = "shots/stdio-acceptance.png"
 
 
@@ -126,6 +128,14 @@ def main() -> int:
                     "arguments": {"out": PROBE_SHOT_PATH, "dry_run": True},
                 },
             ),
+            _request(
+                5,
+                "tools/call",
+                {
+                    "name": "browser_exec",
+                    "arguments": {"code": PROBE_CODE, "dry_run": True},
+                },
+            ),
         ]
     ) + "\n"
 
@@ -135,19 +145,19 @@ def main() -> int:
         process.stdin.flush()
         messages = []
         deadline = 15
-        while len(messages) < 4:
+        while len(messages) < 5:
             try:
                 line = lines.get(timeout=deadline)
             except queue.Empty:
                 # An empty ``str(exc)`` used to make a starved read look like a
                 # silent failure. Name what never arrived instead.
-                missing = sorted({1, 2, 3, 4} - {m.get("id") for m in messages})
+                missing = sorted({1, 2, 3, 4, 5} - {m.get("id") for m in messages})
                 raise RuntimeError(
                     f"no reply to request id(s) {missing} within {deadline}s "
                     f"({len(messages)}/4 replies received)"
                 ) from None
             message = json.loads(line)
-            if message.get("id") in (1, 2, 3, 4):
+            if message.get("id") in (1, 2, 3, 4, 5):
                 messages.append(message)
         initialize = next(message for message in messages if message.get("id") == 1)
         tools_list = next(message for message in messages if message.get("id") == 2)
@@ -162,11 +172,14 @@ def main() -> int:
             )
         type_resp = next(message for message in messages if message.get("id") == 3)
         shot_resp = next(message for message in messages if message.get("id") == 4)
-        for resp, label in ((type_resp, "browser_type"), (shot_resp, "browser_shot")):
+        exec_resp = next(message for message in messages if message.get("id") == 5)
+        for resp, label in ((type_resp, "browser_type"), (shot_resp, "browser_shot"),
+                           (exec_resp, "browser_exec")):
             if "error" in resp:
                 raise RuntimeError(f"{label} tools/call failed: {resp['error']}")
         type_result = json.loads(type_resp["result"]["content"][0]["text"])
         shot_result = json.loads(shot_resp["result"]["content"][0]["text"])
+        exec_result = json.loads(exec_resp["result"]["content"][0]["text"])
         if type_result.get("sent") is not False:
             raise RuntimeError(f"browser_type dry-run sent should be False: {type_result}")
         if type_result.get("dry_run") is not True:
@@ -181,6 +194,12 @@ def main() -> int:
             raise RuntimeError(f"browser_shot dry_run should be True: {shot_result}")
         if shot_result.get("path") != PROBE_SHOT_PATH:
             raise RuntimeError(f"browser_shot path mismatch: {shot_result}")
+        if exec_result.get("executed") is not False:
+            raise RuntimeError(f"browser_exec dry-run executed should be False: {exec_result}")
+        if exec_result.get("dry_run") is not True:
+            raise RuntimeError(f"browser_exec dry_run should be True: {exec_result}")
+        if exec_result.get("would_execute") is not True:
+            raise RuntimeError(f"browser_exec would_execute should be True: {exec_result}")
     except (AssertionError, OSError, queue.Empty, TypeError, ValueError, KeyError, RuntimeError) as exc:
         stderr = _stop_process(process)
         # Some of these carry an empty ``str()`` (bare ``OSError``), and an empty
@@ -212,6 +231,11 @@ def main() -> int:
                         "captured": shot_result["captured"],
                         "dry_run": shot_result["dry_run"],
                         "path": shot_result["path"],
+                    },
+                    "browser_exec": {
+                        "executed": exec_result["executed"],
+                        "dry_run": exec_result["dry_run"],
+                        "would_execute": exec_result["would_execute"],
                     },
                 },
             },

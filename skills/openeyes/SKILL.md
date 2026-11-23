@@ -37,7 +37,7 @@ names the cause.
 | `eyes capture --window H --out f.png` | Screenshot to a PNG |
 | `eyes resolve --window H` | Walk `uia -> cdp -> vision` and report which tier answered |
 | `eyes vision --detections d.json` | Parse screen-parsing detections into elements (no model) |
-| `eyes browser launch/tabs/scan/click/type/shot` | Drive any Chromium browser over CDP |
+| `eyes browser launch/tabs/scan/click/type/exec/shot` | Drive any Chromium browser over CDP |
 | `eyes app state` / `eyes app ensure` | Is the app alive? Revive it (window gone vs process gone) |
 | `eyes webview describe` / `launch` | Reach the DOM inside a Tauri / Wails / Electron app |
 | `eyes native find <app>` | Find the application's own CLI / URL scheme / registered executable / Store AUMID |
@@ -331,12 +331,24 @@ eyes browser click --hint s --go
 
 # 6. snapshot viewport
 eyes browser shot --out shot.png
+
+# 7. run your own code in the page — the code-first escape hatch
+#    (a loop over 200 rows is one call, not 200 click/type pairs)
+eyes browser exec --code "document.title" --go --json
+eyes browser exec --file collect.js --go --json     # a script with loops
 ```
 
 The browser path also assigns Vimium-style letter hints to every
 interactive element (``a``, ``s``, ``d``, ``f``, ... up to 2-letter,
 3-letter up to 1884 total). An LLM can answer "click element ``s``"
 without describing coordinates — same UX as UIA mode.
+
+`eyes browser exec` is the code-first escape hatch: the caller writes the
+page's own JavaScript, so a loop, a condition or a widget the fixed verbs
+never modelled is still expressible. It is dry-run by default (the receipt
+carries the payload length and its sha1 without touching the browser) and
+only runs with `--go`; `--file` takes a script, so a long task is one call
+instead of N scan/click/type rounds.
 
 ### Browser (Firefox WebDriver BiDi)
 
@@ -405,7 +417,7 @@ Login walls, measured on a real Feishu login:
 
 ## MCP server
 
-`eyes-mcp` exposes 23 primitives as MCP tools:
+`eyes-mcp` exposes 24 primitives as MCP tools:
 
 `anchor_probe` and `anchor_wait` mirror the read-only scene probe. Anchor
 capture and `anchor click` stay CLI-only: capture needs a measured rect, and
@@ -437,6 +449,7 @@ click carries the foreground / occlusion safety gates.
 - `browser_click`   --protocol / --hint / --idx / --name_contains / --go / --host_header
 - `browser_type`    --protocol / --text / --hint / --idx / --press_enter / --host_header
 - `browser_shot`    --protocol / --out / --host_header
+- `browser_exec`    --protocol / --code|--code_file / --url_contains / --go / --host_header
 
 For Firefox through a forwarded port, pass `protocol=bidi` and
 `host_header=localhost:9222` to these browser tools.

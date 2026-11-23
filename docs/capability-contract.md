@@ -1,6 +1,6 @@
 # OpenEyes MCP capability contract
 
-This contract describes the 20 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, the two act-then-prove tools `click_by_id` / `act_and_verify`, the read-only `native_surfaces` discovery tool, and `record_replay`). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
+This contract describes the 24 tools exposed by `openeyes.mcp.server` (v0.1.x shipped 13; v0.2.0 adds two read-only tools, the `app_ensure` lifecycle tool, the two act-then-prove tools `click_by_id` / `act_and_verify`, the read-only `native_surfaces` discovery tool, `record_replay`, and the code-first `browser_exec`). It is a compatibility boundary for Codex skills, dsh, and other MCP hosts: changing a tool name, required argument, default execution mode, or effect class is a contract change.
 
 ## Safety classes
 
@@ -24,6 +24,7 @@ This contract describes the 20 tools exposed by `openeyes.mcp.server` (v0.1.x sh
 | `browser_scan` | Browser | read | none | Reads interactive DOM elements and assigns hints. |
 | `browser_click` | Browser | high-risk | `go=false` default; `true` executes | Resolves one element and optionally clicks it. |
 | `browser_type` | Browser | write | `dry_run=true` default; `false` types | Resolves an optional target via `hint`/`idx`/`name_contains`/`control_type` and types into it. Accepts `url_contains` to scope tab resolution. |
+| `browser_exec` | Browser | high-risk | `go=false` default; `true` executes | Runs the caller's own JavaScript in the page and returns its value. The code-first escape hatch: a loop, a condition or a widget the fixed verbs never modelled is still expressible. |
 | `browser_shot` | Browser | write | `dry_run=true` default; `false` writes | Captures a viewport PNG to the requested path. |
 | `resolve_elements` | Any | read | none | Walks the `uia -> cdp -> vision` chain and returns the first non-empty element set, the tier that answered, and the per-tier trail (ok / count / reason). Never actuates. |
 | `vision_detect` | Vision | read | none | Parses screen-parsing detections (OmniParser v2 compatible) into `Element[]`. Reads a file path or inline JSON; no model runs on the host. |
@@ -41,6 +42,8 @@ All side-effecting tools use `dry_run: true` as their default. Omitting `dry_run
 `browser_click` uses the compatibility switch `go: false`. Omitting `go`, passing `false`, or passing no value must return the resolved target with `clicked: false` and `would_click: true`. Only `go: true` may click.
 
 `browser_type` may connect and scan the DOM during dry-run when a selector is supplied so it can return the resolved target; it must not focus, insert text, or press Enter. When `url_contains` is supplied it must be forwarded to the underlying page selector so a mismatched tab fails closed before any text is sent, even when no element selector is supplied. A matched call also reports the resolved page as `target_url`, including when an element selector is supplied. `browser_shot` dry-run resolves a matching page URL but returns the requested output path without creating it.
+
+`browser_exec` takes exactly one of `code` or `code_file`. A dry-run must not run the code: it reports `executed: false`, `dry_run: true`, `would_execute: true`, the payload length and its sha1. It connects only when `url_contains` has to be resolved, and then fails closed on a mismatched tab. `go: true` runs the code and returns its value; `dry_run: true` wins over `go`, so a dry run can never execute by accident. A page error is reported with its cause, never swallowed.
 
 ## CLI delivery path (`eyes click --method`)
 

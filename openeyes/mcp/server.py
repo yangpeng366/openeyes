@@ -1,7 +1,7 @@
 """
 OpenEyes MCP server — exposes core primitives as MCP tools.
 
-Tools (22):
+Tools (24):
     list_windows()             -> [{hwnd, title, ...}, ...]
     capture_window(hwnd, out?, dry_run?) -> {path, size, captured}
     detect_elements(hwnd, restore?, depth?, name_contains?, control_type?, regex?)
@@ -20,6 +20,8 @@ Tools (22):
     browser_type(--text, --hint|--idx|--name-contains?, dry_run?)
                                 -> {sent_chars: int, into: str, press_enter: bool}
     browser_shot(--out, dry_run?) -> {path: str, captured: bool}
+    browser_exec(--code|--code-file, --url-contains?, --go?)
+                                -> {executed: bool, result: Any, code_sha1: str}
     click_by_id(hwnd, automation_id, method?, budget?, dry_run?)
                                 -> {ok, method, name, center, landed, error}
     act_and_verify(hwnd, automation_id, expect, method?, budget?, retries?,
@@ -52,6 +54,7 @@ All side-effecting tools default to dry_run=true. Set dry_run=false to execute.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -430,6 +433,7 @@ async def list_tools() -> list[Tool]:
                     "control_type": {"type": "string"},
                     "url_contains": {"type": "string"},
                     "go": {"type": "boolean", "default": False},
+
                 },
             },
         ),
@@ -460,6 +464,34 @@ async def list_tools() -> list[Tool]:
                     "dry_run": {"type": "boolean", "default": True},
                 },
                 "required": ["text"],
+            },
+        ),
+        Tool(
+            name="browser_exec",
+            description="Run page JavaScript and return its value. The "
+                        "code-first escape hatch: pass code (or code_file) "
+                        "and the page runs it, so a loop, a condition or an "
+                        "unmodelled widget is still expressible. Default "
+                        "dry_run=true; set go=true to run it, and dry_run=true "
+                        "forces a dry run even when go is true.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "port": {"type": "integer", "default": 9222},
+                    "protocol": {"type": "string", "enum": ["cdp", "bidi"],
+                                 "default": "cdp"},
+                    "host_header": {"type": "string",
+                                    "description": "BiDi Host header; use localhost:9222 through SSH forwarding"},
+                    "code": {"type": "string",
+                              "description": "JavaScript to run in the page"},
+                    "code_file": {"type": "string",
+                                 "description": "read the JavaScript from a file"},
+                    "url_contains": {"type": "string"},
+                    "await_promise": {"type": "boolean", "default": False},
+                    "timeout": {"type": "number", "default": 20.0},
+                    "go": {"type": "boolean", "default": False},
+                    "dry_run": {"type": "boolean", "default": True},
+                },
             },
         ),
         Tool(
@@ -1347,6 +1379,74 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "dry_run": dry_run,
                     "target": chosen.to_dict() if chosen else None,
                     **({"target_url": target_url} if url_contains else {})
+                }))]
+            except Exception as e:
+                return [TextContent(type="text", text=_to_json(
+                    {"error": str(e), "tool": name}))]
+            finally:
+                _close_browser_connection(protocol, conn)
+
+        if name == "browser_exec":
+            protocol = _browser_protocol(arguments)
+            backend = _browser_backend(arguments)
+            conn = None
+            try:
+                source = arguments.get("code")
+                code_file = arguments.get("code_file")
+                if bool(source) == bool(code_file):
+                    return [TextContent(type="text", text=_to_json({
+                        "error": "give exactly one of code or code_file",
+                        "tool": name,
+                    }))]
+                if code_file:
+                    path = Path(code_file)
+                    if not path.is_file():
+                        return [TextContent(type="text", text=_to_json({
+                            "error": f"no such file: {code_file}",
+                            "tool": name,
+                        }))]
+                    source = path.read_text(encoding="utf-8-sig")
+                if not source.strip():
+                    return [TextContent(type="text", text=_to_json({
+                        "error": "the page JavaScript is empty",
+                        "tool": name,
+                    }))]
+                digest = hashlib.sha1(source.encode("utf-8")).hexdigest()
+                preview = " ".join(source.split())[:200]
+                target_url = ""
+                go = bool(arguments.get("go", False))
+                if arguments.get("dry_run") is True:
+                    go = False
+                if go or arguments.get("url_contains"):
+                    conn = backend.connect(
+                        port=arguments.get("port", 9222),
+                        url_contains=arguments.get("url_contains"),
+                        **_browser_connection_options(arguments),
+                    )
+                    target_url = conn.current_url()
+                if not go:
+                    return [TextContent(type="text", text=_to_json({
+                        "executed": False,
+                        "dry_run": True,
+                        "would_execute": True,
+                        "code_chars": len(source),
+                        "code_sha1": digest,
+                        "preview": preview,
+                        "target_url": target_url,
+                    }))]
+                value = backend.exec_js(
+                    conn, source,
+                    await_promise=bool(arguments.get("await_promise", False)),
+                    timeout=float(arguments.get("timeout", 20.0)),
+                )
+                return [TextContent(type="text", text=_to_json({
+                    "executed": True,
+                    "dry_run": False,
+                    "code_chars": len(source),
+                    "code_sha1": digest,
+                    "preview": preview,
+                    "target_url": target_url,
+                    "result": value,
                 }))]
             except Exception as e:
                 return [TextContent(type="text", text=_to_json(
