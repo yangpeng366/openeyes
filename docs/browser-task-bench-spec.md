@@ -54,6 +54,19 @@ Per `(task, strategy)`:
    FAIL ("I cannot") and never PASS. `SKIP` beats `PASS` in the combine rule,
    so a skipped route cannot fake a win.
 
+## 4a. Errata (measured 2026-11-24, lead)
+
+* **`browser scan` has no `--json` of its own.** The flag is global and must come
+  **before** the subcommand: `eyes --json browser scan --port 9334`.
+  `eyes browser scan --json` exits 2 with "No such option: --json".
+  (`browser click`, `browser exec`, `browser tabs` do accept `--json` at the end.)
+* A checkbox's accessible name in the scan output is its **`id`** (`c1`), while
+  the `<label>` carries the human text (`item-01`). The verbs route addresses
+  the **label** by its text; clicking a label's centre toggles the associated
+  input (measured: clicking `item-01` and `item-03` left the page with 2 of 3
+  boxes checked). So fixture pages must give every checkbox a `<label for=...>`
+  whose text is the unique name the route will use.
+
 ## 5. API contract
 
 ### 5.1 `benchmarks/_browser_task_suite.py` (core suite)
