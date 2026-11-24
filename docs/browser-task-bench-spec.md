@@ -67,6 +67,40 @@ Per `(task, strategy)`:
   boxes checked). So fixture pages must give every checkbox a `<label for=...>`
   whose text is the unique name the route will use.
 
+## 4b. Review-driven hardening (adopted 2026-11-24, lead)
+
+An independent review asked "where can this bench go green without meaning
+anything". Five gaps were real and are now part of the contract:
+
+1. **pre-state guard.** Right after setup and **before any strategy runs**, the
+   runner evaluates `expect_js` once. If the result already equals `expected`,
+   the task's page starts done: that is a bench bug - `bench_verdict` becomes
+   FAIL (exit 2), the offending task is named, and the run stops. This is what
+   stops a `control` from "naturally" passing.
+2. **control-pass hard guard.** Any task whose `control` verdict is not FAIL
+   forces `bench_verdict` FAIL (exit 2), naming the task.
+3. **SKIP is not a pass.** The summary carries `skip_count` and the reason per
+   strategy, and says in words that a skipped route does not count towards
+   pass/fail. A bench where every route is SKIP is SKIP, not PASS.
+4. **fixture server binding.** Bind `127.0.0.1` explicitly, fail loudly (exit
+   4) when the port is taken - never fall back silently to another port, or the
+   token in the URL will not match the tab.
+5. **cleanup on interrupt.** Register the interrupt handler and clean up in a
+   `finally`: kill the Edge this run started, stop the fixture server, remove
+   the temporary profile. An interrupted run exits **130** and the receipt says
+   `interrupted: true` - never 0, never 1.
+
+Also adopted:
+
+* The receipt names the per-run token (`bench_token`) so a run can be traced,
+  and the runner verifies the loaded page really carries that token before it
+  judges anything.
+* `metric_notes` states "`agent_output_bytes` is bytes, NOT a token count", and
+  the JSON carries `"x-not-tokens": true` next to it.
+* `expect_js` must read **ground truth produced by the element itself** (its
+  own activation handler ran), never a value the strategy itself could have
+  written. A strategy must not be able to fake the thing it is measured on.
+
 ## 5. API contract
 
 ### 5.1 `benchmarks/_browser_task_suite.py` (core suite)
