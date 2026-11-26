@@ -179,6 +179,31 @@ def test_a_dry_run_never_activates_even_when_asked(tmp_path, monkeypatch):
     assert payload["ok"] is True
 
 
+def test_the_schema_advertises_activate_as_live_only():
+    """A client discovers ``activate`` from the schema, not from a docstring.
+
+    The payload contract is pinned above; this pins the discovery surface. An
+    MCP client that only reads ``tools/list`` must be able to see that
+    activation is opt-in and that asking for it on a dry run moves nothing -
+    otherwise ``activate=true`` reads as a permission it never received.
+    """
+    pytest.importorskip("mcp")
+    import openeyes.mcp.server as mcp_server
+
+    tools = asyncio.run(mcp_server.list_tools())
+    tool = next(t for t in tools if t.name == "record_replay")
+    activate = tool.inputSchema["properties"]["activate"]
+
+    assert activate["type"] == "boolean"
+    assert activate["default"] is False
+    # the dry-run guarantee has to survive in the text the client actually reads
+    assert "live=false" in activate["description"]
+    assert "dry run never moves a window" in activate["description"]
+    # and the failure receipt is advertised where a client looks for failures
+    assert "activation" in tool.description
+    assert "failed_steps" in tool.description
+
+
 def test_live_activation_is_opt_in(tmp_path, monkeypatch):
     path, _ = _write_click_trajectory(tmp_path)
     backend = _ActivatingBackend(present=True)
