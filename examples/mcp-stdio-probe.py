@@ -1,12 +1,21 @@
 """Verify the OpenEyes MCP stdio handshake without starting a browser.
 
 The probe drives the full JSON-RPC stdio transport end-to-end: it sends
-``initialize``, ``notifications/initialized``, ``tools/list``, and two
-``tools/call`` requests (``browser_type`` and ``browser_shot``) in dry-run
-mode.  The dry-run tool calls exercise the server's tool-dispatch path over
-stdio without touching a real browser or the dsh web host, broadening the
-repository-local surrogate acceptance while the 127.0.0.1:3080 gate stays
-closed.
+``initialize``, ``notifications/initialized``, ``tools/list``, and three
+``tools/call`` requests (``browser_type``, ``browser_shot`` and ``browser_exec``)
+in dry-run mode.  The dry-run tool calls exercise the server's tool-dispatch
+path over stdio without touching a real browser or the dsh web host,
+broadening the repository-local surrogate acceptance while the
+127.0.0.1:3080 gate stays closed.
+
+Scope note: this probe issues no anchor call, so its timeout receipt carries no
+``roi`` clause.  An ``anchor_wait`` executed with ``roi_pad`` but no captured
+frame reports ``roi: null`` (the roll-up is built from the deciding frame), so a
+window-free stdio probe cannot produce one.  The clause itself is pinned where
+it is produced: ``test_cli_anchor_wait_timeout_text_carries_the_roi_clause``
+(text tier) and ``test_anchor_wait_timeout_keeps_the_roi_roll_up`` (MCP
+receipt tier).  What this probe owes on a stall is a receipt that names which
+requests starved - ``_starved_receipt`` below.
 """
 
 from __future__ import annotations
@@ -16,6 +25,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 EXPECTED_TOOLS = [
@@ -44,6 +54,21 @@ EXPECTED_TOOLS = [
     "scene_describe",
     "record_replay",
 ]
+
+# Request id -> verb, so a starved read can name what never answered instead of
+# only counting replies.
+EXPECTED_REQUESTS = {
+    1: "initialize",
+    2: "tools/list",
+    3: "browser_type",
+    4: "browser_shot",
+    5: "browser_exec",
+}
+
+# One wall-clock budget for the whole reply set, not per read: five 15 s reads
+# outlast a caller's own 20 s timeout, so the probe would be killed before it
+# could print the receipt that says why.
+REPLY_BUDGET_S = 15.0
 
 PROBE_TEXT = "acceptance"
 PROBE_CODE = "document.title"
@@ -79,6 +104,34 @@ def _stop_process(process: subprocess.Popen[str]) -> str:
             process.kill()
             process.wait(timeout=5)
     return process.stderr.read() if process.stderr else ""
+
+
+def _starved_receipt(
+    messages: list[dict],
+    *,
+    budget: float = REPLY_BUDGET_S,
+    stderr: str = "",
+) -> dict:
+    """The receipt for a read that ran out of time: which verbs never answered.
+
+    An empty ``str(exc)`` used to make a starved read look like a silent
+    failure, and the count alone (``2/4``) named neither the missing verbs nor
+    the right total. The receipt now lists every request that never replied by
+    verb, and reports the count against the number actually sent.
+    """
+    seen = {message.get("id") for message in messages}
+    missing = [rid for rid in EXPECTED_REQUESTS if rid not in seen]
+    named = ", ".join(f"{EXPECTED_REQUESTS[rid]} (id {rid})" for rid in missing)
+    return {
+        "ready": False,
+        "error": (
+            f"no reply to {named or 'any request'} within {budget:g}s "
+            f"({len(messages)}/{len(EXPECTED_REQUESTS)} replies received)"
+        ),
+        "error_type": "TimeoutError",
+        "missing": missing,
+        "stderr": stderr[-2000:],
+    }
 
 
 def main() -> int:
@@ -144,20 +197,24 @@ def main() -> int:
         process.stdin.write(payload)
         process.stdin.flush()
         messages = []
-        deadline = 15
-        while len(messages) < 5:
-            try:
-                line = lines.get(timeout=deadline)
-            except queue.Empty:
-                # An empty ``str(exc)`` used to make a starved read look like a
-                # silent failure. Name what never arrived instead.
-                missing = sorted({1, 2, 3, 4, 5} - {m.get("id") for m in messages})
-                raise RuntimeError(
-                    f"no reply to request id(s) {missing} within {deadline}s "
-                    f"({len(messages)}/4 replies received)"
-                ) from None
+        deadline = time.monotonic() + REPLY_BUDGET_S
+        while len(messages) < len(EXPECTED_REQUESTS):
+            remaining = deadline - time.monotonic()
+            line = None
+            if remaining > 0:
+                try:
+                    line = lines.get(timeout=remaining)
+                except queue.Empty:
+                    line = None
+            if line is None:
+                print(json.dumps(
+                    _starved_receipt(messages, budget=REPLY_BUDGET_S,
+                                     stderr=_stop_process(process)),
+                    ensure_ascii=False,
+                ))
+                return 2
             message = json.loads(line)
-            if message.get("id") in (1, 2, 3, 4, 5):
+            if message.get("id") in EXPECTED_REQUESTS:
                 messages.append(message)
         initialize = next(message for message in messages if message.get("id") == 1)
         tools_list = next(message for message in messages if message.get("id") == 2)

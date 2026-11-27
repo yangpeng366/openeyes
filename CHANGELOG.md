@@ -19,6 +19,21 @@ versioning: [Semantic Versioning](https://semver.org/).
   reported with its cause. Rationale and measurements: `docs/browser-exec.md`.
 
 ### Fixed
+- **The stdio probe's stall receipt names the verbs that never answered.** `examples/mcp-stdio-probe.py`
+  reported `no reply to request id(s) [3, 4] within 15s (2/4 replies received)`: a caller had to map ids
+  back to verbs, and the denominator said 4 while five requests were written (`browser_exec` was added to
+  the probe without updating the count). The receipt is now built by `_starved_receipt`, which lists each
+  starved request by verb, counts against `len(EXPECTED_REQUESTS)`, and carries `missing` as ids. The
+  15 s budget also became one wall-clock deadline for the whole reply set instead of one per read - five
+  per-read 15 s waits outlast a caller's own 20 s subprocess timeout, so the probe was killed before it
+  could print the receipt that says why. Checked the `roi` clause question at the same time: this probe
+  issues no anchor call, and a window-free `anchor_wait` with `roi_pad` reports `roi: null` (the roll-up
+  is built from the deciding frame), so the clause belongs to the tiers that produce it and is pinned
+  there - `test_cli_anchor_wait_timeout_text_carries_the_roi_clause` (text) and
+  `test_anchor_wait_timeout_keeps_the_roi_roll_up` (MCP receipt). Tests:
+  `test_starved_receipt_names_the_verbs_that_never_answered`,
+  `test_starved_receipt_is_empty_of_verbs_when_nothing_replied`,
+  `test_probe_request_ids_cover_every_expected_verb`.
 - **`probe_anchors` no longer buys the one-scale pass with an inferred product.** The probe inferred a
   scale product from the window DPI and handed it to `find_anchor_in_image`, which treated any
   non-`None` product as caller-supplied; a probe therefore tried `[1.0]` on geometry where
