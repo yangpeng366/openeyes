@@ -101,6 +101,30 @@ Also adopted:
   own activation handler ran), never a value the strategy itself could have
   written. A strategy must not be able to fake the thing it is measured on.
 
+## 4c. Adopted 2026-11-28: SKIP enforcement in the runner, and `--repeat`
+
+Two additions, both measured on a real Edge.
+
+1. **Rule 4.5 is now enforcement, not prose.** The first extra-suite run
+   reported `shadow-toggle` and `iframe-nested` as verbs FAIL: `browser scan`
+   returned 0 interactive elements and the following `browser click
+   --name-contains` exited 4 ("could not resolve a browser target"). The route
+   never addressed the element, so there was nothing to fail - that was the
+   bench violating its own rule. The verbs route now stops when the scan shows
+   no element matching a target, spends no blind click, and the row is SKIP
+   with the scan evidence in `reason` (the calls it did spend stay in `calls`).
+   Pinned by `tests/test_bench_browser_task.py`.
+2. **`--repeat N` (default 1) for success rate and P90.** Capability
+   differences are binary; cost is a distribution. With `N > 1` each
+   `(task, strategy)` runs N times and the receipt row carries `repeat`,
+   `elapsed_p50_s`, `elapsed_p90_s` (nearest-rank, no interpolation),
+   `success_rate` (PASS runs / judged runs, SKIP not judged) and a compact
+   `detail.runs`. Aggregate verdict across repetitions: any FAIL -> FAIL, every
+   SKIP -> SKIP, and a mix -> SKIP (repetitions that disagree are not a pass).
+   `detail.runs` replaces `detail.calls_detail`, which is identical in argv
+   apart from the per-run token. `--repeat 1` keeps the receipt exactly as in
+   section 5.3. Measured numbers: `docs/browser-task-bench-results.md`.
+
 ## 5. API contract
 
 ### 5.1 `benchmarks/_browser_task_suite.py` (core suite)

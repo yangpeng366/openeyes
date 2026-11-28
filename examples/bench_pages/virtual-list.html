@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bench - virtual list</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; }
+  code { background: #eee; padding: 0 2px; }
+  #list { width: 260px; height: 400px; overflow-y: auto; box-sizing: border-box;
+          border: 1px solid #888; background: #fff; }
+  #spacer { position: relative; width: 100%; }
+  #window { position: absolute; left: 0; top: 0; width: 100%; }
+  #window button { display: block; width: 100%; height: 20px; margin: 0; padding: 0 6px;
+                   box-sizing: border-box; border: 0; border-bottom: 1px solid #eee;
+                   background: #fff; font: 12px/19px monospace; text-align: left;
+                   cursor: pointer; }
+  #window button.picked { background: #ffe9a8; }
+</style>
+</head>
+<!--
+  Browser-task bench fixture (extra suite): virtual scrolling list.
+  Self-contained: no external asset, no network, no alert/prompt, no
+  randomness, no timers (the only re-render trigger is the scroll event).
+  The query string is deliberately ignored; ?bench=<token> is the runner's tab
+  selector, nothing on this page reads it.
+
+  Only the visible window (20 rows) is ever in the DOM, while the list holds
+  500 rows - so the total is a page fact published as body[data-total], never
+  something a strategy can count from the DOM.
+  State starts "not yet done": body[data-picked] is empty.
+-->
+<body data-total="500" data-picked="" data-rendered="0">
+<h1>virtual list</h1>
+<p>
+  total rows: <strong>500</strong> (only 20 are in the DOM at any scroll offset).
+  Clicking a row marks it picked; until then nothing is picked.
+</p>
+<div id="list" tabindex="0" aria-label="virtual-list-viewport">
+  <div id="spacer"><div id="window"></div></div>
+</div>
+<script>
+(function () {
+  var TOTAL = 500;      // rows the list claims
+  var ROW = 20;         // row height, px
+  var VISIBLE = 20;     // rows actually rendered
+  var list = document.getElementById('list');
+  var spacer = document.getElementById('spacer');
+  var win = document.getElementById('window');
+  var picked = '';
+
+  function label(index) {
+    var n = String(index + 1);
+    while (n.length < 3) { n = '0' + n; }
+    return 'row-' + n;
+  }
+
+  function paintPicked() {
+    var rows = win.getElementsByTagName('button');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].className = rows[i].textContent === picked ? 'picked' : '';
+    }
+  }
+
+  function render() {
+    var first = Math.floor(list.scrollTop / ROW);
+    if (first > TOTAL - VISIBLE) { first = TOTAL - VISIBLE; }
+    if (first < 0) { first = 0; }
+    var html = '';
+    for (var i = 0; i < VISIBLE; i++) {
+      var idx = first + i;
+      html += '<button type="button" data-index="' + idx + '">' + label(idx) + '</button>';
+    }
+    win.style.top = (first * ROW) + 'px';
+    win.innerHTML = html;
+    document.body.dataset.rendered = String(VISIBLE);
+    paintPicked();
+  }
+
+  spacer.style.height = (TOTAL * ROW) + 'px';
+
+  win.addEventListener('click', function (ev) {
+    var el = ev.target;
+    if (!el || el.tagName !== 'BUTTON') { return; }
+    picked = el.textContent;
+    document.body.dataset.picked = picked;
+    paintPicked();
+  });
+
+  list.addEventListener('scroll', render);
+
+  render();
+})();
+</script>
+</body>
+</html>

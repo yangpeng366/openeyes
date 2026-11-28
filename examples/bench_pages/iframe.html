@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bench - nested iframe</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; }
+  code { background: #eee; padding: 0 2px; }
+  #bench-frame { width: 420px; height: 150px; border: 1px solid #888; background: #fafafa; }
+</style>
+</head>
+<!--
+  Browser-task bench fixture (extra suite): nested browsing context.
+  Self-contained: no external asset, no network, no alert/prompt, no
+  randomness, no timers. The child document is written from this page, so it
+  stays same-origin (about:blank inherits the parent origin) and scriptable
+  from both sides. The query string is deliberately ignored; ?bench=<token> is
+  the runner's tab selector, nothing on this page reads it.
+  State starts "not yet done": the child body carries data-state="pending".
+-->
+<body data-iframe-state="pending">
+<h1>nested iframe</h1>
+<p>
+  The button lives in the child document inside <code>#bench-frame</code>, not
+  in this one. It starts <code>pending</code>; one click makes it
+  <code>done</code>. The child publishes the state on its own
+  <code>body[data-state]</code> and this page mirrors it on
+  <code>body[data-iframe-state]</code>.
+</p>
+<iframe id="bench-frame" title="bench child document"></iframe>
+<script>
+(function () {
+  var frame = document.getElementById('bench-frame');
+  var child = [
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head><meta charset="utf-8"><title>bench child</title>',
+    '<style>',
+    'html,body{margin:0;padding:0}',
+    'body{padding:10px;font-family:sans-serif;background:#fafafa}',
+    'button{padding:6px 10px;font:inherit}',
+    '#state{padding-left:6px;font-weight:bold}',
+    '</style></head>',
+    '<body data-state="pending">',
+    '<p>child document - the control is here, not in the parent</p>',
+    '<button type="button" id="confirm" aria-label="iframe-confirm">iframe-confirm</button>',
+    '<span id="state">pending</span>',
+    '</body>',
+    '</html>'
+  ].join('\n');
+
+  var doc = frame.contentDocument;
+  doc.open();
+  doc.write(child);
+  doc.close();
+
+  var btn = doc.getElementById('confirm');
+  btn.addEventListener('click', function () {
+    var childDoc = frame.contentDocument;
+    childDoc.body.dataset.state = 'done';
+    childDoc.getElementById('state').textContent = 'done';
+    document.body.dataset.iframeState = 'done';
+  });
+})();
+</script>
+</body>
+</html>

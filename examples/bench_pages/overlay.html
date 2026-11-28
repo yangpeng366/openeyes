@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes bench - overlay-link</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px 0; }
+  #link-stage { position: relative; display: inline-block; }
+  #overlay-link { display: block; padding: 8px 12px; background: #e8e8f8;
+                  border: 1px solid #888; color: #004; }
+  /* The scrim covers the link's box exactly and is transparent: the
+     topmost element at the link's centre is this div, not the link. */
+  #scrim { position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+           background: transparent; z-index: 5; }
+  #clicked-flag { font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>overlay-link</h1>
+<p>The link below is present, enabled and measured, but a transparent scrim sits
+on top of it: the element at its centre is the scrim, so a click dispatched at
+the reported centre never reaches the link. Clicking the element itself does
+reach it and sets <code>data-clicked="1"</code> on the link.</p>
+<div id="link-stage">
+  <a id="overlay-link" href="#clicked">overlay-link</a>
+  <div id="scrim" aria-hidden="true"></div>
+</div>
+<p>Clicked marker: <span id="clicked-flag">(unset)</span></p>
+<script>
+  var link = document.getElementById('overlay-link');
+  var flag = document.getElementById('clicked-flag');
+
+  link.addEventListener('click', function (event) {
+    event.preventDefault();
+    link.setAttribute('data-clicked', '1');
+    flag.textContent = 'data-clicked=1';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes bench - read-rows</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px 0; }
+  table { border-collapse: collapse; font-family: monospace; }
+  th, td { border: 1px solid #999; padding: 1px 8px; text-align: left; }
+  #readout { width: 220px; height: 120px; font-family: monospace; }
+  #verify-readout { margin: 6px 0; padding: 4px 12px; }
+</style>
+</head>
+<body>
+<h1>read-rows</h1>
+<p>50 rows of text. Nothing in the table is clickable: the fixed menu has no
+verb that reads page text, so only the code route can transcribe the payload
+column into the readout below. The page - not the strategy - decides whether the
+transcription is right: <code>verify-readout</code> compares the readout with its
+own rows and publishes the result on <code>body[data-readout]</code>.</p>
+<table id="rows">
+<thead><tr><th>payload</th></tr></thead>
+<tbody>
+  <tr><td>alpha-01</td></tr>
+  <tr><td>alpha-02</td></tr>
+  <tr><td>alpha-03</td></tr>
+  <tr><td>alpha-04</td></tr>
+  <tr><td>alpha-05</td></tr>
+  <tr><td>alpha-06</td></tr>
+  <tr><td>alpha-07</td></tr>
+  <tr><td>alpha-08</td></tr>
+  <tr><td>alpha-09</td></tr>
+  <tr><td>alpha-10</td></tr>
+  <tr><td>alpha-11</td></tr>
+  <tr><td>alpha-12</td></tr>
+  <tr><td>alpha-13</td></tr>
+  <tr><td>alpha-14</td></tr>
+  <tr><td>alpha-15</td></tr>
+  <tr><td>alpha-16</td></tr>
+  <tr><td>alpha-17</td></tr>
+  <tr><td>alpha-18</td></tr>
+  <tr><td>alpha-19</td></tr>
+  <tr><td>alpha-20</td></tr>
+  <tr><td>alpha-21</td></tr>
+  <tr><td>alpha-22</td></tr>
+  <tr><td>alpha-23</td></tr>
+  <tr><td>alpha-24</td></tr>
+  <tr><td>alpha-25</td></tr>
+  <tr><td>alpha-26</td></tr>
+  <tr><td>alpha-27</td></tr>
+  <tr><td>alpha-28</td></tr>
+  <tr><td>alpha-29</td></tr>
+  <tr><td>alpha-30</td></tr>
+  <tr><td>alpha-31</td></tr>
+  <tr><td>alpha-32</td></tr>
+  <tr><td>alpha-33</td></tr>
+  <tr><td>alpha-34</td></tr>
+  <tr><td>alpha-35</td></tr>
+  <tr><td>alpha-36</td></tr>
+  <tr><td>alpha-37</td></tr>
+  <tr><td>alpha-38</td></tr>
+  <tr><td>alpha-39</td></tr>
+  <tr><td>alpha-40</td></tr>
+  <tr><td>alpha-41</td></tr>
+  <tr><td>alpha-42</td></tr>
+  <tr><td>alpha-43</td></tr>
+  <tr><td>alpha-44</td></tr>
+  <tr><td>alpha-45</td></tr>
+  <tr><td>alpha-46</td></tr>
+  <tr><td>alpha-47</td></tr>
+  <tr><td>alpha-48</td></tr>
+  <tr><td>alpha-49</td></tr>
+  <tr><td>alpha-50</td></tr>
+</tbody>
+</table>
+<p>Readout (one payload per line):</p>
+<textarea id="readout" aria-label="readout" autocomplete="off"></textarea>
+<div><button type="button" id="verify-readout">verify-readout</button></div>
+<script>
+  var rows = document.querySelectorAll('#rows tbody tr');
+  var payloads = [];
+  for (var i = 0; i < rows.length; i++) {
+    payloads.push((rows[i].textContent || '').trim());
+  }
+  document.getElementById('verify-readout').addEventListener('click', function () {
+    var text = (document.getElementById('readout').value || '').replace(/\r/g, '').trim();
+    var lines = text ? text.split('\n') : [];
+    var good = text !== '' && lines.length === payloads.length;
+    for (var j = 0; good && j < payloads.length; j++) {
+      if (lines[j].trim() !== payloads[j]) { good = false; }
+    }
+    if (!good) {
+      document.body.dataset.readout = 'mismatch:' + lines.length;
+    } else {
+      document.body.dataset.readout = 'ok:' + payloads.length;
+    }
+  });
+  // the row payloads are the page's own ground truth; nothing here reads the readout
+  document.body.dataset.rows = String(payloads.length);
+</script>
+</body>
+</html>

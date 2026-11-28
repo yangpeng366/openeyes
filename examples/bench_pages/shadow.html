@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bench - shadow dom toggle</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; }
+  code { background: #eee; padding: 0 2px; }
+</style>
+</head>
+<!--
+  Browser-task bench fixture (extra suite): shadow DOM.
+  Self-contained: no external asset, no network, no alert/prompt, no
+  randomness, no timers. The query string is deliberately ignored; ?bench=<token>
+  is the runner's tab selector, nothing on this page reads it.
+  State starts "not yet done": body[data-shadow-state] is "off".
+-->
+<body data-shadow-state="off">
+<h1>shadow dom toggle</h1>
+<p>
+  The toggle lives inside an open shadow root of <code>#gate</code>, not in the
+  light DOM. It starts <code>off</code>; one click turns it <code>on</code>.
+  The shadow tree mirrors its state to <code>body[data-shadow-state]</code>, so
+  the judgement stays one short expression.
+</p>
+<div id="gate"></div>
+<script>
+(function () {
+  var host = document.getElementById('gate');
+  var root = host.attachShadow({ mode: 'open' });
+  root.innerHTML = [
+    '<style>',
+    'button{padding:6px 10px;font:inherit}',
+    '#status{padding-left:6px;font-weight:bold}',
+    '#status.off{color:#b00020}',
+    '#status.on{color:#0a7a0a}',
+    '</style>',
+    '<button type="button" id="toggle" aria-label="shadow-toggle"' +
+      ' data-state="off">shadow-toggle</button>',
+    '<span id="status" class="off">off</span>'
+  ].join('');
+
+  var btn = root.getElementById('toggle');
+  var status = root.getElementById('status');
+
+  function paint() {
+    var state = btn.dataset.state;
+    status.textContent = state;
+    status.className = state;
+    document.body.dataset.shadowState = state;
+  }
+
+  btn.addEventListener('click', function () {
+    btn.dataset.state = btn.dataset.state === 'on' ? 'off' : 'on';
+    paint();
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>

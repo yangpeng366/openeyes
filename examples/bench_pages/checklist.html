@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes bench - checklist-20</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px 0; }
+  /* Two compact columns: all 20 controls stay inside a small viewport, so a
+     coordinate click never lands outside the page. */
+  ul#checklist { list-style: none; margin: 0; padding: 0;
+                 column-count: 2; column-gap: 24px; }
+  ul#checklist li { margin: 0; height: 18px; line-height: 18px; }
+  #checked-count { font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>checklist-20</h1>
+<p>Checked: <span id="checked-count">0</span> / 20</p>
+<ul id="checklist">
+  <li><input type="checkbox" id="item-01"><label for="item-01">item-01</label></li>
+  <li><input type="checkbox" id="item-02"><label for="item-02">item-02</label></li>
+  <li><input type="checkbox" id="item-03"><label for="item-03">item-03</label></li>
+  <li><input type="checkbox" id="item-04"><label for="item-04">item-04</label></li>
+  <li><input type="checkbox" id="item-05"><label for="item-05">item-05</label></li>
+  <li><input type="checkbox" id="item-06"><label for="item-06">item-06</label></li>
+  <li><input type="checkbox" id="item-07"><label for="item-07">item-07</label></li>
+  <li><input type="checkbox" id="item-08"><label for="item-08">item-08</label></li>
+  <li><input type="checkbox" id="item-09"><label for="item-09">item-09</label></li>
+  <li><input type="checkbox" id="item-10"><label for="item-10">item-10</label></li>
+  <li><input type="checkbox" id="item-11"><label for="item-11">item-11</label></li>
+  <li><input type="checkbox" id="item-12"><label for="item-12">item-12</label></li>
+  <li><input type="checkbox" id="item-13"><label for="item-13">item-13</label></li>
+  <li><input type="checkbox" id="item-14"><label for="item-14">item-14</label></li>
+  <li><input type="checkbox" id="item-15"><label for="item-15">item-15</label></li>
+  <li><input type="checkbox" id="item-16"><label for="item-16">item-16</label></li>
+  <li><input type="checkbox" id="item-17"><label for="item-17">item-17</label></li>
+  <li><input type="checkbox" id="item-18"><label for="item-18">item-18</label></li>
+  <li><input type="checkbox" id="item-19"><label for="item-19">item-19</label></li>
+  <li><input type="checkbox" id="item-20"><label for="item-20">item-20</label></li>
+</ul>
+<script>
+  var boxes = document.querySelectorAll('#checklist input[type=checkbox]');
+  var counter = document.getElementById('checked-count');
+
+  function refresh() {
+    var checked = 0;
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i].checked) { checked += 1; }
+    }
+    counter.textContent = String(checked);
+  }
+
+  for (var j = 0; j < boxes.length; j++) {
+    boxes[j].addEventListener('change', refresh);
+  }
+  refresh();
+</script>
+</body>
+</html>

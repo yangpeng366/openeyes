@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenEyes bench - form-submit</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { padding: 12px; font-family: sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px 0; }
+  .field { margin: 6px 0; }
+  .field label { display: inline-block; width: 90px; }
+  .field input { width: 180px; }
+  .field button { margin-top: 10px; padding: 4px 12px; }
+  #result { font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>form-submit</h1>
+<!--
+  Every addressable control carries its bench name as aria-label, and the
+  <label> text never repeats it: the verbs route matches on a substring of the
+  accessible name and takes the first DOM match, so a label whose text equals
+  the input's name would steal the match and the route would click instead of
+  type (measured: both routes left #result at "incomplete:3").
+-->
+<div class="field"><label for="field-one">one</label><input type="text" id="field-one" name="field-one" aria-label="field-one" autocomplete="off"></div>
+<div class="field"><label for="field-two">two</label><input type="text" id="field-two" name="field-two" aria-label="field-two" autocomplete="off"></div>
+<div class="field"><label for="field-three">three</label><input type="text" id="field-three" name="field-three" aria-label="field-three" autocomplete="off"></div>
+<div class="field"><button type="button" id="submit-form">submit-form</button></div>
+<p>Result: <output id="result"></output></p>
+<script>
+  var ids = ['field-one', 'field-two', 'field-three'];
+  var result = document.getElementById('result');
+  var submit = document.getElementById('submit-form');
+
+  submit.addEventListener('click', function () {
+    var values = [];
+    var missing = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var value = document.getElementById(ids[i]).value;
+      if (value === '') { missing += 1; }
+      values.push(value);
+    }
+    result.textContent = missing ? 'incomplete:' + missing : values.join('|');
+  });
+</script>
+</body>
+</html>
