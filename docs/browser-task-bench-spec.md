@@ -125,6 +125,28 @@ Two additions, both measured on a real Edge.
    apart from the per-run token. `--repeat 1` keeps the receipt exactly as in
    section 5.3. Measured numbers: `docs/browser-task-bench-results.md`.
 
+## 4d. Adopted 2026-11-28: `--warmup N`, and a stop that actually stops
+
+1. **`--warmup N` (default 0).** Before the measured repetitions, each
+   `(task, strategy)` pair spends N runs that are thrown away. They are
+   recorded in `detail.warmup_runs` (`verdict`, `elapsed_s`, `calls`,
+   `agent_output_bytes`) and counted in **no** metric: not `calls`, not
+   `agent_output_bytes`, not `elapsed_s`, not `p50`/`p90`/`success_rate`, not
+   the row verdict, not `errors`. The receipt carries `warmup: N` and, when
+   `N > 0`, a `metric_notes.warmup` line. The flag exists because the first run
+   of a pair pays for a cold CLI, a cold renderer and an empty page cache; that
+   bias belongs in `warmup_runs`, not in the mean. It is not a p90 fix: the
+   nearest-rank p90 of five samples is the maximum, and the route's own
+   per-action cost dominates that tail. Measured: `checklist-20` verbs cold
+   16.09 s vs 14.98 s kept (≈7 %), code/control ≈0.01 s.
+2. **The stop escalates, or the receipt says it failed.** `_EdgeProcess.wait()`
+   raises `subprocess.TimeoutExpired` when the pid outlives the deadline, so
+   `_stop_process` reaches `taskkill /F`; `taskkill` without `/F` only posts a
+   close message, which a debugging Edge can ignore. A survivor is appended to
+   `receipt.errors` (bench verdict FAIL) instead of raising inside `finally`,
+   because a run that cannot write its receipt is worse than one that reports
+   its own leftover.
+
 ## 5. API contract
 
 ### 5.1 `benchmarks/_browser_task_suite.py` (core suite)
@@ -153,7 +175,8 @@ def load_tasks() -> list[Task]:
 ```
 python benchmarks/bench_browser_task.py [--port 9333] [--suite core,extra]
                                          [--tasks id,id] [--strategies verbs,code,control]
-                                         [--out DIR] [--json] [--no-launch]
+                                         [--out DIR] [--repeat N] [--warmup N]
+                                         [--json] [--no-launch]
 ```
 
 * `--port`: CDP port (default 9333). `--no-launch`: use a browser that is
