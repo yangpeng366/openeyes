@@ -90,6 +90,45 @@ def test_starved_receipt_is_empty_of_verbs_when_nothing_replied():
     assert receipt["stderr"] == "boom"
 
 
+def test_starved_receipt_carries_no_roi_clause():
+    """A window-free stdio probe owes no ``roi`` clause, and must not fake one.
+
+    ``anchor_wait`` with ``roi_pad`` but no captured frame reports ``roi: null``
+    because the roll-up is built from the deciding frame, and this probe issues
+    no anchor call at all. A report consumer that greps for ``roi`` must
+    therefore be told the field is absent by design, not silently handed a
+    placeholder: the receipt key set is pinned here so adding ``"roi": None``
+    to look complete fails loudly and sends the reader to the module docstring.
+    """
+    module = _probe_module()
+
+    receipt = module._starved_receipt([], budget=15.0, stderr="")
+
+    assert set(receipt) == {"ready", "error", "error_type", "missing", "stderr"}
+    assert "roi" not in json.dumps(receipt)
+
+
+def test_docstring_points_at_tests_that_exist():
+    """The scope note names tests that really exist.
+
+    The docstring explains where the ``roi`` clause is produced instead; those
+    pointers are the only thing standing between a reader and re-adding the
+    clause here, so a renamed or deleted test must break this one.
+    """
+    module = _probe_module()
+    named = set(re.findall(r"test_[a-z0-9_]+", module.__doc__ or ""))
+
+    assert named, "docstring should name the tests that pin the roi clause"
+    defined = set()
+    for path in (ROOT / "tests").rglob("test_*.py"):
+        defined.update(re.findall(
+            r"^def (test_[a-z0-9_]+)",
+            path.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        ))
+    assert named <= defined, f"docstring names missing tests: {sorted(named - defined)}"
+
+
 def test_probe_request_ids_cover_every_expected_verb():
     """The receipt's id table is exactly the ids the probe writes into the pipe."""
     module = _probe_module()
