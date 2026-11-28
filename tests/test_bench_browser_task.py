@@ -9,9 +9,13 @@ not skipped, and the repetition maths says what it says.
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCH = REPO_ROOT / "benchmarks" / "bench_browser_task.py"
@@ -130,3 +134,91 @@ def test_a_single_run_keeps_the_contract_receipt_shape():
     combined = bench._combine_runs([row])
     assert combined is row
     assert "runs" not in combined["detail"]
+
+
+def test_warmup_runs_are_spent_and_dropped_from_every_metric(monkeypatch):
+    """A 30 s cold first run must not reach p90 once --warmup 1 drops it."""
+    seen = []
+
+    def fake_measure_once(task, strategy, *, port, fixture_port):
+        seen.append((task.id, strategy))
+        cold = len(seen) == 1
+        return _row(bench.PASS, 30.0 if cold else 1.0), []
+
+    monkeypatch.setattr(bench, "_measure_once", fake_measure_once)
+    row, errors = bench._measure(
+        _task(), "verbs", port=9333, fixture_port=8000, repeat=3, warmup=1
+    )
+
+    assert len(seen) == 4, "one warmup run plus three measured runs"
+    assert errors == [], "a warmup run cannot fail the bench"
+    assert row["detail"]["repeat"] == 3
+    assert row["detail"]["elapsed_p90_s"] == 1.0, "the cold run is not in p90"
+    assert row["elapsed_s"] == 1.0
+    assert row["calls"] == 2, "the warmup run's calls stay out of calls"
+    assert row["detail"]["warmup_discarded"] == 1
+    assert row["detail"]["warmup_runs"] == [
+        {"verdict": bench.PASS, "elapsed_s": 30.0, "calls": 2, "agent_output_bytes": 100}
+    ]
+
+
+def test_no_warmup_leaves_the_row_untouched_and_parses_off_by_default(monkeypatch):
+    assert bench._parse_args([]).warmup == 0
+    assert bench._parse_args(["--warmup", "1"]).warmup == 1
+
+    def fake_measure_once(task, strategy, *, port, fixture_port):
+        return _row(bench.PASS, 1.5), []
+
+    monkeypatch.setattr(bench, "_measure_once", fake_measure_once)
+    row, _ = bench._measure(
+        _task(), "verbs", port=9333, fixture_port=8000, repeat=2, warmup=0
+    )
+    for key in ("warmup", "warmup_discarded", "warmup_runs", "warmup_note"):
+        assert key not in row["detail"], f"--warmup 0 must not add {key} to the receipt"
+
+
+class _FakeEdge:
+    """A Popen-shaped route that ignores the polite close, like a debugging Edge."""
+
+    stderr = io.StringIO("")
+
+    def __init__(self, dies_on_kill: bool) -> None:
+        self.pid = 4242
+        self.dead = False
+        self.dies_on_kill = dies_on_kill
+        self.calls: list[str] = []
+
+    def poll(self):
+        return 0 if self.dead else None
+
+    def terminate(self) -> None:
+        self.calls.append("terminate")
+
+    def kill(self) -> None:
+        self.calls.append("kill")
+        self.dead = self.dies_on_kill
+
+    def wait(self, timeout=None) -> int:
+        if self.dead:
+            return 0
+        raise subprocess.TimeoutExpired("taskkill", timeout or 0.0)
+
+
+def test_stop_edge_escalates_to_a_force_kill():
+    """taskkill without /F does not close a debugging Edge; the run must."""
+    edge = _FakeEdge(dies_on_kill=True)
+    assert bench._stop_edge(edge) is None
+    assert edge.calls == ["terminate", "kill"]
+
+
+def test_stop_edge_reports_a_survivor_instead_of_raising():
+    edge = _FakeEdge(dies_on_kill=False)
+    problem = bench._stop_edge(edge)
+    assert problem is not None and "still running" in problem
+
+
+def test_edge_wait_raises_when_the_pid_outlives_the_deadline(monkeypatch):
+    """Returning 0 here would suppress the force-kill in ``_stop_process``."""
+    monkeypatch.setattr(bench, "_pid_alive", lambda pid: True)
+    with pytest.raises(subprocess.TimeoutExpired):
+        bench._EdgeProcess(4242).wait(0.05)

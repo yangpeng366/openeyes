@@ -324,7 +324,10 @@ class _EdgeProcess:
             if not _pid_alive(self.pid):
                 return 0
             time.sleep(0.1)
-        return 0
+        # Popen raises when the process outlives the timeout; so does this.
+        # Returning 0 here would tell the shared ``_stop_process`` that Edge
+        # closed when it did not, and the force-kill would never be issued.
+        raise subprocess.TimeoutExpired("taskkill", timeout or 0.0)
 
 
 def _launch_edge(port: int):
@@ -336,6 +339,20 @@ def _launch_edge(port: int):
         port=port, seed=False, headless=False, profile_dir=profile_dir,
     )
     return info, _EdgeProcess(int(info["pid"]))
+
+
+def _stop_edge(edge) -> str | None:
+    """Stop the Edge this bench started; report a survivor instead of raising.
+
+    ``taskkill`` without ``/F`` only posts a close message, and a debugging Edge
+    does not always take it, so the escalation to ``/F`` is the normal path.  If
+    that fails too the run must still write its receipt and say so.
+    """
+    try:
+        _stop_process(edge)
+    except subprocess.TimeoutExpired:
+        return f"the Edge this bench started (pid {edge.pid}) is still running after the stop"
+    return None
 
 
 def _wait_for_page(port: int, token: str, timeout: float = 25.0) -> str:
@@ -999,8 +1016,27 @@ def _combine_runs(runs: list[dict]) -> dict:
 
 def _measure(
     task, strategy: str, *, port: int, fixture_port: int, repeat: int = 1,
+    warmup: int = 0,
 ) -> tuple[dict, list[str]]:
-    """Measure one pair, ``repeat`` times, and report the aggregate."""
+    """Measure one pair: ``warmup`` discarded runs, then ``repeat`` kept ones.
+
+    The warmup exists because the first run of a pair pays for a cold CLI, a
+    cold renderer and an empty page cache.  Those costs do not come back on the
+    later runs, so averaging them in inflates the tail (p90) of the measured
+    set.  A warmup run is spent and recorded, but never counted: not in calls,
+    not in bytes, not in the verdict, not in p50/p90/success_rate.
+    """
+    discarded: list[dict] = []
+    for _ in range(max(0, warmup)):
+        row, _ = _measure_once(
+            task, strategy, port=port, fixture_port=fixture_port
+        )
+        discarded.append({
+            "verdict": row["verdict"],
+            "elapsed_s": row["elapsed_s"],
+            "calls": row["calls"],
+            "agent_output_bytes": row["agent_output_bytes"],
+        })
     runs: list[dict] = []
     errors: list[str] = []
     for _ in range(max(1, repeat)):
@@ -1009,7 +1045,14 @@ def _measure(
         )
         runs.append(row)
         errors.extend(row_errors)
-    return _combine_runs(runs), errors
+    combined = _combine_runs(runs)
+    if discarded:
+        combined["detail"]["warmup_runs"] = discarded
+        combined["detail"]["warmup_discarded"] = len(discarded)
+        combined["detail"]["warmup_note"] = (
+            "the first run(s) of this pair, excluded from every metric"
+        )
+    return combined, errors
 
 
 def _summary(rows: list[dict]) -> dict:
@@ -1138,6 +1181,11 @@ def _print_human(receipt: dict) -> None:
                 if "elapsed_p90_s" in bucket else ""
             )
         )
+    if receipt.get("warmup"):
+        print(
+            f"  warmup: {receipt['warmup']} run(s) per pair spent and discarded "
+            "from every metric"
+        )
     if receipt.get("bench_reason"):
         print(f"  reason: {receipt['bench_reason']}")
     for row in receipt["tasks"]:
@@ -1164,6 +1212,7 @@ def _run(args) -> int:
         )
     tasks = _collect_tasks(suites, _parse_list(args.tasks))
     repeat = max(1, int(getattr(args, "repeat", 1) or 1))
+    warmup = max(0, int(getattr(args, "warmup", 0) or 0))
 
     server, fixture_port = _start_fixture_server(PAGES_DIR)
     edge = None
@@ -1181,19 +1230,27 @@ def _run(args) -> int:
             for strategy in strategies:
                 row, row_errors = _measure(
                     task, strategy, port=args.port, fixture_port=fixture_port,
-                    repeat=repeat,
+                    repeat=repeat, warmup=warmup,
                 )
                 rows.append(row)
                 errors.extend(row_errors)
     finally:
         if edge is not None:
-            _stop_process(edge)
+            problem = _stop_edge(edge)
+            if problem:
+                errors.append(problem)
         with contextlib.suppress(Exception):
             server.shutdown()
 
     summary = _summary(rows)
     verdict, reason = _bench_verdict(rows, summary, errors)
     metric_notes = dict(METRIC_NOTES)
+    if warmup:
+        metric_notes["warmup"] = (
+            f"the first {warmup} run(s) of every (task, strategy) pair were spent "
+            "and discarded; they are recorded in detail.warmup_runs and counted "
+            "in no metric"
+        )
     if repeat > 1:
         metric_notes["elapsed_p50_s"] = (
             f"nearest-rank median of {repeat} repetitions of the same (task, strategy)"
@@ -1209,6 +1266,7 @@ def _run(args) -> int:
         "generated_at": _now(),
         "port": args.port,
         "repeat": repeat,
+        "warmup": warmup,
         "suites": suites,
         "metric_notes": metric_notes,
         "tasks": rows,
@@ -1253,6 +1311,10 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--repeat", type=int, default=1,
                         help="repetitions per (task, strategy); >1 adds p50/p90 and "
                              "a success rate (default: 1)")
+    parser.add_argument("--warmup", type=int, default=0,
+                        help="throwaway runs per (task, strategy) before the "
+                             "measured ones, to drop the cold first run from "
+                             "p50/p90 (default: 0)")
     return parser.parse_args(argv)
 
 
